@@ -66,7 +66,7 @@ const RULES = {
 }
 
 // ILP Solver Service Configuration
-const ILP_SOLVER_URL = Deno.env.get("ILP_SOLVER_URL") || "http://localhost:8000"
+const ILP_SOLVER_URL = Deno.env.get("ILP_SOLVER_URL") || "https://timetablescheduling.onrender.com"
 
 // ILP-based constraint satisfaction solver
 class ILPTimetableGenerator {

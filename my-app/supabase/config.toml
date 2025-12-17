@@ -1,0 +1,7 @@
+# Supabase Edge Functions Configuration
+
+[functions.generate-base-timetable]
+verify_jwt = false
+
+[functions.optimize-timetable]
+verify_jwt = false

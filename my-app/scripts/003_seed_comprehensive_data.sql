@@ -123,12 +123,13 @@ INSERT INTO faculty_availability (faculty_id, day_of_week, start_period, end_per
   ((SELECT id FROM faculty WHERE code = 'CSE-F004'), 2, 2, 6),  -- Wednesday
   ((SELECT id FROM faculty WHERE code = 'CSE-F004'), 4, 1, 5);  -- Friday
 
--- CSE-F005: Vikram Singh - Available Mon-Thu, periods 2-7
+-- CSE-F005: Vikram Singh - Expanded availability for lab sections
 INSERT INTO faculty_availability (faculty_id, day_of_week, start_period, end_period) VALUES
-  ((SELECT id FROM faculty WHERE code = 'CSE-F005'), 0, 2, 7),  -- Monday
-  ((SELECT id FROM faculty WHERE code = 'CSE-F005'), 1, 2, 7),  -- Tuesday
-  ((SELECT id FROM faculty WHERE code = 'CSE-F005'), 2, 2, 7),  -- Wednesday
-  ((SELECT id FROM faculty WHERE code = 'CSE-F005'), 3, 2, 7);  -- Thursday
+  ((SELECT id FROM faculty WHERE code = 'CSE-F005'), 0, 1, 8),  -- Monday
+  ((SELECT id FROM faculty WHERE code = 'CSE-F005'), 1, 1, 8),  -- Tuesday
+  ((SELECT id FROM faculty WHERE code = 'CSE-F005'), 2, 1, 8),  -- Wednesday
+  ((SELECT id FROM faculty WHERE code = 'CSE-F005'), 3, 1, 8),  -- Thursday
+  ((SELECT id FROM faculty WHERE code = 'CSE-F005'), 4, 1, 8);  -- Friday
 
 -- CSE-F006: Neha Gupta - Available Mon, Tue, Thu, Fri
 INSERT INTO faculty_availability (faculty_id, day_of_week, start_period, end_period) VALUES
@@ -182,12 +183,14 @@ INSERT INTO faculty_availability (faculty_id, day_of_week, start_period, end_per
   ((SELECT id FROM faculty WHERE code = 'MECH-F002'), 3, 1, 6),  -- Thursday
   ((SELECT id FROM faculty WHERE code = 'MECH-F002'), 5, 2, 5);  -- Saturday
 
--- MECH-F003: Ravi Kumar - Mid-day slots
+-- MECH-F003: Ravi Kumar - Expanded availability for lab sections
 INSERT INTO faculty_availability (faculty_id, day_of_week, start_period, end_period) VALUES
-  ((SELECT id FROM faculty WHERE code = 'MECH-F003'), 0, 3, 6),  -- Monday
-  ((SELECT id FROM faculty WHERE code = 'MECH-F003'), 1, 3, 6),  -- Tuesday
-  ((SELECT id FROM faculty WHERE code = 'MECH-F003'), 3, 3, 6),  -- Thursday
-  ((SELECT id FROM faculty WHERE code = 'MECH-F003'), 4, 3, 6);  -- Friday
+  ((SELECT id FROM faculty WHERE code = 'MECH-F003'), 0, 1, 8),  -- Monday
+  ((SELECT id FROM faculty WHERE code = 'MECH-F003'), 1, 1, 8),  -- Tuesday
+  ((SELECT id FROM faculty WHERE code = 'MECH-F003'), 2, 1, 8),  -- Wednesday
+  ((SELECT id FROM faculty WHERE code = 'MECH-F003'), 3, 1, 8),  -- Thursday
+  ((SELECT id FROM faculty WHERE code = 'MECH-F003'), 4, 1, 8),  -- Friday
+  ((SELECT id FROM faculty WHERE code = 'MECH-F003'), 5, 1, 5);  -- Saturday
 
 -- CIVIL-F001: Bhavna Singh - Full availability
 INSERT INTO faculty_availability (faculty_id, day_of_week, start_period, end_period) VALUES

@@ -11,11 +11,22 @@ import { getSupabaseBrowserClient } from "@/lib/client"
 import type { TimetableJob } from "@/lib/database"
 import { generateTimetablePDF } from "@/lib/pdf-generator"
 
+interface ErrorDetail {
+  section: string
+  subject: string
+  type: string
+  expected: number | string
+  scheduled: number
+  reason: string
+}
+
 export function GenerateTimetable() {
   const router = useRouter()
   const [currentJob, setCurrentJob] = useState<TimetableJob | null>(null)
   const [generating, setGenerating] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
+  const [errorDetails, setErrorDetails] = useState<ErrorDetail[]>([])
+  const [showErrorDialog, setShowErrorDialog] = useState(false)
 
   useEffect(() => {
     // Subscribe to job updates
@@ -79,21 +90,39 @@ export function GenerateTimetable() {
 
   const handleGenerateBase = async () => {
     setGenerating(true)
+    setShowErrorDialog(false)  // Clear previous errors
 
     try {
-      // Call Supabase Edge Function instead of Next.js API route
+      // Call Supabase Edge Function
       const supabase = getSupabaseBrowserClient()
       const { data, error } = await supabase.functions.invoke("generate-base-timetable", {
         method: "POST",
       })
 
       if (error) {
-        alert("Error: " + error.message)
+        console.error("[v0] Function error:", error)
+        setErrorDetails([{
+          section: "System",
+          subject: "Error",
+          type: "system",
+          expected: "N/A",
+          scheduled: 0,
+          reason: error.message || "Unknown error occurred"
+        }])
+        setShowErrorDialog(true)
         setGenerating(false)
         return
       }
 
       console.log("[v0] Generation result:", data)
+      
+      // Handle incomplete schedule errors
+      if (!data?.success && data?.error === "INCOMPLETE_SCHEDULE" && data?.details) {
+        setErrorDetails(data.details)
+        setShowErrorDialog(true)
+        setGenerating(false)
+        return
+      }
       
       // Fetch the updated job immediately
       if (data?.success && data?.jobId) {
@@ -101,7 +130,15 @@ export function GenerateTimetable() {
       }
     } catch (error) {
       console.error("[v0] Error:", error)
-      alert("Error generating timetable")
+      setErrorDetails([{
+        section: "System",
+        subject: "Error",
+        type: "system",
+        expected: "N/A",
+        scheduled: 0,
+        reason: error instanceof Error ? error.message : "Unknown error generating timetable"
+      }])
+      setShowErrorDialog(true)
       setGenerating(false)
     }
   }
@@ -115,7 +152,6 @@ export function GenerateTimetable() {
     setGenerating(true)
 
     try {
-      // Call Supabase Edge Function instead of Next.js API route
       const supabase = getSupabaseBrowserClient()
       const { data, error } = await supabase.functions.invoke("optimize-timetable", {
         method: "POST",
@@ -130,7 +166,6 @@ export function GenerateTimetable() {
 
       console.log("[v0] Optimization result:", data)
       
-      // Fetch the updated job immediately
       if (data?.success) {
         setTimeout(() => fetchLatestJob(), 1000)
       }
@@ -152,11 +187,9 @@ export function GenerateTimetable() {
       setGenerating(true)
       const supabase = getSupabaseBrowserClient()
 
-      // Determine which table to use
       const isOptimized = currentJob.status === "completed"
       const tableName = isOptimized ? "timetable_optimized" : "timetable_base"
 
-      // Fetch timetable data
       const { data: timetableSlots, error } = await supabase
         .from(tableName)
         .select(
@@ -177,7 +210,6 @@ export function GenerateTimetable() {
         return
       }
 
-      // Generate PDF
       const fileName = await generateTimetablePDF(timetableSlots, currentJob.id, isOptimized)
       console.log("PDF generated:", fileName)
 
@@ -268,11 +300,6 @@ export function GenerateTimetable() {
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                   Generating...
                 </>
-              ) : currentJob?.status === "failed" && currentJob?.message && !currentJob.message.toLowerCase().includes("optimiz") ? (
-                <>
-                  <Play className="w-4 h-4 mr-2" />
-                  Retry Base Generation
-                </>
               ) : (
                 <>
                   <Play className="w-4 h-4 mr-2" />
@@ -296,19 +323,14 @@ export function GenerateTimetable() {
             </div>
             <Button
               onClick={handleOptimize}
-              disabled={generating || (!currentJob || (currentJob.status !== "base_complete" && currentJob.status !== "failed"))}
-              className="w-full bg-transparent"
+              disabled={generating || (!currentJob || currentJob.status !== "base_complete")}
+              className="w-full"
               variant="outline"
             >
               {generating && currentJob?.status === "optimizing" ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                   Optimizing...
-                </>
-              ) : currentJob?.status === "failed" && currentJob?.message && currentJob.message.toLowerCase().includes("optimiz") ? (
-                <>
-                  <Zap className="w-4 h-4 mr-2" />
-                  Retry Optimization
                 </>
               ) : (
                 <>
@@ -353,7 +375,6 @@ export function GenerateTimetable() {
               </div>
             )}
 
-            {/* Action Buttons */}
             {(currentJob.status === "base_complete" || currentJob.status === "completed") && (
               <div className="pt-4 border-t space-y-2">
                 <Button onClick={handleViewTimetable} className="w-full" variant="default" disabled={generating}>
@@ -375,6 +396,100 @@ export function GenerateTimetable() {
                 </Button>
               </div>
             )}
+          </div>
+        </Card>
+      )}
+
+      {/* Error Details Dialog */}
+      {showErrorDialog && errorDetails.length > 0 && (
+        <Card className="p-6 border-destructive">
+          <div className="space-y-4">
+            <div className="flex items-start justify-between">
+              <div className="space-y-1">
+                <h3 className="text-lg font-semibold text-destructive flex items-center gap-2">
+                  <AlertCircle className="w-5 h-5" />
+                  Timetable Generation Failed
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  Unable to generate complete timetable. Please review the issues below and make necessary changes.
+                </p>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowErrorDialog(false)}
+              >
+                ✕
+              </Button>
+            </div>
+
+            <div className="rounded-lg border bg-muted/50 p-4 space-y-3">
+              <h4 className="font-medium text-sm">Issues Found ({errorDetails.length}):</h4>
+              <div className="space-y-2 max-h-96 overflow-y-auto">
+                {errorDetails.map((detail, idx) => (
+                  <div
+                    key={idx}
+                    className="p-3 bg-background rounded border-l-4 border-destructive space-y-1"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="font-medium text-sm">
+                        {detail.section} - {detail.subject}
+                      </div>
+                      <Badge variant="outline" className="text-xs">
+                        {detail.type}
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground">{detail.reason}</p>
+                    <div className="flex gap-4 text-xs">
+                      <span>
+                        <span className="text-muted-foreground">Expected:</span>{" "}
+                        <span className="font-medium">{detail.expected} periods</span>
+                      </span>
+                      <span>
+                        <span className="text-muted-foreground">Scheduled:</span>{" "}
+                        <span className="font-medium text-destructive">{detail.scheduled} periods</span>
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-lg border bg-blue-50 dark:bg-blue-950/20 p-4">
+              <h4 className="font-medium text-sm mb-2 text-blue-900 dark:text-blue-100">
+                💡 Suggested Actions:
+              </h4>
+              <ul className="space-y-1 text-sm text-blue-800 dark:text-blue-200">
+                <li>• <strong>Faculty Availability:</strong> Check if faculty have enough available time slots</li>
+                <li>• <strong>Room Capacity:</strong> Ensure classrooms can accommodate section sizes</li>
+                <li>• <strong>Lab Rooms:</strong> Verify sufficient lab rooms are available for all lab courses</li>
+                <li>• <strong>Time Conflicts:</strong> Check for overlapping sections or faculty assignments</li>
+                <li>• <strong>Weekly Hours:</strong> Review subject weekly hour requirements (theory: 1.5-3hrs, labs: 4hrs)</li>
+              </ul>
+            </div>
+
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={() => router.push("/admin/faculty")}
+                className="flex-1"
+              >
+                Manage Faculty
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => router.push("/admin/classrooms")}
+                className="flex-1"
+              >
+                Manage Classrooms
+              </Button>
+              <Button
+                onClick={() => setShowErrorDialog(false)}
+                className="flex-1"
+              >
+                Close
+              </Button>
+            </div>
           </div>
         </Card>
       )}

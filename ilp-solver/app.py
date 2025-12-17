@@ -276,14 +276,22 @@ def solve_lab_timetable(data: ProblemData):
         # ============================================
         # CONSTRAINT 3: Section non-overlap (period-level)
         # ============================================
-        for c_idx in range(len(courses)):
+        # Group courses by section to prevent section from having multiple classes at same time
+        section_to_courses = {}
+        for c_idx, course in enumerate(courses):
+            if course.sectionId not in section_to_courses:
+                section_to_courses[course.sectionId] = []
+            section_to_courses[course.sectionId].append(c_idx)
+        
+        for section_id, course_indices in section_to_courses.items():
             for day in days:
                 for period in range(1, rules.periodsPerDay + 1):
                     period_vars = []
-                    for (c, d, block, r_idx) in valid_assignments:
-                        if c == c_idx and d == day:
-                            if period in block_periods[block]:
-                                period_vars.append(L[(c, d, block, r_idx)])
+                    for c_idx in course_indices:
+                        for (c, d, block, r_idx) in valid_assignments:
+                            if c == c_idx and d == day:
+                                if period in block_periods[block]:
+                                    period_vars.append(L[(c, d, block, r_idx)])
                     
                     if period_vars:
                         model.Add(sum(period_vars) <= 1)

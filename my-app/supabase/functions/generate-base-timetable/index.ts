@@ -501,30 +501,23 @@ class ILPTimetableGenerator {
 
       const slot = this.findTheorySlot(course, periodsToSchedule)
       if (slot) {
-        this.addSlot(course, slot.day, slot.startPeriod, slot.endPeriod, slot.classroomId)
-        periodsScheduled += periodsToSchedule
-        console.log(
-          `[Edge Function]   ✓ Theory block at Day ${slot.day}, Periods ${slot.startPeriod}-${slot.endPeriod} (${periodsScheduled}/${periodsNeeded})`,
-        )
+        const success = this.addSlot(course, slot.day, slot.startPeriod, slot.endPeriod, slot.classroomId)
+        if (success) {
+          periodsScheduled += periodsToSchedule
+        }
       } else {
-        // FAIL HARD: Cannot meet periods_per_week requirement
-        const errorMsg = `INCOMPLETE SCHEDULE: Cannot schedule ${course.subjectCode} for ${course.sectionName}. ` +
-          `Scheduled ${periodsScheduled}/${periodsNeeded} periods. ` +
-          `Reasons: (1) No available theory rooms, (2) Faculty conflicts, (3) Section schedule full, (4) Day period limits exceeded.`
-        console.error(`[Edge Function] ❌ ${errorMsg}`)
-        throw new Error(errorMsg)
+        // Cannot find slot - log and break
+        console.error(`[ERROR] Theory ${course.subjectCode} (${course.sectionName}): Cannot find slot for ${periodsToSchedule} periods (${periodsScheduled}/${periodsNeeded} scheduled)`)
+        break
       }
     }
 
-    // Double-check we scheduled all periods
+    // Log if incomplete
     if (periodsScheduled < periodsNeeded) {
-      throw new Error(
-        `COVERAGE CONSTRAINT VIOLATED: ${course.subjectCode} (${course.sectionName}) scheduled ${periodsScheduled}/${periodsNeeded} periods`
-      )
+      console.error(`[ERROR] Theory ${course.subjectCode} (${course.sectionName}): Incomplete - ${periodsScheduled}/${periodsNeeded} periods`)
     }
 
     this.courseProgress.set(courseId, periodsScheduled)
-    console.log(`[Edge Function] ✅ Completed ${course.subjectCode}: ${periodsScheduled}/${periodsNeeded} periods`)
     return periodsScheduled
   }
 

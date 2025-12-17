@@ -1,5 +1,5 @@
-import type { DayOfWeek, Period, SubjectType } from "../types/database"
-import { RULES } from "../constants/timetable"
+import type { DayOfWeek, Period, SubjectType } from "./database"
+import { RULES } from "./timetable"
 
 // Types for the ILP solver
 export interface CourseAssignment {

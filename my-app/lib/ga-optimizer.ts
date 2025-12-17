@@ -1,5 +1,5 @@
 import type { TimetableSlot } from "./ilp-generator"
-import { GA_CONFIG, FITNESS_WEIGHTS } from "../constants/timetable"
+import { GA_CONFIG, FITNESS_WEIGHTS } from "./timetable"
 
 // Genetic Algorithm for timetable optimization
 export class GATimetableOptimizer {

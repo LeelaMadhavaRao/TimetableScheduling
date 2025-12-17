@@ -37,7 +37,7 @@ export function FacultyList({ faculty: initialFaculty, departments }: FacultyLis
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "faculty" },
-        (payload) => {
+        (payload: any) => {
           console.log("[Faculty] Database change detected:", payload)
           router.refresh()
         }

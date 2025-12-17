@@ -4,7 +4,8 @@ import { useState, useEffect } from "react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Edit, Trash2, BookOpen } from "lucide-react"
+import { Input } from "@/components/ui/input"
+import { Edit, Trash2, BookOpen, Search } from "lucide-react"
 import type { Section, Department, Subject, Faculty } from "@/lib/database"
 import { SectionDialog } from "./section-dialog"
 import { SectionSubjectsDialog } from "./section-subjects-dialog"
@@ -30,6 +31,7 @@ export function SectionList({ sections: initialSections, departments, subjects }
   const [sections, setSections] = useState(initialSections)
   const [selectedSection, setSelectedSection] = useState<SectionWithDetails | null>(null)
   const [showSubjects, setShowSubjects] = useState(false)
+  const [searchQuery, setSearchQuery] = useState("")
   const router = useRouter()
 
   useEffect(() => {
@@ -66,11 +68,33 @@ export function SectionList({ sections: initialSections, departments, subjects }
     setSections(sections.filter((s) => s.id !== id))
   }
 
+  // Filter sections based on search query
+  const filteredSections = sections.filter((section) => {
+    const query = searchQuery.toLowerCase()
+    return (
+      section.name.toLowerCase().includes(query) ||
+      section.year_level.toString().includes(query) ||
+      (section.departments?.name && section.departments.name.toLowerCase().includes(query))
+    )
+  })
+
   return (
     <div className="space-y-4">
-      {sections.length === 0 ? (
+      {/* Search Bar */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
+        <Input
+          type="text"
+          placeholder="Search sections by name, year, or department..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="pl-10"
+        />
+      </div>
+
+      {filteredSections.length === 0 ? (
         <div className="text-center py-12 text-muted-foreground">
-          <p>No sections yet. Add your first section to get started.</p>
+          <p>{searchQuery ? "No sections found matching your search." : "No sections yet. Add your first section to get started."}</p>
         </div>
       ) : (
         <div className="rounded-md border">
@@ -86,7 +110,7 @@ export function SectionList({ sections: initialSections, departments, subjects }
               </TableRow>
             </TableHeader>
             <TableBody>
-              {sections.map((section) => (
+              {filteredSections.map((section) => (
                 <TableRow key={section.id}>
                   <TableCell className="font-medium">{section.name}</TableCell>
                   <TableCell>

@@ -1,7 +1,9 @@
 import { getSupabaseServerClient } from "@/lib/server"
 import { TimetableViewer } from "@/components/timetable-viewer"
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Calendar } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Calendar, ArrowLeft } from "lucide-react"
+import Link from "next/link"
 
 export default async function TimetablePage() {
   const supabase = await getSupabaseServerClient()
@@ -17,7 +19,15 @@ export default async function TimetablePage() {
 
   if (!latestJob) {
     return (
-      <div className="container mx-auto px-4 py-8">
+      <div className="container mx-auto px-4 py-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+        <div className="mb-6">
+          <Link href="/">
+            <Button variant="ghost" size="sm" className="mb-4">
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back to Home
+            </Button>
+          </Link>
+        </div>
         <Card>
           <CardHeader>
             <CardTitle>No Timetable Available</CardTitle>
@@ -44,13 +54,21 @@ export default async function TimetablePage() {
   const { data: faculty } = await supabase.from("faculty").select("*").order("name")
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="container mx-auto px-4 py-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
       <div className="mb-6">
-        <h1 className="text-3xl font-bold text-foreground mb-2">Timetable Viewer</h1>
+        <Link href="/">
+          <Button variant="ghost" size="sm" className="mb-4">
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back to Home
+          </Button>
+        </Link>
+        <h1 className="text-3xl font-bold text-foreground mb-2 bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
+          Timetable Viewer
+        </h1>
         <p className="text-muted-foreground">View generated timetables by section or faculty</p>
       </div>
 
-      <Card className="mb-6">
+      <Card className="mb-6 hover:shadow-lg transition-shadow">
         <CardHeader>
           <div className="flex items-center gap-2">
             <Calendar className="w-5 h-5 text-primary" />

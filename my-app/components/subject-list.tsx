@@ -4,7 +4,8 @@ import { useState, useEffect } from "react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Edit, Trash2 } from "lucide-react"
+import { Input } from "@/components/ui/input"
+import { Edit, Trash2, Search } from "lucide-react"
 import type { Subject, Department, Faculty } from "@/lib/database"
 import { SubjectDialog } from "./subject-dialog"
 import { getSupabaseBrowserClient } from "@/lib/client"
@@ -23,6 +24,7 @@ interface SubjectListProps {
 
 export function SubjectList({ subjects: initialSubjects, departments, faculty }: SubjectListProps) {
   const [subjects, setSubjects] = useState(initialSubjects)
+  const [searchQuery, setSearchQuery] = useState("")
   const router = useRouter()
 
   useEffect(() => {
@@ -59,11 +61,36 @@ export function SubjectList({ subjects: initialSubjects, departments, faculty }:
     setSubjects(subjects.filter((s) => s.id !== id))
   }
 
+  // Filter subjects based on search query
+  const filteredSubjects = subjects.filter((subject) => {
+    const query = searchQuery.toLowerCase()
+    const facultyCodes = subject.subject_faculty?.map(sf => sf.faculty.code).join(" ").toLowerCase() || ""
+    return (
+      subject.name.toLowerCase().includes(query) ||
+      subject.code.toLowerCase().includes(query) ||
+      subject.subject_type.toLowerCase().includes(query) ||
+      facultyCodes.includes(query) ||
+      (subject.departments?.name && subject.departments.name.toLowerCase().includes(query))
+    )
+  })
+
   return (
     <div className="space-y-4">
-      {subjects.length === 0 ? (
+      {/* Search Bar */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
+        <Input
+          type="text"
+          placeholder="Search subjects by name, code, type, faculty, or department..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="pl-10"
+        />
+      </div>
+
+      {filteredSubjects.length === 0 ? (
         <div className="text-center py-12 text-muted-foreground">
-          <p>No subjects yet. Add your first subject to get started.</p>
+          <p>{searchQuery ? "No subjects found matching your search." : "No subjects yet. Add your first subject to get started."}</p>
         </div>
       ) : (
         <div className="rounded-md border">
@@ -80,7 +107,7 @@ export function SubjectList({ subjects: initialSubjects, departments, faculty }:
               </TableRow>
             </TableHeader>
             <TableBody>
-              {subjects.map((subject) => (
+              {filteredSubjects.map((subject) => (
                 <TableRow key={subject.id}>
                   <TableCell>
                     <Badge variant="outline">{subject.code}</Badge>

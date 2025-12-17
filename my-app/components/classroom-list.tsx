@@ -4,7 +4,8 @@ import { useState, useEffect } from "react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Edit, Trash2 } from "lucide-react"
+import { Input } from "@/components/ui/input"
+import { Edit, Trash2, Search } from "lucide-react"
 import type { Classroom } from "@/lib/database"
 import { ClassroomDialog } from "./classroom-dialog"
 import { getSupabaseBrowserClient } from "@/lib/client"
@@ -16,6 +17,7 @@ interface ClassroomListProps {
 
 export function ClassroomList({ classrooms: initialClassrooms }: ClassroomListProps) {
   const [classrooms, setClassrooms] = useState(initialClassrooms)
+  const [searchQuery, setSearchQuery] = useState("")
   const router = useRouter()
 
   useEffect(() => {
@@ -52,11 +54,34 @@ export function ClassroomList({ classrooms: initialClassrooms }: ClassroomListPr
     setClassrooms(classrooms.filter((c) => c.id !== id))
   }
 
+  // Filter classrooms based on search query
+  const filteredClassrooms = classrooms.filter((classroom) => {
+    const query = searchQuery.toLowerCase()
+    return (
+      classroom.name.toLowerCase().includes(query) ||
+      classroom.room_type.toLowerCase().includes(query) ||
+      (classroom.building && classroom.building.toLowerCase().includes(query)) ||
+      classroom.capacity.toString().includes(query)
+    )
+  })
+
   return (
     <div className="space-y-4">
-      {classrooms.length === 0 ? (
+      {/* Search Bar */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
+        <Input
+          type="text"
+          placeholder="Search classrooms by name, type, building, or capacity..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="pl-10"
+        />
+      </div>
+
+      {filteredClassrooms.length === 0 ? (
         <div className="text-center py-12 text-muted-foreground">
-          <p>No classrooms yet. Add your first classroom to get started.</p>
+          <p>{searchQuery ? "No classrooms found matching your search." : "No classrooms yet. Add your first classroom to get started."}</p>
         </div>
       ) : (
         <div className="rounded-md border">
@@ -72,7 +97,7 @@ export function ClassroomList({ classrooms: initialClassrooms }: ClassroomListPr
               </TableRow>
             </TableHeader>
             <TableBody>
-              {classrooms.map((classroom) => (
+              {filteredClassrooms.map((classroom) => (
                 <TableRow key={classroom.id}>
                   <TableCell className="font-medium">{classroom.name}</TableCell>
                   <TableCell>

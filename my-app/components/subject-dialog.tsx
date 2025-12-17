@@ -40,6 +40,7 @@ export function SubjectDialog({ subject, departments, faculty, trigger }: Subjec
     department_id: subject?.department_id || "",
   })
   const [selectedFaculty, setSelectedFaculty] = useState<string[]>([])
+  const [facultySearch, setFacultySearch] = useState("")
   const router = useRouter()
 
   useEffect(() => {
@@ -123,7 +124,14 @@ export function SubjectDialog({ subject, departments, faculty, trigger }: Subjec
                 <Label htmlFor="type">Type *</Label>
                 <Select
                   value={formData.subject_type}
-                  onValueChange={(value: "theory" | "lab") => setFormData({ ...formData, subject_type: value })}
+                  onValueChange={(value: "theory" | "lab") => {
+                    // Labs are always 4 continuous periods once a week
+                    setFormData({ 
+                      ...formData, 
+                      subject_type: value,
+                      periods_per_week: value === "lab" ? 4 : formData.periods_per_week 
+                    })
+                  }}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -145,18 +153,28 @@ export function SubjectDialog({ subject, departments, faculty, trigger }: Subjec
                 required
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="periods">Periods per Week *</Label>
-              <Input
-                id="periods"
-                type="number"
-                min="1"
-                max="20"
-                value={formData.periods_per_week}
-                onChange={(e) => setFormData({ ...formData, periods_per_week: Number.parseInt(e.target.value) || 0 })}
-                required
-              />
-            </div>
+            {formData.subject_type === "theory" ? (
+              <div className="space-y-2">
+                <Label htmlFor="periods">Periods per Week *</Label>
+                <Input
+                  id="periods"
+                  type="number"
+                  min="1"
+                  max="20"
+                  value={formData.periods_per_week}
+                  onChange={(e) => setFormData({ ...formData, periods_per_week: Number.parseInt(e.target.value) || 0 })}
+                  required
+                />
+                <p className="text-xs text-muted-foreground">Number of theory periods per week</p>
+              </div>
+            ) : (
+              <div className="rounded-lg bg-muted/50 p-3 space-y-1">
+                <p className="text-sm font-medium">Lab Schedule</p>
+                <p className="text-xs text-muted-foreground">
+                  Lab subjects are automatically scheduled for 4 continuous periods (1 session) per week
+                </p>
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="department">Department</Label>
               <Select
@@ -177,25 +195,48 @@ export function SubjectDialog({ subject, departments, faculty, trigger }: Subjec
             </div>
             <div className="space-y-2">
               <Label>Assigned Faculty (e.g., JAVA - KSR)</Label>
+              <Input
+                type="text"
+                placeholder="Search faculty by name or code..."
+                value={facultySearch}
+                onChange={(e) => setFacultySearch(e.target.value)}
+                className="mb-2"
+              />
               <div className="border rounded-md p-3 space-y-2 max-h-48 overflow-y-auto">
-                {faculty.map((f) => (
-                  <div key={f.id} className="flex items-center space-x-2">
-                    <Checkbox
-                      id={f.id}
-                      checked={selectedFaculty.includes(f.id)}
-                      onCheckedChange={(checked) => {
-                        if (checked) {
-                          setSelectedFaculty([...selectedFaculty, f.id])
-                        } else {
-                          setSelectedFaculty(selectedFaculty.filter((id) => id !== f.id))
-                        }
-                      }}
-                    />
-                    <label htmlFor={f.id} className="text-sm cursor-pointer">
-                      {f.name} ({f.code})
-                    </label>
-                  </div>
-                ))}
+                {faculty
+                  .filter((f) => {
+                    const query = facultySearch.toLowerCase()
+                    return (
+                      f.name.toLowerCase().includes(query) ||
+                      f.code.toLowerCase().includes(query)
+                    )
+                  })
+                  .map((f) => (
+                    <div key={f.id} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={f.id}
+                        checked={selectedFaculty.includes(f.id)}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            setSelectedFaculty([...selectedFaculty, f.id])
+                          } else {
+                            setSelectedFaculty(selectedFaculty.filter((id) => id !== f.id))
+                          }
+                        }}
+                      />
+                      <label htmlFor={f.id} className="text-sm cursor-pointer">
+                        {f.name} ({f.code})
+                      </label>
+                    </div>
+                  ))}
+                {faculty.filter((f) => {
+                  const query = facultySearch.toLowerCase()
+                  return f.name.toLowerCase().includes(query) || f.code.toLowerCase().includes(query)
+                }).length === 0 && (
+                  <p className="text-sm text-muted-foreground text-center py-2">
+                    No faculty found matching "{facultySearch}"
+                  </p>
+                )}
               </div>
             </div>
           </div>

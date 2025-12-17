@@ -4,7 +4,8 @@ import { useState, useEffect } from "react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Edit, Trash2, Clock } from "lucide-react"
+import { Input } from "@/components/ui/input"
+import { Edit, Trash2, Clock, Search } from "lucide-react"
 import type { Faculty, Department } from "@/lib/database"
 import { FacultyDialog } from "./faculty-dialog"
 import { AvailabilityDialog } from "./availability-dialog"
@@ -24,6 +25,7 @@ export function FacultyList({ faculty: initialFaculty, departments }: FacultyLis
   const [faculty, setFaculty] = useState(initialFaculty)
   const [selectedFaculty, setSelectedFaculty] = useState<FacultyWithDept | null>(null)
   const [showAvailability, setShowAvailability] = useState(false)
+  const [searchQuery, setSearchQuery] = useState("")
   const router = useRouter()
 
   useEffect(() => {
@@ -61,11 +63,34 @@ export function FacultyList({ faculty: initialFaculty, departments }: FacultyLis
     setFaculty(faculty.filter((f) => f.id !== id))
   }
 
+  // Filter faculty based on search query
+  const filteredFaculty = faculty.filter((member) => {
+    const query = searchQuery.toLowerCase()
+    return (
+      member.name.toLowerCase().includes(query) ||
+      member.code.toLowerCase().includes(query) ||
+      (member.email && member.email.toLowerCase().includes(query)) ||
+      (member.departments?.name && member.departments.name.toLowerCase().includes(query))
+    )
+  })
+
   return (
     <div className="space-y-4">
-      {faculty.length === 0 ? (
+      {/* Search Bar */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
+        <Input
+          type="text"
+          placeholder="Search faculty by name, code, email, or department..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="pl-10"
+        />
+      </div>
+
+      {filteredFaculty.length === 0 ? (
         <div className="text-center py-12 text-muted-foreground">
-          <p>No faculty members yet. Add your first faculty member to get started.</p>
+          <p>{searchQuery ? "No faculty members found matching your search." : "No faculty members yet. Add your first faculty member to get started."}</p>
         </div>
       ) : (
         <div className="rounded-md border">
@@ -81,7 +106,7 @@ export function FacultyList({ faculty: initialFaculty, departments }: FacultyLis
               </TableRow>
             </TableHeader>
             <TableBody>
-              {faculty.map((member) => (
+              {filteredFaculty.map((member) => (
                 <TableRow key={member.id}>
                   <TableCell>
                     <Badge variant="outline">{member.code}</Badge>

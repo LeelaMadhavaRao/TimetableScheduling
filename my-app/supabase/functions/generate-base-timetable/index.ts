@@ -200,34 +200,32 @@ class ILPTimetableGenerator {
   }
 
   async generate(): Promise<TimetableSlot[]> {
-    console.log("[Edge Function] Starting ILP-based timetable generation with strict constraints")
-    console.log("[Edge Function] Total courses to schedule:", this.courses.length)
+    console.log(`[Generation] Starting - ${this.courses.length} courses (${this.courses.filter(c => c.subjectType === "lab").length} labs, ${this.courses.filter(c => c.subjectType === "theory").length} theory)`)
 
     const labCourses = this.courses.filter((c) => c.subjectType === "lab")
     const theoryCourses = this.courses.filter((c) => c.subjectType === "theory")
 
     // PRIORITIZATION: Sort labs by difficulty
     const prioritizedLabs = this.prioritizeLabCourses(labCourses)
-    console.log(`[Edge Function] Prioritized ${prioritizedLabs.length} labs (multi-lab sections first)`)
 
-    console.log("[Edge Function] Phase 1: Scheduling", prioritizedLabs.length, "lab courses using external ILP solver")
+    console.log("[Phase 1] Scheduling labs using ILP solver...")
     
     try {
       const labsScheduled = await this.scheduleLabsWithExternalSolver(prioritizedLabs)
-      console.log(`[Edge Function] ✅ Lab ILP scheduling complete: ${labsScheduled} labs successfully scheduled`)
+      console.log(`[Phase 1] ✅ Complete - ${labsScheduled}/${prioritizedLabs.length} labs scheduled`)
     } catch (error) {
-      console.error(`[Edge Function] ❌ External ILP solver failed:`, error instanceof Error ? error.message : String(error))
-      console.log(`[Edge Function] Falling back to greedy algorithm for labs...`)
+      console.error(`[ERROR] ILP solver failed:`, error instanceof Error ? error.message : String(error))
+      console.log(`[Phase 1] Falling back to greedy algorithm...`)
       
       let labsScheduled = 0
       for (const course of labCourses) {
         const scheduled = this.scheduleLabCourse(course)
         if (scheduled) labsScheduled++
       }
-      console.log(`[Edge Function] Greedy fallback: ${labsScheduled}/${labCourses.length} labs scheduled`)
+      console.log(`[Phase 1] Greedy fallback: ${labsScheduled}/${labCourses.length} labs scheduled`)
     }
 
-    console.log("[Edge Function] Phase 2: Scheduling", theoryCourses.length, "theory courses")
+    console.log(`[Phase 2] Scheduling ${theoryCourses.length} theory courses...`)
     let theoryScheduled = 0
     let theoryFailed = 0
     
@@ -237,15 +235,20 @@ class ILPTimetableGenerator {
         theoryScheduled++
       } else {
         theoryFailed++
+        console.error(`[ERROR] Theory ${course.subjectCode} (${course.sectionName}): ${progress}/${course.periodsPerWeek} periods scheduled`)
       }
     }
     
-    console.log(`[Edge Function] Theory scheduling complete: ${theoryScheduled} fully scheduled, ${theoryFailed} partially/not scheduled`)
-
-    console.log("[Edge Function] Generation complete. Total slots:", this.timetable.length)
+    console.log(`[Phase 2] ✅ Complete - ${theoryScheduled}/${theoryCourses.length} theory courses fully scheduled`)
     
+    if (theoryFailed > 0) {
+      console.error(`[ERROR] ${theoryFailed} theory courses incomplete`)
+    }
+
     // Validate no overlaps
     this.validateNoOverlaps()
+    
+    console.log(`[Generation] ✅ Complete - ${this.timetable.length} total time slots created`)
     
     return this.timetable
   }
@@ -253,9 +256,8 @@ class ILPTimetableGenerator {
   async scheduleLabsWithExternalSolver(labCourses: CourseAssignment[]): Promise<number> {
     if (labCourses.length === 0) return 0
 
-    console.log("[ILP] Preparing problem data for external solver...")
     const labRooms = this.classrooms.filter((r) => r.roomType === "lab")
-    console.log(`[ILP] Found ${labRooms.length} lab rooms available`)
+    console.log(`[ILP] Sending ${labCourses.length} labs to solver (${labRooms.length} rooms available)`)
 
     // Serialize problem data as JSON
     const problemData = {
@@ -289,24 +291,6 @@ class ILPTimetableGenerator {
       },
     }
 
-    console.log(`[ILP] Sending problem to solver service at ${ILP_SOLVER_URL}/solve-labs`)
-    console.log(`[ILP] Problem size: ${labCourses.length} labs, ${labRooms.length} rooms`)
-    console.log(`[ILP] 🔍 DEBUG - Lab Courses:`, labCourses.map(c => ({
-      subject: c.subjectCode,
-      section: c.sectionName,
-      students: c.studentCount,
-      faculty: c.facultyCode
-    })))
-    console.log(`[ILP] 🔍 DEBUG - Lab Rooms:`, labRooms.map(r => ({
-      id: r.id,
-      name: r.name,
-      capacity: r.capacity
-    })))
-    console.log(`[ILP] 🔍 DEBUG - Faculty Availability (sample):`, Object.entries(problemData.facultyAvailability).slice(0, 3).map(([code, windows]) => ({
-      faculty: code,
-      windows: windows.length
-    })))
-
     // Call external ILP solver service
     const startTime = Date.now()
     try {
@@ -318,47 +302,57 @@ class ILPTimetableGenerator {
 
       if (!response.ok) {
         const errorText = await response.text()
-        console.error(`[ILP] ❌ Solver error response (${response.status}):`, errorText)
-        console.error(`[ILP] Full error details:`, errorText)
+        console.error(`[ERROR] Solver returned ${response.status}:`, errorText)
         throw new Error(`Solver service returned ${response.status}: ${errorText}`)
       }
 
       const result = await response.json()
       const solveTime = Date.now() - startTime
-      console.log(`[ILP] ✅ Solver completed in ${solveTime}ms`)
-      console.log(`[ILP] Result structure:`, { success: result.success, status: result.status, assignmentCount: result.assignments?.length })
+      console.log(`[ILP] Solver completed in ${solveTime}ms - Status: ${result.status}`)
       
       if (!result.success) {
         throw new Error(result.message || "Solver failed to find a solution")
       }
 
       console.log(`[ILP] Solution status: ${result.status}`)
-      console.log(`[ILP] Assigning ${result.assignments.length} lab slots to timetable`)
+      console.log(`[ILP] Processing ${result.assignments.length} lab assignments...`)
 
       // Process solution from solver
       let assignedLabs = 0
+      let skippedLabs = 0
+      const skippedDetails: string[] = []
+      
       for (const assignment of result.assignments) {
         const course = labCourses.find(
           (c) => c.sectionId === assignment.sectionId && c.subjectId === assignment.subjectId
         )
         if (!course) {
-          console.warn(`[ILP] ⚠️ Course not found for assignment:`, assignment)
+          console.error(`[ERROR] Lab course not found for assignment - Section: ${assignment.sectionId}, Subject: ${assignment.subjectId}`)
+          skippedLabs++
           continue
         }
 
-        this.addSlot(
+        const success = this.addSlot(
           course,
           assignment.day as DayOfWeek,
           assignment.startPeriod as Period,
           assignment.endPeriod as Period,
           assignment.roomId
         )
-        assignedLabs++
-
-        console.log(
-          `[ILP] ✓ Assigned ${course.subjectCode} (${course.sectionName}) to room ${assignment.roomId} ` +
-          `on day ${assignment.day} periods ${assignment.startPeriod}-${assignment.endPeriod}`
-        )
+        
+        if (success) {
+          assignedLabs++
+        } else {
+          skippedLabs++
+          skippedDetails.push(`${course.subjectCode} (${course.sectionName}) - Day ${assignment.day}, Periods ${assignment.startPeriod}-${assignment.endPeriod}`)
+        }
+      }
+      
+      console.log(`[ILP] ✅ Lab scheduling complete: ${assignedLabs}/${result.assignments.length} assigned`)
+      
+      if (skippedLabs > 0) {
+        console.error(`[ERROR] Skipped ${skippedLabs} labs due to conflicts:`)
+        skippedDetails.forEach(detail => console.error(`  - ${detail}`))
       }
 
       return assignedLabs
@@ -702,7 +696,7 @@ class ILPTimetableGenerator {
     startPeriod: Period,
     endPeriod: Period,
     classroomId: string,
-  ): void {
+  ): boolean {
     // Double-check for conflicts before adding (safety check)
     for (let p = startPeriod; p <= endPeriod; p++) {
       const key = `${day}-${p}`
@@ -712,16 +706,16 @@ class ILPTimetableGenerator {
       const sectionSchedule = this.sectionSchedule.get(course.sectionId) || new Set()
       
       if (facultySchedule.has(key)) {
-        console.error(`[ILP] ❌ CRITICAL ERROR: Faculty ${course.facultyCode} already scheduled at Day ${day} Period ${p}`)
-        return
+        console.error(`[ERROR] Faculty ${course.facultyCode} conflict at Day ${day} Period ${p} - Skipping ${course.subjectCode} (${course.sectionName})`)
+        return false
       }
       if (roomSchedule.has(key)) {
-        console.error(`[ILP] ❌ CRITICAL ERROR: Room ${classroomId} already scheduled at Day ${day} Period ${p}`)
-        return
+        console.error(`[ERROR] Room ${classroomId} conflict at Day ${day} Period ${p} - Skipping ${course.subjectCode} (${course.sectionName})`)
+        return false
       }
       if (sectionSchedule.has(key)) {
-        console.error(`[ILP] ❌ CRITICAL ERROR: Section ${course.sectionName} already scheduled at Day ${day} Period ${p}`)
-        return
+        console.error(`[ERROR] Section ${course.sectionName} conflict at Day ${day} Period ${p} - Skipping ${course.subjectCode}`)
+        return false
       }
     }
 
@@ -771,7 +765,7 @@ class ILPTimetableGenerator {
       this.sectionSchedule.get(course.sectionId)!.add(key)
     }
     
-    console.log(`[ILP] ✓ Assigned ${course.subjectCode} to ${course.sectionName} with ${course.facultyCode} on Day ${day} Periods ${startPeriod}-${endPeriod}`)
+    return true
   }
 }
 

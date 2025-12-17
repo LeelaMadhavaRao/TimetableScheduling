@@ -117,11 +117,13 @@ INSERT INTO faculty_availability (faculty_id, day_of_week, start_period, end_per
   ((SELECT id FROM faculty WHERE code = 'CSE-F003'), 3, 3, 8),  -- Thursday
   ((SELECT id FROM faculty WHERE code = 'CSE-F003'), 4, 3, 8);  -- Friday
 
--- CSE-F004: Sneha Desai - Limited availability
+-- CSE-F004: Sneha Desai - Expanded availability for 3 lab sections
 INSERT INTO faculty_availability (faculty_id, day_of_week, start_period, end_period) VALUES
-  ((SELECT id FROM faculty WHERE code = 'CSE-F004'), 0, 1, 4),  -- Monday
-  ((SELECT id FROM faculty WHERE code = 'CSE-F004'), 2, 2, 6),  -- Wednesday
-  ((SELECT id FROM faculty WHERE code = 'CSE-F004'), 4, 1, 5);  -- Friday
+  ((SELECT id FROM faculty WHERE code = 'CSE-F004'), 0, 1, 8),  -- Monday (full day)
+  ((SELECT id FROM faculty WHERE code = 'CSE-F004'), 1, 1, 8),  -- Tuesday (full day)
+  ((SELECT id FROM faculty WHERE code = 'CSE-F004'), 2, 1, 8),  -- Wednesday (full day)
+  ((SELECT id FROM faculty WHERE code = 'CSE-F004'), 3, 1, 8),  -- Thursday (full day)
+  ((SELECT id FROM faculty WHERE code = 'CSE-F004'), 4, 1, 8);  -- Friday (full day)
 
 -- CSE-F005: Vikram Singh - Expanded availability for lab sections
 INSERT INTO faculty_availability (faculty_id, day_of_week, start_period, end_period) VALUES

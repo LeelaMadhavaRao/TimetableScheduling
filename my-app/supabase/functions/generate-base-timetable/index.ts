@@ -61,7 +61,7 @@ const RULES = {
   PERIOD_DURATION_MINS: 45,
   LUNCH_START_PERIOD: 4.5,
   LUNCH_END_PERIOD: 5,
-  MAX_THEORY_PERIODS_PER_SUBJECT_PER_DAY: 2, // Per SUBJECT per day (not section)
+  MAX_THEORY_BLOCK_SIZE: 3, // Max periods to schedule in one block (2.25hr max)
   MAX_SECTION_PERIODS_PER_DAY: 6, // Total periods per section per day (allows 4-5 subjects)
   THEORY_BLOCK_OPTIONS: [1.5, 2.25, 3], // hours per week
 }
@@ -502,7 +502,7 @@ class ILPTimetableGenerator {
     while (periodsScheduled < periodsNeeded && attempts < maxAttempts) {
       attempts++
       const remainingPeriods = periodsNeeded - periodsScheduled
-      const periodsToSchedule = Math.min(RULES.MAX_THEORY_PERIODS_PER_DAY, remainingPeriods)
+      const periodsToSchedule = Math.min(RULES.MAX_THEORY_BLOCK_SIZE, remainingPeriods)
 
       const slot = this.findTheorySlot(course, periodsToSchedule)
       if (slot) {
@@ -594,11 +594,6 @@ class ILPTimetableGenerator {
 
     // Check total section periods per day (not too many classes in one day)
     if (!this.canScheduleTheoryOnDay(course.sectionId, day, end - start + 1)) {
-      return null
-    }
-    
-    // Check per-SUBJECT periods per day (max 2 periods of same subject per day)
-    if (!this.canScheduleSubjectOnDay(course.sectionId, course.subjectId, day, end - start + 1)) {
       return null
     }
 
@@ -706,19 +701,6 @@ class ILPTimetableGenerator {
 
     // Section can have up to MAX_SECTION_PERIODS_PER_DAY total (includes labs)
     return periodsOnDay + additionalPeriods <= RULES.MAX_SECTION_PERIODS_PER_DAY
-  }
-
-  // Check if this specific subject can have more periods on this day (per-subject limit)
-  private canScheduleSubjectOnDay(sectionId: string, subjectId: string, day: DayOfWeek, additionalPeriods: number): boolean {
-    // Check how many periods this subject already has on this day for this section
-    let subjectPeriodsOnDay = 0
-    for (const slot of this.timetable) {
-      if (slot.sectionId === sectionId && slot.subjectId === subjectId && slot.day === day) {
-        subjectPeriodsOnDay += (slot.endPeriod - slot.startPeriod + 1)
-      }
-    }
-    
-    return subjectPeriodsOnDay + additionalPeriods <= RULES.MAX_THEORY_PERIODS_PER_SUBJECT_PER_DAY
   }
 
   private addSlot(

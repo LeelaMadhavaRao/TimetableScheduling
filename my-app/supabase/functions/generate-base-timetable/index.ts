@@ -291,6 +291,21 @@ class ILPTimetableGenerator {
 
     console.log(`[ILP] Sending problem to solver service at ${ILP_SOLVER_URL}/solve-labs`)
     console.log(`[ILP] Problem size: ${labCourses.length} labs, ${labRooms.length} rooms`)
+    console.log(`[ILP] 🔍 DEBUG - Lab Courses:`, labCourses.map(c => ({
+      subject: c.subjectCode,
+      section: c.sectionName,
+      students: c.studentCount,
+      faculty: c.facultyCode
+    })))
+    console.log(`[ILP] 🔍 DEBUG - Lab Rooms:`, labRooms.map(r => ({
+      id: r.id,
+      name: r.name,
+      capacity: r.capacity
+    })))
+    console.log(`[ILP] 🔍 DEBUG - Faculty Availability (sample):`, Object.entries(problemData.facultyAvailability).slice(0, 3).map(([code, windows]) => ({
+      faculty: code,
+      windows: windows.length
+    })))
 
     // Call external ILP solver service
     const startTime = Date.now()
@@ -303,13 +318,15 @@ class ILPTimetableGenerator {
 
       if (!response.ok) {
         const errorText = await response.text()
-        console.error(`[ILP] Solver error response (${response.status}):`, errorText)
+        console.error(`[ILP] ❌ Solver error response (${response.status}):`, errorText)
+        console.error(`[ILP] Full error details:`, errorText)
         throw new Error(`Solver service returned ${response.status}: ${errorText}`)
       }
 
       const result = await response.json()
       const solveTime = Date.now() - startTime
       console.log(`[ILP] ✅ Solver completed in ${solveTime}ms`)
+      console.log(`[ILP] Result structure:`, { success: result.success, status: result.status, assignmentCount: result.assignments?.length })
       
       if (!result.success) {
         throw new Error(result.message || "Solver failed to find a solution")
@@ -876,6 +893,20 @@ Deno.serve(async (req) => {
       console.error("[Edge Function] Error fetching availability:", availabilityResult.error)
       throw new Error(`Database error: ${availabilityResult.error.message}`)
     }
+
+    // 🔍 DEBUG: Log raw faculty availability from database
+    console.log("[Edge Function] 🔍 DEBUG - Faculty Availability from DB:", JSON.stringify(availability, null, 2))
+    const mechF003Avail = availability?.filter(a => {
+      // Find MECH-F003 by matching faculty_id
+      const facultyMatch = sectionSubjects?.find(ss => ss.faculty?.code === 'MECH-F003')
+      return facultyMatch && a.faculty_id === facultyMatch.faculty_id
+    })
+    const cseF005Avail = availability?.filter(a => {
+      const facultyMatch = sectionSubjects?.find(ss => ss.faculty?.code === 'CSE-F005')
+      return facultyMatch && a.faculty_id === facultyMatch.faculty_id
+    })
+    console.log("[Edge Function] 🔍 DEBUG - MECH-F003 availability windows:", mechF003Avail?.length || 0, mechF003Avail)
+    console.log("[Edge Function] 🔍 DEBUG - CSE-F005 availability windows:", cseF005Avail?.length || 0, cseF005Avail)
 
     if (!sectionSubjects || !classrooms) {
       await supabase

@@ -121,17 +121,26 @@ def solve_lab_timetable(data: ProblemData):
         
         # Build faculty availability map
         faculty_avail_map = {}
+        print(f"\n[Solver] 📊 FACULTY AVAILABILITY ANALYSIS:")
         for fa in data.facultyAvailability:
             if not fa.slots:  # Empty means available all times
                 faculty_avail_map[fa.facultyId] = "all"
+                print(f"[Solver]   {fa.facultyId}: FULL AVAILABILITY (no restrictions)")
             else:
                 avail_set = set()
                 for slot in fa.slots:
                     for period in range(slot.startPeriod, slot.endPeriod + 1):
                         avail_set.add((slot.dayOfWeek, period))
                 faculty_avail_map[fa.facultyId] = avail_set
+                # Count blocks this faculty can teach
+                block_count = 0
+                for slot in fa.slots:
+                    # Count 4-period blocks within this slot
+                    block_count += max(0, slot.endPeriod - slot.startPeriod - 3 + 1)
+                print(f"[Solver]   {fa.facultyId}: {len(fa.slots)} windows, {len(avail_set)} period-slots, ~{block_count} possible 4-period blocks")
+                print(f"[Solver]      Windows: {[(s.dayOfWeek, s.startPeriod, s.endPeriod) for s in fa.slots]}")
         
-        print(f"[Solver] Problem size: {len(courses)} labs, {len(rooms)} rooms")
+        print(f"\n[Solver] Problem size: {len(courses)} labs, {len(rooms)} rooms")
         
         # ============================================
         # DECISION VARIABLES
@@ -171,6 +180,9 @@ def solve_lab_timetable(data: ProblemData):
         # ============================================
         # CONSTRAINT 1: Each lab scheduled exactly once (HARD REQUIREMENT)
         # ============================================
+        print(f"\n[Solver] 🔍 DEBUG: Checking valid assignments for all labs...")
+        print(f"[Solver] Total valid assignment combinations: {len(valid_assignments)}")
+        
         unschedulable_labs = []
         for c_idx, course in enumerate(courses):
             course_vars = [
@@ -178,27 +190,67 @@ def solve_lab_timetable(data: ProblemData):
                 for (c, day, block, r_idx) in valid_assignments
                 if c == c_idx
             ]
+            
+            print(f"[Solver] Lab {c_idx}: {course.subjectCode} ({course.sectionName}, {course.studentCount} students)")
+            print(f"[Solver]   Faculty: {course.facultyCode}")
+            print(f"[Solver]   Valid assignments: {len(course_vars)}")
+            
             if course_vars:
                 # HARD CONSTRAINT: Exactly 1 assignment per lab
                 model.Add(sum(course_vars) == 1)
             else:
+                # Diagnose why no valid assignments - DETAILED ANALYSIS
+                suitable_rooms = [r for r in rooms if r.capacity >= int(course.studentCount * 0.85)]
+                faculty_slots = faculty_availability.get(course.facultyCode, [])
+                
+                print(f"[Solver]   ❌ NO VALID ASSIGNMENTS FOUND")
+                print(f"[Solver]   Suitable rooms (>=85% capacity): {len(suitable_rooms)}")
+                print(f"[Solver]   Rooms list: {[f'{r.name}({r.capacity})' for r in suitable_rooms[:5]]}")
+                print(f"[Solver]   Faculty availability windows: {len(faculty_slots)}")
+                print(f"[Solver]   Faculty slots detail: {[(s.dayOfWeek, s.startPeriod, s.endPeriod) for s in faculty_slots]}")
+                
+                # Check which specific constraints are blocking
+                blocking_reasons = []
+                if len(suitable_rooms) == 0:
+                    blocking_reasons.append(f"No rooms with capacity >= {int(course.studentCount * 0.85)}")
+                if len(faculty_slots) == 0:
+                    blocking_reasons.append(f"Faculty {course.facultyCode} has NO availability windows")
+                else:
+                    # Check if faculty slots allow 4-period blocks
+                    valid_blocks = []
+                    for slot in faculty_slots:
+                        for start_p in range(slot.startPeriod, slot.endPeriod - 3 + 1):
+                            valid_blocks.append((slot.dayOfWeek, start_p))
+                    if len(valid_blocks) == 0:
+                        blocking_reasons.append(f"Faculty windows don't allow 4-period blocks")
+                    print(f"[Solver]   Possible 4-period blocks for faculty: {len(valid_blocks)}")
+                
                 # Track labs that cannot be scheduled
                 unschedulable_labs.append({
                     "subjectCode": course.subjectCode,
                     "section": course.sectionName,
                     "studentCount": course.studentCount,
-                    "reason": "No valid room/time combinations"
+                    "facultyCode": course.facultyCode,
+                    "suitableRooms": len(suitable_rooms),
+                    "facultyWindows": len(faculty_slots),
+                    "blockingReasons": blocking_reasons,
+                    "reason": " | ".join(blocking_reasons) if blocking_reasons else "Unknown constraint conflict"
                 })
         
         # FAIL HARD if any labs cannot be scheduled
         if unschedulable_labs:
             error_details = "\n".join([
-                f"  • {lab['subjectCode']} ({lab['section']}, {lab['studentCount']} students): {lab['reason']}"
+                f"  • {lab['subjectCode']} ({lab['section']}, {lab['studentCount']} students)\n"
+                f"    Faculty: {lab['facultyCode']}, Suitable Rooms: {lab['suitableRooms']}, Availability Windows: {lab['facultyWindows']}"
                 for lab in unschedulable_labs
             ])
             raise ValueError(
-                f"INFEASIBLE: Cannot schedule {len(unschedulable_labs)} lab(s):\n{error_details}\n"
-                f"Please check: (1) Lab room capacities, (2) Faculty availability, (3) Time block availability"
+                f"INFEASIBLE: Cannot schedule {len(unschedulable_labs)} lab(s):\n{error_details}\n\n"
+                f"Diagnosis:\n"
+                f"- Total rooms: {len(rooms)}\n"
+                f"- Total time blocks: {len(days)} days × {len(time_blocks)} blocks = {len(days) * len(time_blocks)}\n"
+                f"- Total valid assignments checked: {len(valid_assignments)}\n"
+                f"\nPlease check: (1) Lab room capacities, (2) Faculty availability, (3) Time block availability"
             )
         
         print(f"[Solver] ✓ Added constraint: each of {len(courses)} labs exactly once (HARD)")

@@ -1,0 +1,11 @@
+{
+  "name": "ILP Timetable Solver",
+  "description": "FastAPI-based ILP solver for timetable scheduling using Google OR-Tools",
+  "repository": "https://github.com/LeelaMadhavaRao/TimetableScheduling",
+  "keywords": ["fastapi", "or-tools", "scheduling", "constraint-programming"],
+  "buildpacks": [
+    {
+      "url": "heroku/python"
+    }
+  ]
+}

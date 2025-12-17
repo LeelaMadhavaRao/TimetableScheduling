@@ -216,7 +216,7 @@ class ILPTimetableGenerator {
       const labsScheduled = await this.scheduleLabsWithExternalSolver(prioritizedLabs)
       console.log(`[Edge Function] ✅ Lab ILP scheduling complete: ${labsScheduled} labs successfully scheduled`)
     } catch (error) {
-      console.error(`[Edge Function] ❌ External ILP solver failed:`, error.message)
+      console.error(`[Edge Function] ❌ External ILP solver failed:`, error instanceof Error ? error.message : String(error))
       console.log(`[Edge Function] Falling back to greedy algorithm for labs...`)
       
       let labsScheduled = 0
@@ -294,55 +294,61 @@ class ILPTimetableGenerator {
 
     // Call external ILP solver service
     const startTime = Date.now()
-    const response = await fetch(`${ILP_SOLVER_URL}/solve-labs`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(problemData),
-    })
+    try {
+      const response = await fetch(`${ILP_SOLVER_URL}/solve-labs`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(problemData),
+      })
 
-    if (!response.ok) {
-      const errorText = await response.text()
-      throw new Error(`Solver service returned ${response.status}: ${errorText}`)
-    }
-
-    const result = await response.json()
-    const solveTime = Date.now() - startTime
-    console.log(`[ILP] ✅ Solver completed in ${solveTime}ms`)
-
-    if (!result.success) {
-      throw new Error(result.message || "Solver failed to find a solution")
-    }
-
-    console.log(`[ILP] Solution status: ${result.status}`)
-    console.log(`[ILP] Assigning ${result.assignments.length} lab slots to timetable`)
-
-    // Process solution from solver
-    let assignedLabs = 0
-    for (const assignment of result.assignments) {
-      const course = labCourses.find(
-        (c) => c.sectionId === assignment.sectionId && c.subjectId === assignment.subjectId
-      )
-      if (!course) {
-        console.warn(`[ILP] ⚠️ Course not found for assignment:`, assignment)
-        continue
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error(`[ILP] Solver error response (${response.status}):`, errorText)
+        throw new Error(`Solver service returned ${response.status}: ${errorText}`)
       }
 
-      this.addSlot(
-        course,
-        assignment.day as DayOfWeek,
-        assignment.startPeriod as Period,
-        assignment.endPeriod as Period,
-        assignment.roomId
-      )
-      assignedLabs++
+      const result = await response.json()
+      const solveTime = Date.now() - startTime
+      console.log(`[ILP] ✅ Solver completed in ${solveTime}ms`)
+      
+      if (!result.success) {
+        throw new Error(result.message || "Solver failed to find a solution")
+      }
 
-      console.log(
-        `[ILP] ✓ Assigned ${course.subjectCode} (${course.sectionName}) to room ${assignment.roomId} ` +
-        `on day ${assignment.day} periods ${assignment.startPeriod}-${assignment.endPeriod}`
-      )
+      console.log(`[ILP] Solution status: ${result.status}`)
+      console.log(`[ILP] Assigning ${result.assignments.length} lab slots to timetable`)
+
+      // Process solution from solver
+      let assignedLabs = 0
+      for (const assignment of result.assignments) {
+        const course = labCourses.find(
+          (c) => c.sectionId === assignment.sectionId && c.subjectId === assignment.subjectId
+        )
+        if (!course) {
+          console.warn(`[ILP] ⚠️ Course not found for assignment:`, assignment)
+          continue
+        }
+
+        this.addSlot(
+          course,
+          assignment.day as DayOfWeek,
+          assignment.startPeriod as Period,
+          assignment.endPeriod as Period,
+          assignment.roomId
+        )
+        assignedLabs++
+
+        console.log(
+          `[ILP] ✓ Assigned ${course.subjectCode} (${course.sectionName}) to room ${assignment.roomId} ` +
+          `on day ${assignment.day} periods ${assignment.startPeriod}-${assignment.endPeriod}`
+        )
+      }
+
+      return assignedLabs
+    } catch (fetchError) {
+      console.error(`[ILP] ❌ Failed to call solver at ${ILP_SOLVER_URL}:`, fetchError instanceof Error ? fetchError.message : String(fetchError))
+      throw new Error(`Failed to call ILP solver: ${fetchError instanceof Error ? fetchError.message : String(fetchError)}`)
     }
-
-    return assignedLabs
   }
 
   private scheduleLabCourse(course: CourseAssignment): boolean {
@@ -857,6 +863,20 @@ Deno.serve(async (req) => {
     const classrooms = classroomsResult.data
     const availability = availabilityResult.data
 
+    // Check for database errors
+    if (sectionSubjectsResult.error) {
+      console.error("[Edge Function] Error fetching section_subjects:", sectionSubjectsResult.error)
+      throw new Error(`Database error: ${sectionSubjectsResult.error.message}`)
+    }
+    if (classroomsResult.error) {
+      console.error("[Edge Function] Error fetching classrooms:", classroomsResult.error)
+      throw new Error(`Database error: ${classroomsResult.error.message}`)
+    }
+    if (availabilityResult.error) {
+      console.error("[Edge Function] Error fetching availability:", availabilityResult.error)
+      throw new Error(`Database error: ${availabilityResult.error.message}`)
+    }
+
     if (!sectionSubjects || !classrooms) {
       await supabase
         .from("timetable_jobs")
@@ -920,7 +940,7 @@ Deno.serve(async (req) => {
     // Run ILP generation
     const startTime = Date.now()
     const generator = new ILPTimetableGenerator(courses, classroomOptions, facultyAvailability)
-    const timetableSlots = generator.generate()
+    const timetableSlots = await generator.generate()
     const generationTime = Date.now() - startTime
 
     console.log("[Edge Function] Generation completed in", generationTime, "ms")
@@ -1027,7 +1047,7 @@ Deno.serve(async (req) => {
   } catch (error) {
     console.error("[Edge Function] Error:", error)
     return new Response(
-      JSON.stringify({ error: error.message || "Internal server error" }),
+      JSON.stringify({ error: error instanceof Error ? error.message : "Internal server error" }),
       {
         status: 500,
         headers: {

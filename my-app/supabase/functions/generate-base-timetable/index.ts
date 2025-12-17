@@ -61,7 +61,8 @@ const RULES = {
   PERIOD_DURATION_MINS: 45,
   LUNCH_START_PERIOD: 4.5,
   LUNCH_END_PERIOD: 5,
-  MAX_THEORY_PERIODS_PER_DAY: 2,
+  MAX_THEORY_PERIODS_PER_SUBJECT_PER_DAY: 2, // Per SUBJECT per day (not section)
+  MAX_SECTION_PERIODS_PER_DAY: 6, // Total periods per section per day (allows 4-5 subjects)
   THEORY_BLOCK_OPTIONS: [1.5, 2.25, 3], // hours per week
 }
 
@@ -423,7 +424,7 @@ class ILPTimetableGenerator {
   ): { day: DayOfWeek; startPeriod: Period; endPeriod: Period; classroomId: string } | null {
     if (this.isSectionAlreadyScheduled(course.sectionId, day, start, end)) return null
     if (!this.isFacultyDynamicallyAvailable(course.facultyId, day, start, end)) return null
-    if (!this.checkFacultyGapRule(course.facultyId, day, start, end)) return null
+    // Faculty gap rule is soft - don't block labs for this
 
     for (const room of rooms) {
       if (this.isRoomDynamicallyAvailable(room.id, day, start, end)) {
@@ -532,19 +533,40 @@ class ILPTimetableGenerator {
 
     // Days to try: Mon(0) to Fri(4), then Sat(5)
     const daysToTry: DayOfWeek[] = [0, 1, 2, 3, 4, 5]
-
+    
+    // PASS 1: Try with faculty gap rule enforced (preferred)
     for (const day of daysToTry) {
-      // Saturday only half day for non-first years
       const maxPeriod = day === 5 && course.yearLevel !== 1 ? 4 : 8
 
-      // Try different starting positions for the required periods
       for (let start = 1; start <= maxPeriod - periodsNeeded + 1; start++) {
         const end = start + periodsNeeded - 1
         if (end > maxPeriod) continue
 
         // Don't split across lunch (periods 4 and 5)
         if (start <= 4 && end > 4) continue
+        
+        // Check faculty gap rule in pass 1
+        if (!this.checkFacultyGapRule(course.facultyId, day as DayOfWeek, start as Period, end as Period)) {
+          continue
+        }
 
+        const slot = this.tryTheorySlot(course, theoryRooms, day as DayOfWeek, start as Period, end as Period)
+        if (slot) return slot
+      }
+    }
+    
+    // PASS 2: Relax faculty gap rule if no slot found (fallback)
+    for (const day of daysToTry) {
+      const maxPeriod = day === 5 && course.yearLevel !== 1 ? 4 : 8
+
+      for (let start = 1; start <= maxPeriod - periodsNeeded + 1; start++) {
+        const end = start + periodsNeeded - 1
+        if (end > maxPeriod) continue
+
+        // Don't split across lunch
+        if (start <= 4 && end > 4) continue
+
+        // Skip gap rule check - accept any valid slot
         const slot = this.tryTheorySlot(course, theoryRooms, day as DayOfWeek, start as Period, end as Period)
         if (slot) return slot
       }
@@ -570,15 +592,18 @@ class ILPTimetableGenerator {
       return null
     }
 
-    // Check theory periods per day constraint
+    // Check total section periods per day (not too many classes in one day)
     if (!this.canScheduleTheoryOnDay(course.sectionId, day, end - start + 1)) {
       return null
     }
-
-    // Check faculty gap rule
-    if (!this.checkFacultyGapRule(course.facultyId, day, start, end)) {
+    
+    // Check per-SUBJECT periods per day (max 2 periods of same subject per day)
+    if (!this.canScheduleSubjectOnDay(course.sectionId, course.subjectId, day, end - start + 1)) {
       return null
     }
+
+    // Check faculty gap rule (soft - only for theory, skip if no other option)
+    // This is handled separately in findTheorySlot with fallback
 
     // CRITICAL CHECK 3: Find room with DYNAMIC availability
     for (const room of rooms) {
@@ -667,6 +692,7 @@ class ILPTimetableGenerator {
     return true
   }
 
+  // Check if section can have more theory on this day (total section limit)
   private canScheduleTheoryOnDay(sectionId: string, day: DayOfWeek, additionalPeriods: number): boolean {
     const schedule = this.sectionSchedule.get(sectionId)
     if (!schedule) return true
@@ -678,7 +704,21 @@ class ILPTimetableGenerator {
       }
     }
 
-    return periodsOnDay + additionalPeriods <= RULES.MAX_THEORY_PERIODS_PER_DAY
+    // Section can have up to MAX_SECTION_PERIODS_PER_DAY total (includes labs)
+    return periodsOnDay + additionalPeriods <= RULES.MAX_SECTION_PERIODS_PER_DAY
+  }
+
+  // Check if this specific subject can have more periods on this day (per-subject limit)
+  private canScheduleSubjectOnDay(sectionId: string, subjectId: string, day: DayOfWeek, additionalPeriods: number): boolean {
+    // Check how many periods this subject already has on this day for this section
+    let subjectPeriodsOnDay = 0
+    for (const slot of this.timetable) {
+      if (slot.sectionId === sectionId && slot.subjectId === subjectId && slot.day === day) {
+        subjectPeriodsOnDay += (slot.endPeriod - slot.startPeriod + 1)
+      }
+    }
+    
+    return subjectPeriodsOnDay + additionalPeriods <= RULES.MAX_THEORY_PERIODS_PER_SUBJECT_PER_DAY
   }
 
   private addSlot(

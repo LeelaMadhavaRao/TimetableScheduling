@@ -808,22 +808,61 @@ class ILPTimetableGenerator {
       `[Edge Function] Scheduling THEORY ${course.subjectCode} for ${course.sectionName} - ${periodsNeeded} periods needed`,
     )
 
-    // Try to schedule in blocks (1.5hr, 2.25hr, or 3hr = 2, 3, or 4 periods)
+    // Try to schedule in blocks (2 or 3 periods MINIMUM, never single period)
+    // Theory blocks: 2 periods (1.5hr), 3 periods (2.25hr)
     let attempts = 0
     const maxAttempts = 50 // Prevent infinite loops
     
     while (periodsScheduled < periodsNeeded && attempts < maxAttempts) {
       attempts++
       const remainingPeriods = periodsNeeded - periodsScheduled
-      const periodsToSchedule = Math.min(RULES.MAX_THEORY_BLOCK_SIZE, remainingPeriods)
+      
+      // Determine block size: prefer 3 periods, but allow 2 periods
+      // NEVER schedule single-period theory blocks
+      let periodsToSchedule: number
+      if (remainingPeriods >= 3) {
+        periodsToSchedule = Math.min(RULES.MAX_THEORY_BLOCK_SIZE, remainingPeriods)
+      } else if (remainingPeriods === 2) {
+        periodsToSchedule = 2
+      } else if (remainingPeriods === 1) {
+        // Cannot schedule 1 period - theory minimum is 2 periods
+        console.warn(`[Edge Function] ⚠️ ${course.subjectCode} has 1 remaining period - cannot schedule (min 2 periods)`)
+        break
+      } else {
+        break
+      }
 
       const slot = this.findTheorySlot(course, periodsToSchedule)
       if (slot) {
         const success = this.addSlot(course, slot.day, slot.startPeriod, slot.endPeriod, slot.classroomId)
         if (success) {
           periodsScheduled += periodsToSchedule
+        } else {
+          // Try smaller block if 3 failed
+          if (periodsToSchedule === 3 && remainingPeriods >= 2) {
+            const slot2 = this.findTheorySlot(course, 2)
+            if (slot2) {
+              const success2 = this.addSlot(course, slot2.day, slot2.startPeriod, slot2.endPeriod, slot2.classroomId)
+              if (success2) {
+                periodsScheduled += 2
+                continue
+              }
+            }
+          }
+          break
         }
       } else {
+        // Try smaller block if 3 failed
+        if (periodsToSchedule === 3 && remainingPeriods >= 2) {
+          const slot2 = this.findTheorySlot(course, 2)
+          if (slot2) {
+            const success = this.addSlot(course, slot2.day, slot2.startPeriod, slot2.endPeriod, slot2.classroomId)
+            if (success) {
+              periodsScheduled += 2
+              continue
+            }
+          }
+        }
         // Cannot find slot - break and accept partial schedule
         break
       }
@@ -1160,6 +1199,69 @@ class ILPTimetableGenerator {
     
     return true
   }
+
+  /**
+   * Detect all conflicts in the generated timetable
+   * Returns array of conflict descriptions
+   */
+  detectConflicts(slots: TimetableSlot[]): string[] {
+    const conflicts: string[] = []
+    
+    // Maps to track occupancy
+    const facultyOccupied = new Map<string, Set<string>>() // facultyId -> Set of "day-period"
+    const roomOccupied = new Map<string, Set<string>>() // roomId -> Set of "day-period"
+    const sectionOccupied = new Map<string, Set<string>>() // sectionId -> Set of "day-period"
+    
+    for (const slot of slots) {
+      const course = this.courses.find(c => c.sectionId === slot.sectionId && c.subjectId === slot.subjectId)
+      if (!course) continue
+      
+      // Check each period in the slot
+      for (let p = slot.startPeriod; p <= slot.endPeriod; p++) {
+        const key = `${slot.day}-${p}`
+        
+        // Check faculty conflict
+        if (!facultyOccupied.has(slot.facultyId)) {
+          facultyOccupied.set(slot.facultyId, new Set())
+        }
+        if (facultyOccupied.get(slot.facultyId)!.has(key)) {
+          conflicts.push(`Faculty ${course.facultyCode} has overlapping classes at Day ${slot.day} Period ${p}`)
+        }
+        facultyOccupied.get(slot.facultyId)!.add(key)
+        
+        // Check room conflict
+        if (!roomOccupied.has(slot.classroomId)) {
+          roomOccupied.set(slot.classroomId, new Set())
+        }
+        if (roomOccupied.get(slot.classroomId)!.has(key)) {
+          conflicts.push(`Room ${slot.classroomId} has overlapping classes at Day ${slot.day} Period ${p}`)
+        }
+        roomOccupied.get(slot.classroomId)!.add(key)
+        
+        // Check section conflict
+        if (!sectionOccupied.has(slot.sectionId)) {
+          sectionOccupied.set(slot.sectionId, new Set())
+        }
+        if (sectionOccupied.get(slot.sectionId)!.has(key)) {
+          const existingSlot = slots.find(s => 
+            s.sectionId === slot.sectionId && 
+            s.day === slot.day && 
+            s.startPeriod <= p && 
+            s.endPeriod >= p &&
+            s !== slot
+          )
+          const existingCourse = existingSlot ? this.courses.find(c => 
+            c.sectionId === existingSlot.sectionId && c.subjectId === existingSlot.subjectId
+          ) : null
+          
+          conflicts.push(`Section ${course.sectionName} has overlapping classes at Day ${slot.day} Period ${p}: ${course.subjectCode} conflicts with ${existingCourse?.subjectCode || 'unknown'}`)
+        }
+        sectionOccupied.get(slot.sectionId)!.add(key)
+      }
+    }
+    
+    return conflicts
+  }
 }
 
 // Validation function to check schedule completeness
@@ -1415,6 +1517,42 @@ Deno.serve(async (req) => {
       const s = labSlotsToInsert[i]
       console.log(`  Lab ${i}: Day=${s.day_of_week}, Periods=${s.start_period}-${s.end_period} (${s.end_period - s.start_period + 1} periods)`)
     }
+
+    // 🔍 CRITICAL: Validate for conflicts BEFORE database insert
+    console.log("[Edge Function] 🔍 Validating timetable for conflicts before insert...")
+    const conflicts = generator.detectConflicts(timetableSlots)
+    
+    if (conflicts.length > 0) {
+      console.error(`[Edge Function] ❌ CRITICAL: Found ${conflicts.length} conflicts in generated timetable!`)
+      conflicts.forEach((c, i) => {
+        console.error(`  Conflict ${i + 1}: ${c}`)
+      })
+      
+      await supabase
+        .from("timetable_jobs")
+        .update({ 
+          status: "failed", 
+          message: `Timetable generation failed: ${conflicts.length} conflicts detected. ${conflicts[0]}` 
+        })
+        .eq("id", job.id)
+      
+      return new Response(
+        JSON.stringify({ 
+          error: "CONFLICTS_DETECTED",
+          conflicts: conflicts.slice(0, 10),
+          message: `Generated timetable contains ${conflicts.length} conflicts` 
+        }),
+        {
+          status: 422,
+          headers: {
+            "Content-Type": "application/json",
+            "Access-Control-Allow-Origin": "*",
+          },
+        },
+      )
+    }
+    
+    console.log("[Edge Function] ✅ No conflicts detected - proceeding with database insert")
 
     const { error: insertError } = await supabase.from("timetable_base").insert(slotsToInsert)
 

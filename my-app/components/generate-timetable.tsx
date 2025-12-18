@@ -10,6 +10,7 @@ import { Play, Zap, CheckCircle, AlertCircle, Loader2, Eye, Download } from "luc
 import { getSupabaseBrowserClient } from "@/lib/client"
 import type { TimetableJob } from "@/lib/database"
 import { generateTimetablePDF } from "@/lib/pdf-generator"
+import type { REALTIME_SUBSCRIBE_STATES } from "@supabase/supabase-js"
 
 interface ErrorDetail {
   section: string
@@ -52,7 +53,7 @@ export function GenerateTimetable() {
           }
         },
       )
-      .subscribe((status) => {
+      .subscribe((status: `${REALTIME_SUBSCRIBE_STATES}`) => {
         console.log("[GenerateTimetable] Subscription status:", status)
       })
 

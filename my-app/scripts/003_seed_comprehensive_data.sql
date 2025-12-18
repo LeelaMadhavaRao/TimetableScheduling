@@ -210,38 +210,40 @@ INSERT INTO faculty_availability (faculty_id, day_of_week, start_period, end_per
   ((SELECT id FROM faculty WHERE code = 'CIVIL-F002'), 5, 1, 4);  -- Saturday
 
 -- ==================== SUBJECTS - COMPUTER SCIENCE ====================
+-- IMPORTANT: For labs, periods_per_week = 1 means ONE 4-period block per week
+-- NOT individual periods! Each lab session is 4 continuous periods (P1-4 or P5-8)
 INSERT INTO subjects (name, code, subject_type, periods_per_week, department_id) VALUES
   ('Data Structures', 'CS-101', 'theory', 3, (SELECT id FROM departments WHERE code = 'CSE')),
-  ('Data Structures Lab', 'CS-101L', 'lab', 2, (SELECT id FROM departments WHERE code = 'CSE')),
+  ('Data Structures Lab', 'CS-101L', 'lab', 1, (SELECT id FROM departments WHERE code = 'CSE')),
   ('Web Development', 'CS-201', 'theory', 3, (SELECT id FROM departments WHERE code = 'CSE')),
-  ('Web Development Lab', 'CS-201L', 'lab', 2, (SELECT id FROM departments WHERE code = 'CSE')),
+  ('Web Development Lab', 'CS-201L', 'lab', 1, (SELECT id FROM departments WHERE code = 'CSE')),
   ('Database Management', 'CS-301', 'theory', 3, (SELECT id FROM departments WHERE code = 'CSE')),
-  ('Database Lab', 'CS-301L', 'lab', 2, (SELECT id FROM departments WHERE code = 'CSE')),
+  ('Database Lab', 'CS-301L', 'lab', 1, (SELECT id FROM departments WHERE code = 'CSE')),
   ('Artificial Intelligence', 'CS-401', 'theory', 3, (SELECT id FROM departments WHERE code = 'CSE')),
   ('Machine Learning', 'CS-402', 'theory', 3, (SELECT id FROM departments WHERE code = 'CSE')),
   ('Cloud Computing', 'CS-501', 'theory', 3, (SELECT id FROM departments WHERE code = 'CSE')),
-  ('Cloud Computing Lab', 'CS-501L', 'lab', 2, (SELECT id FROM departments WHERE code = 'CSE')),
+  ('Cloud Computing Lab', 'CS-501L', 'lab', 1, (SELECT id FROM departments WHERE code = 'CSE')),
   
   -- ECE Subjects
   ('Circuit Theory', 'EC-101', 'theory', 3, (SELECT id FROM departments WHERE code = 'ECE')),
-  ('Circuit Lab', 'EC-101L', 'lab', 2, (SELECT id FROM departments WHERE code = 'ECE')),
+  ('Circuit Lab', 'EC-101L', 'lab', 1, (SELECT id FROM departments WHERE code = 'ECE')),
   ('Digital Electronics', 'EC-201', 'theory', 3, (SELECT id FROM departments WHERE code = 'ECE')),
-  ('Digital Electronics Lab', 'EC-201L', 'lab', 2, (SELECT id FROM departments WHERE code = 'ECE')),
+  ('Digital Electronics Lab', 'EC-201L', 'lab', 1, (SELECT id FROM departments WHERE code = 'ECE')),
   ('Microprocessors', 'EC-301', 'theory', 3, (SELECT id FROM departments WHERE code = 'ECE')),
-  ('Microprocessor Lab', 'EC-301L', 'lab', 2, (SELECT id FROM departments WHERE code = 'ECE')),
+  ('Microprocessor Lab', 'EC-301L', 'lab', 1, (SELECT id FROM departments WHERE code = 'ECE')),
   
   -- MECH Subjects
   ('Thermodynamics', 'ME-101', 'theory', 3, (SELECT id FROM departments WHERE code = 'MECH')),
   ('Mechanics', 'ME-201', 'theory', 3, (SELECT id FROM departments WHERE code = 'MECH')),
-  ('Mechanics Lab', 'ME-201L', 'lab', 2, (SELECT id FROM departments WHERE code = 'MECH')),
+  ('Mechanics Lab', 'ME-201L', 'lab', 1, (SELECT id FROM departments WHERE code = 'MECH')),
   ('CAD Design', 'ME-301', 'theory', 2, (SELECT id FROM departments WHERE code = 'MECH')),
-  ('CAD Lab', 'ME-301L', 'lab', 3, (SELECT id FROM departments WHERE code = 'MECH')),
+  ('CAD Lab', 'ME-301L', 'lab', 1, (SELECT id FROM departments WHERE code = 'MECH')),
   
   -- CIVIL Subjects
   ('Structural Analysis', 'CE-101', 'theory', 3, (SELECT id FROM departments WHERE code = 'CIVIL')),
   ('Structural Design', 'CE-201', 'theory', 3, (SELECT id FROM departments WHERE code = 'CIVIL')),
   ('Geotechnics', 'CE-301', 'theory', 3, (SELECT id FROM departments WHERE code = 'CIVIL')),
-  ('Geotechnics Lab', 'CE-301L', 'lab', 2, (SELECT id FROM departments WHERE code = 'CIVIL'))
+  ('Geotechnics Lab', 'CE-301L', 'lab', 1, (SELECT id FROM departments WHERE code = 'CIVIL'))
 ON CONFLICT (code) DO NOTHING;
 
 -- ==================== SUBJECT-FACULTY ASSIGNMENTS ====================
@@ -458,11 +460,17 @@ ON CONFLICT (section_id, subject_id) DO NOTHING;
 
 -- ==================== SUMMARY ====================
 -- This script seeds:
--- - 17 Classrooms (11 theory, 6 labs)
--- - 16 Faculty members with availability schedules
+-- - 17 Classrooms (11 theory, 7 labs)
+-- - 15 Faculty members with availability schedules
 -- - 25 Subjects (theory and lab)
+--   * Labs have periods_per_week=1 (meaning 1 session of 4 continuous periods)
+--   * Theory subjects have periods_per_week=2-3 (individual periods)
 -- - 25 Subject-Faculty assignments
 -- - 13 Sections across 4 departments
 -- - 43 Section-Subject assignments
+--
+-- LAB SCHEDULING CONSTRAINT:
+-- Each lab must be scheduled exactly ONCE per week as a 4-period block (P1-4 or P5-8)
+-- The ILP solver handles this by scheduling labs as continuous 4-period blocks
 --
 -- Ready for timetable generation testing!

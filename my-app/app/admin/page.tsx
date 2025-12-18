@@ -21,8 +21,8 @@ export default async function AdminDashboardPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-3xl font-bold text-foreground mb-2">Admin Dashboard</h1>
-        <p className="text-muted-foreground">Manage your timetable scheduling system</p>
+        <h1 className="text-3xl font-bold text-white mb-2">Admin Dashboard</h1>
+        <p className="text-slate-300">Manage your timetable scheduling system</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -53,15 +53,15 @@ export default async function AdminDashboardPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card>
+        <Card className="bg-slate-800/50 border-slate-700 backdrop-blur-xl">
           <CardHeader>
-            <CardTitle>Quick Actions</CardTitle>
-            <CardDescription>Common administrative tasks</CardDescription>
+            <CardTitle className="text-white">Quick Actions</CardTitle>
+            <CardDescription className="text-slate-300">Common administrative tasks</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
             <Link href="/admin/faculty" className="block">
               <ClickSpark sparkColor="#3b82f6" sparkSize={10} sparkRadius={15} sparkCount={8} duration={400}>
-                <Button variant="outline" className="w-full justify-start bg-transparent">
+                <Button variant="outline" className="w-full justify-start bg-slate-700/50 border-slate-600 text-white hover:bg-slate-700 hover:border-blue-500/50">
                   <Users className="w-4 h-4 mr-2" />
                   Manage Faculty
                 </Button>
@@ -69,7 +69,7 @@ export default async function AdminDashboardPage() {
             </Link>
             <Link href="/admin/subjects" className="block">
               <ClickSpark sparkColor="#8b5cf6" sparkSize={10} sparkRadius={15} sparkCount={8} duration={400}>
-                <Button variant="outline" className="w-full justify-start bg-transparent">
+                <Button variant="outline" className="w-full justify-start bg-slate-700/50 border-slate-600 text-white hover:bg-slate-700 hover:border-blue-500/50">
                   <BookOpen className="w-4 h-4 mr-2" />
                   Manage Subjects
                 </Button>
@@ -77,7 +77,7 @@ export default async function AdminDashboardPage() {
             </Link>
             <Link href="/admin/classrooms" className="block">
               <ClickSpark sparkColor="#f59e0b" sparkSize={10} sparkRadius={15} sparkCount={8} duration={400}>
-                <Button variant="outline" className="w-full justify-start bg-transparent">
+                <Button variant="outline" className="w-full justify-start bg-slate-700/50 border-slate-600 text-white hover:bg-slate-700 hover:border-blue-500/50">
                   <Building className="w-4 h-4 mr-2" />
                   Manage Classrooms
                 </Button>
@@ -85,7 +85,7 @@ export default async function AdminDashboardPage() {
             </Link>
             <Link href="/admin/sections" className="block">
               <ClickSpark sparkColor="#ec4899" sparkSize={10} sparkRadius={15} sparkCount={8} duration={400}>
-                <Button variant="outline" className="w-full justify-start bg-transparent">
+                <Button variant="outline" className="w-full justify-start bg-slate-700/50 border-slate-600 text-white hover:bg-slate-700 hover:border-blue-500/50">
                   <Layers className="w-4 h-4 mr-2" />
                   Manage Sections
                 </Button>
@@ -102,14 +102,14 @@ export default async function AdminDashboardPage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="bg-slate-800/50 border-slate-700 backdrop-blur-xl">
           <CardHeader>
-            <CardTitle>Recent Activity</CardTitle>
-            <CardDescription>Timetable generation history</CardDescription>
+            <CardTitle className="text-white">Recent Activity</CardTitle>
+            <CardDescription className="text-slate-300">Timetable generation history</CardDescription>
           </CardHeader>
           <CardContent>
             {jobsCount.count === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
+              <div className="text-center py-8 text-slate-300">
                 <Calendar className="w-12 h-12 mx-auto mb-2 opacity-50" />
                 <p>No timetables generated yet</p>
                 <Link href="/admin/generate">
@@ -119,7 +119,7 @@ export default async function AdminDashboardPage() {
                 </Link>
               </div>
             ) : (
-              <div className="flex items-center gap-2 text-muted-foreground">
+              <div className="flex items-center gap-2 text-slate-300">
                 <TrendingUp className="w-4 h-4" />
                 <span>{jobsCount.count} timetable generation jobs</span>
               </div>
@@ -128,60 +128,60 @@ export default async function AdminDashboardPage() {
         </Card>
       </div>
 
-      <Card className="bg-muted/30">
+      <Card className="bg-slate-800/50 border-slate-700 backdrop-blur-xl">
         <CardHeader>
-          <CardTitle>System Workflow</CardTitle>
-          <CardDescription>Follow these steps to generate your timetable</CardDescription>
+          <CardTitle className="text-white">System Workflow</CardTitle>
+          <CardDescription className="text-slate-300">Follow these steps to generate your timetable</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
             <div className="flex gap-4">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground font-semibold">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-500 text-white font-semibold">
                 1
               </div>
               <div>
-                <h4 className="font-semibold text-foreground mb-1">Setup Faculty</h4>
-                <p className="text-sm text-muted-foreground">
+                <h4 className="font-semibold text-white mb-1">Setup Faculty</h4>
+                <p className="text-sm text-slate-300">
                   Add faculty members with their codes, departments, and available time slots
                 </p>
               </div>
             </div>
             <div className="flex gap-4">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground font-semibold">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-500 text-white font-semibold">
                 2
               </div>
               <div>
-                <h4 className="font-semibold text-foreground mb-1">Create Subjects</h4>
-                <p className="text-sm text-muted-foreground">
+                <h4 className="font-semibold text-white mb-1">Create Subjects</h4>
+                <p className="text-sm text-slate-300">
                   Define subjects with faculty mappings (e.g., JAVA - KSR) and periods per week
                 </p>
               </div>
             </div>
             <div className="flex gap-4">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground font-semibold">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-500 text-white font-semibold">
                 3
               </div>
               <div>
-                <h4 className="font-semibold text-foreground mb-1">Configure Classrooms</h4>
-                <p className="text-sm text-muted-foreground">Add classrooms with capacity and type (lab/theory)</p>
+                <h4 className="font-semibold text-white mb-1">Configure Classrooms</h4>
+                <p className="text-sm text-slate-300">Add classrooms with capacity and type (lab/theory)</p>
               </div>
             </div>
             <div className="flex gap-4">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground font-semibold">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-500 text-white font-semibold">
                 4
               </div>
               <div>
-                <h4 className="font-semibold text-foreground mb-1">Setup Sections</h4>
-                <p className="text-sm text-muted-foreground">Create sections with student counts and assign subjects</p>
+                <h4 className="font-semibold text-white mb-1">Setup Sections</h4>
+                <p className="text-sm text-slate-300">Create sections with student counts and assign subjects</p>
               </div>
             </div>
             <div className="flex gap-4">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-success text-white font-semibold">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white font-semibold">
                 5
               </div>
               <div>
-                <h4 className="font-semibold text-foreground mb-1">Generate & Optimize</h4>
-                <p className="text-sm text-muted-foreground">
+                <h4 className="font-semibold text-white mb-1">Generate & Optimize</h4>
+                <p className="text-sm text-slate-300">
                   Run ILP-based generation for base timetable, then optimize using Genetic Algorithm
                 </p>
               </div>

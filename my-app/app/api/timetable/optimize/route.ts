@@ -5,7 +5,7 @@ import type { TimetableSlot } from "@/lib/ilp-generator"
 
 export async function POST(request: Request) {
   try {
-    const { jobId } = await request.json()
+    const { jobId, adminId } = await request.json()
 
     if (!jobId) {
       return NextResponse.json({ error: "Job ID required" }, { status: 400 })
@@ -59,18 +59,24 @@ export async function POST(request: Request) {
       .update({ progress: 80, message: "Saving optimized timetable..." })
       .eq("id", jobId)
 
-    // Save optimized timetable
-    const optimizedSlots = optimizedSchedule.map((slot) => ({
-      job_id: jobId,
-      section_id: slot.sectionId,
-      subject_id: slot.subjectId,
-      faculty_id: slot.facultyId,
-      classroom_id: slot.classroomId,
-      day_of_week: slot.day,
-      start_period: slot.startPeriod,
-      end_period: slot.endPeriod,
-      fitness_score: finalFitness,
-    }))
+    // Save optimized timetable - include created_by if adminId is provided
+    const optimizedSlots = optimizedSchedule.map((slot) => {
+      const slotData: any = {
+        job_id: jobId,
+        section_id: slot.sectionId,
+        subject_id: slot.subjectId,
+        faculty_id: slot.facultyId,
+        classroom_id: slot.classroomId,
+        day_of_week: slot.day,
+        start_period: slot.startPeriod,
+        end_period: slot.endPeriod,
+        fitness_score: finalFitness,
+      }
+      if (adminId) {
+        slotData.created_by = adminId
+      }
+      return slotData
+    })
 
     const { error: insertError } = await supabase.from("timetable_optimized").insert(optimizedSlots)
 

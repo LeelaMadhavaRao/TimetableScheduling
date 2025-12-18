@@ -3,18 +3,60 @@ import { getSupabaseServerClient } from "@/lib/server"
 import { ILPTimetableGenerator } from "@/lib/ilp-generator"
 import type { CourseAssignment, ClassroomOption, FacultyAvailabilitySlot } from "@/lib/ilp-generator"
 
-export async function POST() {
+export async function POST(request: Request) {
   try {
     const supabase = await getSupabaseServerClient()
+    
+    // Parse request body to get administrator ID
+    let adminId: string | null = null
+    try {
+      const body = await request.json()
+      adminId = body.adminId || null
+    } catch {
+      // No body provided, continue without admin filtering
+    }
+
+    // If adminId is provided, delete previous timetables for this administrator
+    if (adminId) {
+      console.log(`[GenerateBase] Deleting previous timetables for admin: ${adminId}`)
+      
+      // Delete from timetable_optimized first (if exists)
+      await supabase
+        .from("timetable_optimized")
+        .delete()
+        .eq("created_by", adminId)
+      
+      // Delete from timetable_base
+      const { error: deleteBaseError } = await supabase
+        .from("timetable_base")
+        .delete()
+        .eq("created_by", adminId)
+      
+      if (deleteBaseError) {
+        console.warn(`[GenerateBase] Warning deleting old base timetable: ${deleteBaseError.message}`)
+      }
+      
+      // Delete old jobs
+      await supabase
+        .from("timetable_jobs")
+        .delete()
+        .eq("created_by", adminId)
+    }
 
     // Create a new job
+    const jobInsert: Record<string, unknown> = {
+      status: "generating_base",
+      progress: 10,
+      message: "Fetching data...",
+    }
+    
+    if (adminId) {
+      jobInsert.created_by = adminId
+    }
+    
     const { data: job, error: jobError } = await supabase
       .from("timetable_jobs")
-      .insert({
-        status: "generating_base",
-        progress: 10,
-        message: "Fetching data...",
-      })
+      .insert(jobInsert)
       .select()
       .single()
 
@@ -22,14 +64,46 @@ export async function POST() {
       return NextResponse.json({ error: jobError.message }, { status: 500 })
     }
 
-    // Fetch all data needed for generation
-    const { data: sectionSubjects } = await supabase
+    // Fetch all data needed for generation (filtered by admin if provided)
+    let sectionSubjectsQuery = supabase
       .from("section_subjects")
       .select("*, sections(*), subjects(*), faculty(*)")
-
-    const { data: classrooms } = await supabase.from("classrooms").select("*")
-
-    const { data: availability } = await supabase.from("faculty_availability").select("*")
+    
+    let classroomsQuery = supabase.from("classrooms").select("*")
+    let availabilityQuery = supabase.from("faculty_availability").select("*")
+    
+    // Filter by admin if provided
+    if (adminId) {
+      // For section_subjects, we need to filter through sections
+      const { data: adminSections } = await supabase
+        .from("sections")
+        .select("id")
+        .eq("created_by", adminId)
+      
+      const sectionIds = adminSections?.map(s => s.id) || []
+      
+      if (sectionIds.length > 0) {
+        sectionSubjectsQuery = sectionSubjectsQuery.in("section_id", sectionIds)
+      }
+      
+      classroomsQuery = classroomsQuery.eq("created_by", adminId)
+      
+      // Get faculty IDs for this admin
+      const { data: adminFaculty } = await supabase
+        .from("faculty")
+        .select("id")
+        .eq("created_by", adminId)
+      
+      const facultyIds = adminFaculty?.map(f => f.id) || []
+      
+      if (facultyIds.length > 0) {
+        availabilityQuery = availabilityQuery.in("faculty_id", facultyIds)
+      }
+    }
+    
+    const { data: sectionSubjects } = await sectionSubjectsQuery
+    const { data: classrooms } = await classroomsQuery
+    const { data: availability } = await availabilityQuery
 
     if (!sectionSubjects || !classrooms) {
       await supabase
@@ -88,16 +162,24 @@ export async function POST() {
     await supabase.from("timetable_jobs").update({ progress: 80, message: "Saving timetable..." }).eq("id", job.id)
 
     // Save to database
-    const slotsToInsert = timetableSlots.map((slot) => ({
-      job_id: job.id,
-      section_id: slot.sectionId,
-      subject_id: slot.subjectId,
-      faculty_id: slot.facultyId,
-      classroom_id: slot.classroomId,
-      day_of_week: slot.day,
-      start_period: slot.startPeriod,
-      end_period: slot.endPeriod,
-    }))
+    const slotsToInsert = timetableSlots.map((slot) => {
+      const slotData: Record<string, unknown> = {
+        job_id: job.id,
+        section_id: slot.sectionId,
+        subject_id: slot.subjectId,
+        faculty_id: slot.facultyId,
+        classroom_id: slot.classroomId,
+        day_of_week: slot.day,
+        start_period: slot.startPeriod,
+        end_period: slot.endPeriod,
+      }
+      
+      if (adminId) {
+        slotData.created_by = adminId
+      }
+      
+      return slotData
+    })
 
     const { error: insertError } = await supabase.from("timetable_base").insert(slotsToInsert)
 

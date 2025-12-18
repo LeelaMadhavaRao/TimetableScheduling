@@ -29,30 +29,30 @@ export default async function ClassroomsPage() {
               </ClickSpark>
             </Link>
             <div>
-              <h1 className="text-3xl font-bold text-foreground mb-1 bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">
+              <h1 className="text-3xl font-bold text-white mb-1">
                 Classroom Management
               </h1>
-              <p className="text-muted-foreground">Manage classrooms with capacity and type configuration</p>
+              <p className="text-slate-300">Manage classrooms with capacity and type configuration</p>
             </div>
           </div>
         </div>
         <ClassroomDialog />
       </div>
 
-      <Card className="border-primary/20 shadow-lg hover:shadow-xl transition-all duration-300 hover:border-primary/40">
-        <CardHeader className="bg-gradient-to-r from-primary/5 to-transparent">
+      <Card className="bg-slate-800/50 border-slate-700 backdrop-blur-xl shadow-lg hover:shadow-xl transition-all duration-300 hover:border-blue-500/50">
+        <CardHeader className="bg-gradient-to-r from-blue-500/10 to-transparent">
           <div className="flex items-center gap-2">
-            <div className="p-2 rounded-lg bg-primary/10">
-              <Building className="w-5 h-5 text-primary" />
+            <div className="p-2 rounded-lg bg-blue-500/20">
+              <Building className="w-5 h-5 text-blue-400" />
             </div>
             <div className="flex-1">
-              <CardTitle className="flex items-center gap-2">
+              <CardTitle className="flex items-center gap-2 text-white">
                 Classrooms
-                <span className="text-sm font-normal text-muted-foreground">
+                <span className="text-sm font-normal text-slate-400">
                   ({classrooms?.length || 0} total)
                 </span>
               </CardTitle>
-              <CardDescription className="flex items-center gap-1 mt-1">
+              <CardDescription className="flex items-center gap-1 mt-1 text-slate-300">
                 <Info className="w-3 h-3" />
                 Configure classrooms with capacity and type (lab/theory)
               </CardDescription>

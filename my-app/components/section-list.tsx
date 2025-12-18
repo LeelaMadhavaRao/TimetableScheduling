@@ -83,7 +83,7 @@ export function SectionList({ sections: initialSections, departments, subjects }
     <div className="space-y-4">
       {/* Search Bar */}
       <div className="relative">
-        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
+        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-4 h-4" />
         <Input
           type="text"
           placeholder="Search sections by name, year, or department..."
@@ -94,11 +94,11 @@ export function SectionList({ sections: initialSections, departments, subjects }
       </div>
 
       {filteredSections.length === 0 ? (
-        <div className="text-center py-12 text-muted-foreground">
+        <div className="text-center py-12 text-slate-300">
           <p>{searchQuery ? "No sections found matching your search." : "No sections yet. Add your first section to get started."}</p>
         </div>
       ) : (
-        <div className="rounded-md border">
+        <div className="rounded-md border border-slate-700 bg-slate-800/30">
           <Table>
             <TableHeader>
               <TableRow>
@@ -113,7 +113,7 @@ export function SectionList({ sections: initialSections, departments, subjects }
             <TableBody>
               {filteredSections.map((section) => (
                 <TableRow key={section.id}>
-                  <TableCell className="font-medium">{section.name}</TableCell>
+                  <TableCell className="font-medium text-white">{section.name}</TableCell>
                   <TableCell>
                     <Badge variant="outline">Year {section.year_level}</Badge>
                   </TableCell>
@@ -133,7 +133,7 @@ export function SectionList({ sections: initialSections, departments, subjects }
                             setShowSubjects(true)
                           }}
                         >
-                          <BookOpen className="w-4 h-4" />
+                          <BookOpen className="w-4 h-4 text-black" />
                         </Button>
                       </ClickSpark>
                       <SectionDialog
@@ -142,13 +142,13 @@ export function SectionList({ sections: initialSections, departments, subjects }
                         subjects={subjects}
                         trigger={<ClickSpark sparkColor="#10b981" sparkSize={8} sparkRadius={12} sparkCount={6} duration={350}>
                           <Button variant="outline" size="sm">
-                            <Edit className="w-4 h-4" />
+                            <Edit className="w-4 h-4 text-black" />
                           </Button>
                         </ClickSpark>}
                       />
                       <ClickSpark sparkColor="#ef4444" sparkSize={8} sparkRadius={12} sparkCount={6} duration={350}>
                         <Button variant="outline" size="sm" onClick={() => handleDelete(section.id)}>
-                          <Trash2 className="w-4 h-4 text-destructive" />
+                          <Trash2 className="w-4 h-4 text-red-400" />
                         </Button>
                       </ClickSpark>
                     </div>

@@ -1342,16 +1342,68 @@ Deno.serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     const supabase = createClient(supabaseUrl, supabaseKey)
 
-    console.log("[Edge Function] Starting base timetable generation")
+    // Parse request body for adminId (multi-tenant support)
+    let adminId: string | null = null
+    try {
+      const body = await req.json()
+      adminId = body?.adminId || null
+      console.log("[Edge Function] Request body:", JSON.stringify(body))
+    } catch {
+      // No body or invalid JSON - that's okay, adminId will be null
+      console.log("[Edge Function] No request body or invalid JSON")
+    }
 
-    // Create a new job
+    console.log("[Edge Function] Starting base timetable generation", adminId ? `for admin: ${adminId}` : "(no admin filter)")
+
+    // If adminId is provided, delete old timetable data first
+    if (adminId) {
+      console.log("[Edge Function] Cleaning up old timetable data for admin:", adminId)
+      
+      // Get old job IDs for this admin
+      const { data: oldJobs } = await supabase
+        .from("timetable_jobs")
+        .select("id")
+        .eq("created_by", adminId)
+      
+      if (oldJobs && oldJobs.length > 0) {
+        const oldJobIds = oldJobs.map(j => j.id)
+        console.log("[Edge Function] Found", oldJobIds.length, "old jobs to clean up")
+        
+        // Delete optimized timetable data
+        await supabase
+          .from("timetable_optimized")
+          .delete()
+          .in("job_id", oldJobIds)
+        
+        // Delete base timetable data
+        await supabase
+          .from("timetable_base")
+          .delete()
+          .in("job_id", oldJobIds)
+        
+        // Delete old jobs
+        await supabase
+          .from("timetable_jobs")
+          .delete()
+          .eq("created_by", adminId)
+        
+        console.log("[Edge Function] Old timetable data cleaned up")
+      }
+    }
+
+    // Create a new job with created_by if adminId is provided
+    const jobInsertData: any = {
+      status: "generating_base",
+      progress: 10,
+      message: "Fetching data...",
+    }
+    if (adminId) {
+      jobInsertData.created_by = adminId
+    }
+
     const { data: job, error: jobError } = await supabase
       .from("timetable_jobs")
-      .insert({
-        status: "generating_base",
-        progress: 10,
-        message: "Fetching data...",
-      })
+      .insert(jobInsertData)
       .select()
       .single()
 
@@ -1362,11 +1414,59 @@ Deno.serve(async (req) => {
 
     console.log("[Edge Function] Job created:", job.id)
 
-    // Fetch all data needed for generation
+    // Fetch all data needed for generation - with optional admin filtering
+    let sectionSubjectsQuery = supabase
+      .from("section_subjects")
+      .select("*, sections(*), subjects(*), faculty(*)")
+    
+    let classroomsQuery = supabase.from("classrooms").select("*")
+    
+    let availabilityQuery = supabase.from("faculty_availability").select("*, faculty(*)")
+    
+    // If adminId is provided, filter data by admin's created entities
+    if (adminId) {
+      console.log("[Edge Function] Filtering data by admin:", adminId)
+      
+      // First, get sections created by this admin
+      const { data: adminSections } = await supabase
+        .from("sections")
+        .select("id")
+        .eq("created_by", adminId)
+      
+      const sectionIds = adminSections?.map(s => s.id) || []
+      console.log("[Edge Function] Admin's sections:", sectionIds.length)
+      
+      // Get faculty created by this admin
+      const { data: adminFaculty } = await supabase
+        .from("faculty")
+        .select("id")
+        .eq("created_by", adminId)
+      
+      const facultyIds = adminFaculty?.map(f => f.id) || []
+      console.log("[Edge Function] Admin's faculty:", facultyIds.length)
+      
+      // Filter queries
+      if (sectionIds.length > 0) {
+        sectionSubjectsQuery = sectionSubjectsQuery.in("section_id", sectionIds)
+      } else {
+        // No sections - return empty results
+        sectionSubjectsQuery = sectionSubjectsQuery.eq("section_id", "00000000-0000-0000-0000-000000000000")
+      }
+      
+      classroomsQuery = classroomsQuery.eq("created_by", adminId)
+      
+      if (facultyIds.length > 0) {
+        availabilityQuery = availabilityQuery.in("faculty_id", facultyIds)
+      } else {
+        // No faculty - return empty results
+        availabilityQuery = availabilityQuery.eq("faculty_id", "00000000-0000-0000-0000-000000000000")
+      }
+    }
+
     const [sectionSubjectsResult, classroomsResult, availabilityResult] = await Promise.all([
-      supabase.from("section_subjects").select("*, sections(*), subjects(*), faculty(*)"),
-      supabase.from("classrooms").select("*"),
-      supabase.from("faculty_availability").select("*"),
+      sectionSubjectsQuery,
+      classroomsQuery,
+      availabilityQuery,
     ])
 
     const sectionSubjects = sectionSubjectsResult.data
@@ -1488,17 +1588,23 @@ Deno.serve(async (req) => {
       .update({ progress: 80, message: "Saving timetable..." })
       .eq("id", job.id)
 
-    // Save to database
-    const slotsToInsert = timetableSlots.map((slot) => ({
-      job_id: job.id,
-      section_id: slot.sectionId,
-      subject_id: slot.subjectId,
-      faculty_id: slot.facultyId,
-      classroom_id: slot.classroomId,
-      day_of_week: slot.day,
-      start_period: slot.startPeriod,
-      end_period: slot.endPeriod,
-    }))
+    // Save to database - include created_by if adminId is provided
+    const slotsToInsert = timetableSlots.map((slot) => {
+      const slotData: any = {
+        job_id: job.id,
+        section_id: slot.sectionId,
+        subject_id: slot.subjectId,
+        faculty_id: slot.facultyId,
+        classroom_id: slot.classroomId,
+        day_of_week: slot.day,
+        start_period: slot.startPeriod,
+        end_period: slot.endPeriod,
+      }
+      if (adminId) {
+        slotData.created_by = adminId
+      }
+      return slotData
+    })
 
     // 🔍 DEBUG: Log sample slots before database insert
     console.log(`[Edge Function] 🔍 DEBUG - Preparing to insert ${slotsToInsert.length} slots`)

@@ -79,7 +79,7 @@ export function FacultyList({ faculty: initialFaculty, departments }: FacultyLis
     <div className="space-y-4">
       {/* Search Bar */}
       <div className="relative">
-        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
+        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-4 h-4" />
         <Input
           type="text"
           placeholder="Search faculty by name, code, email, or department..."
@@ -90,11 +90,11 @@ export function FacultyList({ faculty: initialFaculty, departments }: FacultyLis
       </div>
 
       {filteredFaculty.length === 0 ? (
-        <div className="text-center py-12 text-muted-foreground">
+        <div className="text-center py-12 text-slate-300">
           <p>{searchQuery ? "No faculty members found matching your search." : "No faculty members yet. Add your first faculty member to get started."}</p>
         </div>
       ) : (
-        <div className="rounded-md border">
+        <div className="rounded-md border border-slate-700 bg-slate-800/30">
           <Table>
             <TableHeader>
               <TableRow>
@@ -112,7 +112,7 @@ export function FacultyList({ faculty: initialFaculty, departments }: FacultyLis
                   <TableCell>
                     <Badge variant="outline">{member.code}</Badge>
                   </TableCell>
-                  <TableCell className="font-medium">{member.name}</TableCell>
+                  <TableCell className="font-medium text-white">{member.name}</TableCell>
                   <TableCell>{member.email || "-"}</TableCell>
                   <TableCell>{member.departments?.name || "-"}</TableCell>
                   <TableCell>{member.phone || "-"}</TableCell>
@@ -126,19 +126,19 @@ export function FacultyList({ faculty: initialFaculty, departments }: FacultyLis
                           setShowAvailability(true)
                         }}
                       >
-                        <Clock className="w-4 h-4" />
+                        <Clock className="w-4 h-4 text-black" />
                       </Button>
                       <FacultyDialog
                         faculty={member}
                         departments={departments}
                         trigger={
                           <Button variant="outline" size="sm">
-                            <Edit className="w-4 h-4" />
+                            <Edit className="w-4 h-4 text-black" />
                           </Button>
                         }
                       />
                       <Button variant="outline" size="sm" onClick={() => handleDelete(member.id)}>
-                        <Trash2 className="w-4 h-4 text-destructive" />
+                        <Trash2 className="w-4 h-4 text-red-400" />
                       </Button>
                     </div>
                   </TableCell>

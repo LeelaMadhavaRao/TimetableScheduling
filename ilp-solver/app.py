@@ -213,24 +213,27 @@ def solve_lab_timetable(data: ProblemData):
             else:
                 # Diagnose why no valid assignments - DETAILED ANALYSIS
                 suitable_rooms = [r for r in rooms if r.capacity >= int(course.studentCount * 0.85)]
-                faculty_slots = faculty_availability.get(course.facultyCode, [])
+                faculty_avail = faculty_avail_map.get(course.facultyId, "all")
+                faculty_slots = [] if faculty_avail == "all" else list(data.facultyAvailability)
+                faculty_info = next((fa for fa in data.facultyAvailability if fa.facultyId == course.facultyId), None)
+                faculty_slots_list = faculty_info.slots if faculty_info else []
                 
                 print(f"[Solver]   ❌ NO VALID ASSIGNMENTS FOUND")
                 print(f"[Solver]   Suitable rooms (>=85% capacity): {len(suitable_rooms)}")
                 print(f"[Solver]   Rooms list: {[f'{r.name}({r.capacity})' for r in suitable_rooms[:5]]}")
-                print(f"[Solver]   Faculty availability windows: {len(faculty_slots)}")
-                print(f"[Solver]   Faculty slots detail: {[(s.dayOfWeek, s.startPeriod, s.endPeriod) for s in faculty_slots]}")
+                print(f"[Solver]   Faculty availability windows: {len(faculty_slots_list)}")
+                print(f"[Solver]   Faculty slots detail: {[(s.dayOfWeek, s.startPeriod, s.endPeriod) for s in faculty_slots_list]}")
                 
                 # Check which specific constraints are blocking
                 blocking_reasons = []
                 if len(suitable_rooms) == 0:
                     blocking_reasons.append(f"No rooms with capacity >= {int(course.studentCount * 0.85)}")
-                if len(faculty_slots) == 0:
+                if len(faculty_slots_list) == 0:
                     blocking_reasons.append(f"Faculty {course.facultyCode} has NO availability windows")
                 else:
                     # Check if faculty slots allow 4-period blocks
                     valid_blocks = []
-                    for slot in faculty_slots:
+                    for slot in faculty_slots_list:
                         for start_p in range(slot.startPeriod, slot.endPeriod - 3 + 1):
                             valid_blocks.append((slot.dayOfWeek, start_p))
                     if len(valid_blocks) == 0:
@@ -244,7 +247,7 @@ def solve_lab_timetable(data: ProblemData):
                     "studentCount": course.studentCount,
                     "facultyCode": course.facultyCode,
                     "suitableRooms": len(suitable_rooms),
-                    "facultyWindows": len(faculty_slots),
+                    "facultyWindows": len(faculty_slots_list),
                     "blockingReasons": blocking_reasons,
                     "reason": " | ".join(blocking_reasons) if blocking_reasons else "Unknown constraint conflict"
                 })

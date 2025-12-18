@@ -401,7 +401,7 @@ Deno.serve(async (req) => {
       })
     }
 
-    const { jobId } = await req.json()
+    const { jobId, adminId } = await req.json()
 
     if (!jobId) {
       return new Response(
@@ -421,7 +421,7 @@ Deno.serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     const supabase = createClient(supabaseUrl, supabaseKey)
 
-    console.log("[Edge Function] Starting optimization for job:", jobId)
+    console.log("[Edge Function] Starting optimization for job:", jobId, adminId ? `(admin: ${adminId})` : "")
 
     // Update job status
     await supabase
@@ -481,18 +481,24 @@ Deno.serve(async (req) => {
       .update({ progress: 80, message: "Saving optimized timetable..." })
       .eq("id", jobId)
 
-    // Save optimized timetable
-    const optimizedSlots = optimizedSchedule.map((slot) => ({
-      job_id: jobId,
-      section_id: slot.sectionId,
-      subject_id: slot.subjectId,
-      faculty_id: slot.facultyId,
-      classroom_id: slot.classroomId,
-      day_of_week: slot.day,
-      start_period: slot.startPeriod,
-      end_period: slot.endPeriod,
-      fitness_score: finalFitness,
-    }))
+    // Save optimized timetable - include created_by if adminId provided
+    const optimizedSlots = optimizedSchedule.map((slot) => {
+      const slotData: any = {
+        job_id: jobId,
+        section_id: slot.sectionId,
+        subject_id: slot.subjectId,
+        faculty_id: slot.facultyId,
+        classroom_id: slot.classroomId,
+        day_of_week: slot.day,
+        start_period: slot.startPeriod,
+        end_period: slot.endPeriod,
+        fitness_score: finalFitness,
+      }
+      if (adminId) {
+        slotData.created_by = adminId
+      }
+      return slotData
+    })
 
     const { error: insertError } = await supabase.from("timetable_optimized").insert(optimizedSlots)
 

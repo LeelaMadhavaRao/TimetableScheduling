@@ -10,14 +10,14 @@ interface StatsCardProps {
 
 export function StatsCard({ title, value, icon: Icon, description }: StatsCardProps) {
   return (
-    <Card>
+    <Card className="bg-slate-800/50 border-slate-700">
       <CardHeader className="flex flex-row items-center justify-between pb-2">
-        <CardTitle className="text-sm font-medium text-muted-foreground">{title}</CardTitle>
-        <Icon className="w-4 h-4 text-muted-foreground" />
+        <CardTitle className="text-sm font-medium text-slate-300">{title}</CardTitle>
+        <Icon className="w-4 h-4 text-slate-400" />
       </CardHeader>
       <CardContent>
-        <div className="text-2xl font-bold text-foreground">{value}</div>
-        {description && <p className="text-xs text-muted-foreground mt-1">{description}</p>}
+        <div className="text-2xl font-bold text-white">{value}</div>
+        {description && <p className="text-xs text-slate-300 mt-1">{description}</p>}
       </CardContent>
     </Card>
   )

@@ -18,23 +18,23 @@ export default function GeneratePage() {
           </Button>
         </Link>
         <div>
-          <h1 className="text-3xl font-bold text-foreground mb-1 bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text flex items-center gap-2">
+          <h1 className="text-3xl font-bold text-white mb-1 flex items-center gap-2">
             Generate Timetable
-            <Sparkles className="w-6 h-6 text-success animate-pulse" />
+            <Sparkles className="w-6 h-6 text-emerald-400 animate-pulse" />
           </h1>
-          <p className="text-muted-foreground">Create and optimize timetables using ILP and GA algorithms</p>
+          <p className="text-slate-300">Create and optimize timetables using ILP and GA algorithms</p>
         </div>
       </div>
 
-      <Card className="border-success/20 shadow-lg hover:shadow-xl transition-all duration-300 hover:border-success/40">
-        <CardHeader className="bg-gradient-to-r from-success/5 to-transparent">
+      <Card className="bg-slate-800/50 border-slate-700 backdrop-blur-xl shadow-lg hover:shadow-xl transition-all duration-300 hover:border-emerald-500/50">
+        <CardHeader className="bg-gradient-to-r from-emerald-500/10 to-transparent">
           <div className="flex items-center gap-2">
-            <div className="p-2 rounded-lg bg-success/10">
-              <Play className="w-5 h-5 text-success" />
+            <div className="p-2 rounded-lg bg-emerald-500/20">
+              <Play className="w-5 h-5 text-emerald-400" />
             </div>
             <div className="flex-1">
-              <CardTitle>Timetable Generation</CardTitle>
-              <CardDescription className="flex items-center gap-1 mt-1">
+              <CardTitle className="text-white">Timetable Generation</CardTitle>
+              <CardDescription className="flex items-center gap-1 mt-1 text-slate-300">
                 <Info className="w-3 h-3" />
                 Generate base timetable using Integer Linear Programming, then optimize with Genetic Algorithm
               </CardDescription>

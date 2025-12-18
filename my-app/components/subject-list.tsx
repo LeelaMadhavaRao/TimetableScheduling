@@ -79,7 +79,7 @@ export function SubjectList({ subjects: initialSubjects, departments, faculty }:
     <div className="space-y-4">
       {/* Search Bar */}
       <div className="relative">
-        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
+        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-4 h-4" />
         <Input
           type="text"
           placeholder="Search subjects by name, code, type, faculty, or department..."
@@ -90,11 +90,11 @@ export function SubjectList({ subjects: initialSubjects, departments, faculty }:
       </div>
 
       {filteredSubjects.length === 0 ? (
-        <div className="text-center py-12 text-muted-foreground">
+        <div className="text-center py-12 text-slate-300">
           <p>{searchQuery ? "No subjects found matching your search." : "No subjects yet. Add your first subject to get started."}</p>
         </div>
       ) : (
-        <div className="rounded-md border">
+        <div className="rounded-md border border-slate-700 bg-slate-800/30">
           <Table>
             <TableHeader>
               <TableRow>
@@ -113,7 +113,7 @@ export function SubjectList({ subjects: initialSubjects, departments, faculty }:
                   <TableCell>
                     <Badge variant="outline">{subject.code}</Badge>
                   </TableCell>
-                  <TableCell className="font-medium">{subject.name}</TableCell>
+                  <TableCell className="font-medium text-white">{subject.name}</TableCell>
                   <TableCell>
                     <Badge variant={subject.subject_type === "lab" ? "default" : "secondary"}>
                       {subject.subject_type}
@@ -138,13 +138,13 @@ export function SubjectList({ subjects: initialSubjects, departments, faculty }:
                         faculty={faculty}
                         trigger={<ClickSpark sparkColor="#10b981" sparkSize={8} sparkRadius={12} sparkCount={6} duration={350}>
                           <Button variant="outline" size="sm">
-                            <Edit className="w-4 h-4" />
+                            <Edit className="w-4 h-4 text-black" />
                           </Button>
                         </ClickSpark>}
                       />
                       <ClickSpark sparkColor="#ef4444" sparkSize={8} sparkRadius={12} sparkCount={6} duration={350}>
                         <Button variant="outline" size="sm" onClick={() => handleDelete(subject.id)}>
-                          <Trash2 className="w-4 h-4 text-destructive" />
+                          <Trash2 className="w-4 h-4 text-red-400" />
                         </Button>
                       </ClickSpark>
                     </div>

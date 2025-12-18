@@ -12,6 +12,7 @@ import type { TimetableJob } from "@/lib/database"
 import { generateTimetablePDF } from "@/lib/pdf-generator"
 import type { REALTIME_SUBSCRIBE_STATES } from "@supabase/supabase-js"
 import ClickSpark from "@/components/ClickSpark"
+import { useAuth } from "@/contexts/AuthContext"
 
 interface ErrorDetail {
   section: string
@@ -24,12 +25,16 @@ interface ErrorDetail {
 
 export function GenerateTimetable() {
   const router = useRouter()
+  const { user, role } = useAuth()
   const [currentJob, setCurrentJob] = useState<TimetableJob | null>(null)
   const [generating, setGenerating] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [errorDetails, setErrorDetails] = useState<ErrorDetail[]>([])
   const [showErrorDialog, setShowErrorDialog] = useState(false)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+  
+  // Get admin ID if user is a timetable administrator
+  const adminId = role === 'timetable_admin' && user ? (user as { id: string }).id : null
 
   useEffect(() => {
     // Subscribe to job updates
@@ -83,12 +88,18 @@ export function GenerateTimetable() {
   const fetchLatestJob = async () => {
     try {
       const supabase = getSupabaseBrowserClient()
-      const { data, error } = await supabase
+      let query = supabase
         .from("timetable_jobs")
         .select("*")
         .order("created_at", { ascending: false })
         .limit(1)
-        .maybeSingle()
+      
+      // Filter by admin ID if available
+      if (adminId) {
+        query = query.eq("created_by", adminId)
+      }
+      
+      const { data, error } = await query.maybeSingle()
 
       if (error) {
         console.error("[GenerateTimetable] Error fetching job:", error)
@@ -125,9 +136,10 @@ export function GenerateTimetable() {
       // Call Supabase Edge Function
       const supabase = getSupabaseBrowserClient()
       
-      console.log("[GenerateTimetable] Calling Edge Function...")
+      console.log("[GenerateTimetable] Calling Edge Function...", adminId ? `with admin ID: ${adminId}` : 'without admin ID')
       const { data, error } = await supabase.functions.invoke("generate-base-timetable", {
         method: "POST",
+        body: adminId ? { adminId } : undefined,
       })
 
       if (error) {
@@ -206,10 +218,10 @@ export function GenerateTimetable() {
     try {
       const supabase = getSupabaseBrowserClient()
       
-      console.log("[GenerateTimetable] Calling optimize Edge Function...")
+      console.log("[GenerateTimetable] Calling optimize Edge Function...", adminId ? `with admin ID: ${adminId}` : 'without admin ID')
       const { data, error } = await supabase.functions.invoke("optimize-timetable", {
         method: "POST",
-        body: { jobId: currentJob.id },
+        body: { jobId: currentJob.id, adminId },
       })
 
       if (error) {
@@ -338,15 +350,15 @@ export function GenerateTimetable() {
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Card className="p-6">
+        <Card className="p-6 bg-slate-800/50 border-slate-700 backdrop-blur-xl">
           <div className="space-y-4">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-lg bg-success/10 flex items-center justify-center">
                 <Play className="w-5 h-5 text-success" />
               </div>
               <div>
-                <h3 className="font-semibold text-foreground">Step 1: Generate Base Timetable</h3>
-                <p className="text-sm text-muted-foreground">Uses ILP to satisfy all hard constraints</p>
+                <h3 className="font-semibold text-white">Step 1: Generate Base Timetable</h3>
+                <p className="text-sm text-slate-300">Uses ILP to satisfy all hard constraints</p>
               </div>
             </div>
             <ClickSpark
@@ -377,15 +389,15 @@ export function GenerateTimetable() {
           </div>
         </Card>
 
-        <Card className="p-6">
+        <Card className="p-6 bg-slate-800/50 border-slate-700 backdrop-blur-xl">
           <div className="space-y-4">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
                 <Zap className="w-5 h-5 text-primary" />
               </div>
               <div>
-                <h3 className="font-semibold text-foreground">Step 2: Optimize Timetable</h3>
-                <p className="text-sm text-muted-foreground">Uses GA to improve quality metrics</p>
+                <h3 className="font-semibold text-white">Step 2: Optimize Timetable</h3>
+                <p className="text-sm text-slate-300">Uses GA to improve quality metrics</p>
               </div>
             </div>
             <ClickSpark
@@ -605,20 +617,20 @@ export function GenerateTimetable() {
         </Card>
       )}
 
-      <Card className="bg-muted/30 p-6">
-        <h3 className="font-semibold text-foreground mb-3">How it Works</h3>
-        <ul className="space-y-2 text-sm text-muted-foreground">
+      <Card className="bg-slate-800/50 border-slate-700 p-6">
+        <h3 className="font-semibold text-white mb-3">How it Works</h3>
+        <ul className="space-y-2 text-sm text-slate-300">
           <li className="flex gap-2">
             <span>1.</span>
             <span>
-              <strong className="text-foreground">ILP Phase:</strong> Generates a valid base timetable that satisfies
+              <strong className="text-white">ILP Phase:</strong> Generates a valid base timetable that satisfies
               all hard constraints (no conflicts, capacity limits, faculty availability, lab priority, Saturday rules)
             </span>
           </li>
           <li className="flex gap-2">
             <span>2.</span>
             <span>
-              <strong className="text-foreground">GA Phase:</strong> Optimizes the base timetable to minimize faculty
+              <strong className="text-white">GA Phase:</strong> Optimizes the base timetable to minimize faculty
               gaps, balance workload, prefer morning slots, and compact lab schedules
             </span>
           </li>

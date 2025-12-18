@@ -1400,7 +1400,7 @@ Deno.serve(async (req) => {
 
     // 🔍 DEBUG: Log sample slots before database insert
     console.log(`[Edge Function] 🔍 DEBUG - Preparing to insert ${slotsToInsert.length} slots`)
-    const labSlots = slotsToInsert.filter(s => {
+    const labSlotsToInsert = slotsToInsert.filter(s => {
       const slot = timetableSlots.find(ts => 
         ts.sectionId === s.section_id && 
         ts.subjectId === s.subject_id &&
@@ -1410,9 +1410,9 @@ Deno.serve(async (req) => {
       // Find if this is a lab by checking if it's 4 periods
       return slot && (slot.endPeriod - slot.startPeriod + 1) === 4
     })
-    console.log(`[Edge Function] 🔍 DEBUG - Lab slots to insert: ${labSlots.length}`)
-    for (let i = 0; i < Math.min(3, labSlots.length); i++) {
-      const s = labSlots[i]
+    console.log(`[Edge Function] 🔍 DEBUG - Lab slots to insert: ${labSlotsToInsert.length}`)
+    for (let i = 0; i < Math.min(3, labSlotsToInsert.length); i++) {
+      const s = labSlotsToInsert[i]
       console.log(`  Lab ${i}: Day=${s.day_of_week}, Periods=${s.start_period}-${s.end_period} (${s.end_period - s.start_period + 1} periods)`)
     }
 

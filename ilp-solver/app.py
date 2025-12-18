@@ -103,6 +103,18 @@ def solve_lab_timetable(data: ProblemData):
     
     start_time = time.time()
     
+    # Log incoming request
+    print(f"\n[Solver] ===== NEW REQUEST RECEIVED =====")
+    print(f"[Solver] 📥 Incoming solve-labs request at {time.strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"[Solver] Request Details:")
+    print(f"[Solver]   • Courses (labs): {len(data.courses)}")
+    print(f"[Solver]   • Rooms: {len(data.rooms)}")
+    print(f"[Solver]   • Faculty with availability: {len(data.facultyAvailability)}")
+    print(f"[Solver]   • Days per week: {data.rules.daysPerWeek}")
+    print(f"[Solver]   • Periods per day: {data.rules.periodsPerDay}")
+    print(f"[Solver]   • Lab periods: {data.rules.labPeriods}")
+    print(f"[Solver] ====================================\n")
+    
     try:
         model = cp_model.CpModel()
         
@@ -374,6 +386,10 @@ def solve_lab_timetable(data: ProblemData):
             
             print(f"[Solver] Extracted {len(assignments)} lab assignments")
             
+            print(f"\n[Solver] ✅ SUCCESS: Request completed in {solve_time_ms}ms")
+            print(f"[Solver] Response: {len(assignments)} lab assignments scheduled")
+            print(f"[Solver] Status: {'OPTIMAL' if status == cp_model.OPTIMAL else 'FEASIBLE'}\n")
+            
             return SolutionResponse(
                 success=True,
                 status="OPTIMAL" if status == cp_model.OPTIMAL else "FEASIBLE",
@@ -384,6 +400,7 @@ def solve_lab_timetable(data: ProblemData):
         
         elif status == cp_model.INFEASIBLE:
             print("[Solver] ❌ Problem is INFEASIBLE")
+            print(f"[Solver] Request failed: No feasible solution found\n")
             
             # Diagnose why infeasible
             diagnostic = []
@@ -404,6 +421,7 @@ def solve_lab_timetable(data: ProblemData):
         
         else:
             print(f"[Solver] ⚠️ Solver status: {solver.StatusName(status)}")
+            print(f"[Solver] Request failed: Solver returned {solver.StatusName(status)}\n")
             return SolutionResponse(
                 success=False,
                 status=solver.StatusName(status),
@@ -414,7 +432,375 @@ def solve_lab_timetable(data: ProblemData):
     
     except Exception as e:
         print(f"[Solver] ❌ Error: {str(e)}")
+        print(f"[Solver] Request failed with exception: {type(e).__name__}\n")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================
+# THEORY SOLVER ENDPOINT
+# ============================================
+
+class TheoryCourse(BaseModel):
+    sectionId: str
+    sectionName: str
+    subjectId: str
+    subjectCode: str
+    facultyId: str
+    facultyCode: str
+    studentCount: int
+    yearLevel: int
+    periodsPerWeek: int  # Theory courses have variable periods
+
+class ExistingAssignment(BaseModel):
+    sectionId: str
+    day: int
+    startPeriod: int
+    endPeriod: int
+    facultyId: str
+    roomId: str
+
+class TheoryRules(BaseModel):
+    daysPerWeek: int
+    periodsPerDay: int
+    maxPeriodsPerBlock: int  # Max consecutive periods (e.g., 3)
+    maxPeriodsPerDay: int    # Max periods per section per day
+
+class TheoryProblemData(BaseModel):
+    courses: List[TheoryCourse]
+    rooms: List[Room]
+    facultyAvailability: List[FacultyAvailability]
+    existingAssignments: List[ExistingAssignment]  # Lab slots already scheduled
+    rules: TheoryRules
+
+@app.post("/solve-theory", response_model=SolutionResponse)
+def solve_theory_timetable(data: TheoryProblemData):
+    """
+    Solve the theory scheduling problem using OR-Tools CP-SAT solver.
+    
+    This is called as a FALLBACK when greedy algorithm fails to schedule >80% of theory periods.
+    
+    Decision Variables: T[course_idx][day][start_period][block_size][room_idx]
+    - binary: 1 if theory course block is assigned to (day, start, size, room), 0 otherwise
+    
+    Constraints:
+    1. Each theory course gets exactly its required periods per week
+    2. Room capacity constraints
+    3. Room non-overlap (no double booking)
+    4. Section non-overlap (students can't be in two places)
+    5. Faculty non-overlap (faculty can't teach two classes simultaneously)
+    6. Faculty availability constraints
+    7. Don't conflict with existing lab assignments
+    8. No splitting across lunch (periods 4-5)
+    9. Max periods per day per section
+    """
+    
+    start_time = time.time()
+    
+    print(f"\n[Theory Solver] ===== NEW THEORY REQUEST RECEIVED =====")
+    print(f"[Theory Solver] 📥 Request at {time.strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"[Theory Solver] Request Details:")
+    print(f"[Theory Solver]   • Theory courses: {len(data.courses)}")
+    print(f"[Theory Solver]   • Rooms: {len(data.rooms)}")
+    print(f"[Theory Solver]   • Existing assignments (labs): {len(data.existingAssignments)}")
+    print(f"[Theory Solver]   • Total periods needed: {sum(c.periodsPerWeek for c in data.courses)}")
+    print(f"[Theory Solver] ====================================\n")
+    
+    try:
+        model = cp_model.CpModel()
+        
+        courses = data.courses
+        rooms = data.rooms
+        rules = data.rules
+        
+        days = list(range(rules.daysPerWeek))  # 0-5 (Mon-Sat)
+        block_sizes = [1, 2, 3]  # Possible block sizes (1, 2, or 3 periods)
+        
+        # Build faculty availability map
+        faculty_avail_map = {}
+        for fa in data.facultyAvailability:
+            if not fa.slots:
+                faculty_avail_map[fa.facultyId] = "all"
+            else:
+                avail_set = set()
+                for slot in fa.slots:
+                    for period in range(slot.startPeriod, slot.endPeriod + 1):
+                        avail_set.add((slot.dayOfWeek, period))
+                faculty_avail_map[fa.facultyId] = avail_set
+        
+        # Build existing assignments map (from labs)
+        existing_faculty = {}  # facultyId -> Set of "day-period"
+        existing_room = {}     # roomId -> Set of "day-period"
+        existing_section = {}  # sectionId -> Set of "day-period"
+        
+        for assign in data.existingAssignments:
+            for p in range(assign.startPeriod, assign.endPeriod + 1):
+                key = f"{assign.day}-{p}"
+                
+                if assign.facultyId not in existing_faculty:
+                    existing_faculty[assign.facultyId] = set()
+                existing_faculty[assign.facultyId].add(key)
+                
+                if assign.roomId not in existing_room:
+                    existing_room[assign.roomId] = set()
+                existing_room[assign.roomId].add(key)
+                
+                if assign.sectionId not in existing_section:
+                    existing_section[assign.sectionId] = set()
+                existing_section[assign.sectionId].add(key)
+        
+        print(f"[Theory Solver] Built existing assignment maps")
+        
+        # ============================================
+        # DECISION VARIABLES
+        # ============================================
+        # T[course_idx][day][start][size][room_idx] = 1 if assigned
+        T = {}
+        valid_assignments = []
+        
+        for c_idx, course in enumerate(courses):
+            for day in days:
+                max_period = 4 if (day == 5 and course.yearLevel != 1) else 8
+                
+                for size in block_sizes:
+                    if size > course.periodsPerWeek:
+                        continue  # Block can't be bigger than total needed
+                    
+                    for start in range(1, max_period - size + 2):
+                        end = start + size - 1
+                        if end > max_period:
+                            continue
+                        
+                        # Don't split across lunch (periods 4 and 5)
+                        if start <= 4 and end >= 5:
+                            continue
+                        
+                        # Check faculty availability
+                        faculty_avail = faculty_avail_map.get(course.facultyId, "all")
+                        if faculty_avail != "all":
+                            if not all((day, p) in faculty_avail for p in range(start, end + 1)):
+                                continue
+                        
+                        # Check not conflicting with existing assignments
+                        section_blocked = existing_section.get(course.sectionId, set())
+                        faculty_blocked = existing_faculty.get(course.facultyId, set())
+                        
+                        conflict = False
+                        for p in range(start, end + 1):
+                            key = f"{day}-{p}"
+                            if key in section_blocked or key in faculty_blocked:
+                                conflict = True
+                                break
+                        
+                        if conflict:
+                            continue
+                        
+                        for r_idx, room in enumerate(rooms):
+                            if room.capacity < course.studentCount:
+                                continue
+                            
+                            # Check room not blocked by existing assignments
+                            room_blocked = existing_room.get(room.id, set())
+                            room_conflict = False
+                            for p in range(start, end + 1):
+                                if f"{day}-{p}" in room_blocked:
+                                    room_conflict = True
+                                    break
+                            
+                            if room_conflict:
+                                continue
+                            
+                            var_name = f"T_{c_idx}_{day}_{start}_{size}_{r_idx}"
+                            T[(c_idx, day, start, size, r_idx)] = model.NewBoolVar(var_name)
+                            valid_assignments.append((c_idx, day, start, size, r_idx))
+        
+        print(f"[Theory Solver] Created {len(valid_assignments)} decision variables")
+        
+        # ============================================
+        # CONSTRAINT 1: Each course gets exact periods
+        # ============================================
+        for c_idx, course in enumerate(courses):
+            course_period_vars = []
+            for (c, day, start, size, r_idx) in valid_assignments:
+                if c == c_idx:
+                    # Weight by block size
+                    course_period_vars.append(size * T[(c, day, start, size, r_idx)])
+            
+            if course_period_vars:
+                model.Add(sum(course_period_vars) == course.periodsPerWeek)
+            else:
+                print(f"[Theory Solver] ❌ No valid slots for {course.subjectCode} ({course.sectionName})")
+        
+        # ============================================
+        # CONSTRAINT 2: Room non-overlap (period-level)
+        # ============================================
+        for r_idx in range(len(rooms)):
+            for day in days:
+                for period in range(1, rules.periodsPerDay + 1):
+                    period_vars = []
+                    for (c_idx, d, start, size, r) in valid_assignments:
+                        if r == r_idx and d == day:
+                            end = start + size - 1
+                            if start <= period <= end:
+                                period_vars.append(T[(c_idx, d, start, size, r)])
+                    
+                    if period_vars:
+                        model.Add(sum(period_vars) <= 1)
+        
+        # ============================================
+        # CONSTRAINT 3: Section non-overlap
+        # ============================================
+        section_to_courses = {}
+        for c_idx, course in enumerate(courses):
+            if course.sectionId not in section_to_courses:
+                section_to_courses[course.sectionId] = []
+            section_to_courses[course.sectionId].append(c_idx)
+        
+        for section_id, course_indices in section_to_courses.items():
+            for day in days:
+                for period in range(1, rules.periodsPerDay + 1):
+                    period_vars = []
+                    for c_idx in course_indices:
+                        for (c, d, start, size, r_idx) in valid_assignments:
+                            if c == c_idx and d == day:
+                                end = start + size - 1
+                                if start <= period <= end:
+                                    period_vars.append(T[(c, d, start, size, r_idx)])
+                    
+                    if period_vars:
+                        model.Add(sum(period_vars) <= 1)
+        
+        # ============================================
+        # CONSTRAINT 4: Faculty non-overlap
+        # ============================================
+        faculty_to_courses = {}
+        for c_idx, course in enumerate(courses):
+            if course.facultyId not in faculty_to_courses:
+                faculty_to_courses[course.facultyId] = []
+            faculty_to_courses[course.facultyId].append(c_idx)
+        
+        for faculty_id, course_indices in faculty_to_courses.items():
+            for day in days:
+                for period in range(1, rules.periodsPerDay + 1):
+                    period_vars = []
+                    for c_idx in course_indices:
+                        for (c, d, start, size, r_idx) in valid_assignments:
+                            if c == c_idx and d == day:
+                                end = start + size - 1
+                                if start <= period <= end:
+                                    period_vars.append(T[(c, d, start, size, r_idx)])
+                    
+                    if period_vars:
+                        model.Add(sum(period_vars) <= 1)
+        
+        # ============================================
+        # CONSTRAINT 5: Max periods per day per section
+        # ============================================
+        for section_id, course_indices in section_to_courses.items():
+            for day in days:
+                day_period_vars = []
+                for c_idx in course_indices:
+                    for (c, d, start, size, r_idx) in valid_assignments:
+                        if c == c_idx and d == day:
+                            day_period_vars.append(size * T[(c, d, start, size, r_idx)])
+                
+                if day_period_vars:
+                    model.Add(sum(day_period_vars) <= rules.maxPeriodsPerDay)
+        
+        # ============================================
+        # OBJECTIVE: Balanced schedule
+        # ============================================
+        # 1. Minimize capacity waste
+        # 2. Prefer morning slots
+        # 3. Distribute across days
+        
+        objective_terms = []
+        
+        for (c_idx, day, start, size, r_idx) in valid_assignments:
+            course = courses[c_idx]
+            room = rooms[r_idx]
+            
+            # Capacity waste penalty
+            capacity_penalty = max(0, room.capacity - course.studentCount)
+            
+            # Afternoon penalty (prefer morning)
+            afternoon_penalty = 10 if start >= 5 else 0
+            
+            # Saturday penalty
+            saturday_penalty = 5 if day == 5 else 0
+            
+            total_penalty = capacity_penalty + afternoon_penalty + saturday_penalty
+            objective_terms.append(total_penalty * T[(c_idx, day, start, size, r_idx)])
+        
+        if objective_terms:
+            model.Minimize(sum(objective_terms))
+        
+        # ============================================
+        # SOLVE
+        # ============================================
+        print("[Theory Solver] Starting CP-SAT solver...")
+        solver = cp_model.CpSolver()
+        solver.parameters.max_time_in_seconds = 30.0  # 30 second timeout (faster than labs)
+        solver.parameters.log_search_progress = False
+        
+        status = solver.Solve(model)
+        solve_time_ms = int((time.time() - start_time) * 1000)
+        
+        # ============================================
+        # PROCESS SOLUTION
+        # ============================================
+        if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
+            print(f"[Theory Solver] ✅ Solution found! Status: {'OPTIMAL' if status == cp_model.OPTIMAL else 'FEASIBLE'}")
+            
+            assignments = []
+            for (c_idx, day, start, size, r_idx) in valid_assignments:
+                if solver.Value(T[(c_idx, day, start, size, r_idx)]) == 1:
+                    course = courses[c_idx]
+                    room = rooms[r_idx]
+                    
+                    assignments.append(Assignment(
+                        sectionId=course.sectionId,
+                        subjectId=course.subjectId,
+                        day=day,
+                        startPeriod=start,
+                        endPeriod=start + size - 1,
+                        roomId=room.id
+                    ))
+            
+            total_periods = sum(a.endPeriod - a.startPeriod + 1 for a in assignments)
+            print(f"[Theory Solver] Extracted {len(assignments)} blocks ({total_periods} total periods)")
+            
+            return SolutionResponse(
+                success=True,
+                status="OPTIMAL" if status == cp_model.OPTIMAL else "FEASIBLE",
+                message=f"Successfully scheduled {len(assignments)} theory blocks ({total_periods} periods)",
+                assignments=assignments,
+                solveTimeMs=solve_time_ms
+            )
+        
+        elif status == cp_model.INFEASIBLE:
+            print("[Theory Solver] ❌ Problem is INFEASIBLE")
+            return SolutionResponse(
+                success=False,
+                status="INFEASIBLE",
+                message="No feasible theory schedule exists. Check room capacities and faculty availability.",
+                assignments=[],
+                solveTimeMs=solve_time_ms
+            )
+        
+        else:
+            print(f"[Theory Solver] ⚠️ Solver status: {solver.StatusName(status)}")
+            return SolutionResponse(
+                success=False,
+                status=solver.StatusName(status),
+                message=f"Solver terminated with status: {solver.StatusName(status)}",
+                assignments=[],
+                solveTimeMs=solve_time_ms
+            )
+    
+    except Exception as e:
+        print(f"[Theory Solver] ❌ Error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

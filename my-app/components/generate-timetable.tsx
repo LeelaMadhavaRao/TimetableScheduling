@@ -27,80 +27,108 @@ export function GenerateTimetable() {
   const [isLoading, setIsLoading] = useState(true)
   const [errorDetails, setErrorDetails] = useState<ErrorDetail[]>([])
   const [showErrorDialog, setShowErrorDialog] = useState(false)
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
 
   useEffect(() => {
     // Subscribe to job updates
     const supabase = getSupabaseBrowserClient()
 
     const channel = supabase
-      .channel("timetable_jobs")
+      .channel("timetable_jobs_realtime")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "timetable_jobs" },
         (payload: { new: TimetableJob | null; old: TimetableJob | null; eventType: string }) => {
-          console.log("[v0] Job update:", payload)
+          console.log("[GenerateTimetable] Real-time job update:", payload)
           if (payload.new) {
             setCurrentJob(payload.new)
-            if (payload.new.status === "completed" || payload.new.status === "failed") {
+            setLastUpdated(new Date())
+            // Update generating state based on job status
+            if (payload.new.status === "completed" || payload.new.status === "failed" || payload.new.status === "base_complete") {
               setGenerating(false)
+            } else if (payload.new.status === "generating_base" || payload.new.status === "optimizing") {
+              setGenerating(true)
             }
           }
         },
       )
-      .subscribe()
+      .subscribe((status) => {
+        console.log("[GenerateTimetable] Subscription status:", status)
+      })
 
-    // Fetch latest job
+    // Fetch latest job on mount
     fetchLatestJob()
 
     return () => {
+      console.log("[GenerateTimetable] Cleaning up subscription")
       supabase.removeChannel(channel)
     }
   }, [])
 
-  // Poll for job updates when generating
+  // Aggressive polling when generating for immediate feedback
   useEffect(() => {
     if (!generating) return
 
+    // More frequent polling for better UX
     const interval = setInterval(() => {
+      console.log("[GenerateTimetable] Polling for job updates...")
       fetchLatestJob()
-    }, 2000) // Poll every 2 seconds
+    }, 1000) // Poll every 1 second for faster updates
 
     return () => clearInterval(interval)
   }, [generating])
 
   const fetchLatestJob = async () => {
-    const supabase = getSupabaseBrowserClient()
-    const { data, error } = await supabase
-      .from("timetable_jobs")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle()
+    try {
+      const supabase = getSupabaseBrowserClient()
+      const { data, error } = await supabase
+        .from("timetable_jobs")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle()
 
-    if (data && !error) {
-      setCurrentJob(data)
-      
-      // Stop loading/generating when job completes or fails
-      if (data.status === "completed" || data.status === "failed" || data.status === "base_complete") {
-        setGenerating(false)
+      if (error) {
+        console.error("[GenerateTimetable] Error fetching job:", error)
+        setIsLoading(false)
+        return
       }
+
+      if (data) {
+        console.log("[GenerateTimetable] Fetched job:", data.status, "Progress:", data.progress)
+        setCurrentJob(data)
+        setLastUpdated(new Date())
+        
+        // Update generating state based on job status
+        if (data.status === "completed" || data.status === "failed" || data.status === "base_complete") {
+          setGenerating(false)
+        } else if (data.status === "generating_base" || data.status === "optimizing") {
+          setGenerating(true)
+        }
+      }
+    } catch (err) {
+      console.error("[GenerateTimetable] Exception fetching job:", err)
+    } finally {
+      setIsLoading(false)
     }
-    setIsLoading(false)
   }
 
   const handleGenerateBase = async () => {
+    console.log("[GenerateTimetable] Starting base timetable generation...")
     setGenerating(true)
     setShowErrorDialog(false)  // Clear previous errors
 
     try {
       // Call Supabase Edge Function
       const supabase = getSupabaseBrowserClient()
+      
+      console.log("[GenerateTimetable] Calling Edge Function...")
       const { data, error } = await supabase.functions.invoke("generate-base-timetable", {
         method: "POST",
       })
 
       if (error) {
-        console.error("[v0] Function error:", error)
+        console.error("[GenerateTimetable] Function error:", error)
         setErrorDetails([{
           section: "System",
           subject: "Error",
@@ -114,7 +142,22 @@ export function GenerateTimetable() {
         return
       }
 
-      console.log("[v0] Generation result:", data)
+      console.log("[GenerateTimetable] Edge Function response:", data)
+      
+      // Handle conflicts detected
+      if (!data?.success && data?.error === "CONFLICTS_DETECTED" && data?.conflicts) {
+        setErrorDetails(data.conflicts.map((c: string) => ({
+          section: "Conflict",
+          subject: "Validation",
+          type: "conflict",
+          expected: "No conflicts",
+          scheduled: 0,
+          reason: c
+        })))
+        setShowErrorDialog(true)
+        setGenerating(false)
+        return
+      }
       
       // Handle incomplete schedule errors
       if (!data?.success && data?.error === "INCOMPLETE_SCHEDULE" && data?.details) {
@@ -124,12 +167,14 @@ export function GenerateTimetable() {
         return
       }
       
-      // Fetch the updated job immediately
+      // Start polling immediately after successful start
       if (data?.success && data?.jobId) {
-        setTimeout(() => fetchLatestJob(), 1000)
+        console.log("[GenerateTimetable] Job started with ID:", data.jobId)
+        // Fetch immediately and continue polling
+        await fetchLatestJob()
       }
     } catch (error) {
-      console.error("[v0] Error:", error)
+      console.error("[GenerateTimetable] Exception:", error)
       setErrorDetails([{
         section: "System",
         subject: "Error",
@@ -149,28 +194,33 @@ export function GenerateTimetable() {
       return
     }
 
+    console.log("[GenerateTimetable] Starting optimization...")
     setGenerating(true)
 
     try {
       const supabase = getSupabaseBrowserClient()
+      
+      console.log("[GenerateTimetable] Calling optimize Edge Function...")
       const { data, error } = await supabase.functions.invoke("optimize-timetable", {
         method: "POST",
         body: { jobId: currentJob.id },
       })
 
       if (error) {
+        console.error("[GenerateTimetable] Optimization error:", error)
         alert("Error: " + error.message)
         setGenerating(false)
         return
       }
 
-      console.log("[v0] Optimization result:", data)
+      console.log("[GenerateTimetable] Optimization response:", data)
       
+      // Start polling immediately
       if (data?.success) {
-        setTimeout(() => fetchLatestJob(), 1000)
+        await fetchLatestJob()
       }
     } catch (error) {
-      console.error("[v0] Error:", error)
+      console.error("[GenerateTimetable] Exception:", error)
       alert("Error optimizing timetable")
       setGenerating(false)
     }
@@ -344,10 +394,26 @@ export function GenerateTimetable() {
       </div>
 
       {currentJob && (
-        <Card className="p-6">
+        <Card className="p-6 relative">
+          {generating && (
+            <div className="absolute top-4 right-4">
+              <div className="flex items-center gap-2 text-xs text-primary">
+                <div className="w-2 h-2 bg-primary rounded-full animate-pulse" />
+                <span>Live updating...</span>
+              </div>
+            </div>
+          )}
+          
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="font-semibold text-foreground">Current Job Status</h3>
+              <div>
+                <h3 className="font-semibold text-foreground">Current Job Status</h3>
+                {lastUpdated && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Last updated: {lastUpdated.toLocaleTimeString()}
+                  </p>
+                )}
+              </div>
               {getStatusBadge(currentJob.status)}
             </div>
 
@@ -359,7 +425,11 @@ export function GenerateTimetable() {
               <Progress value={currentJob.progress} className="h-2" />
             </div>
 
-            {currentJob.message && <p className="text-sm text-muted-foreground">{currentJob.message}</p>}
+            {currentJob.message && (
+              <div className="p-3 bg-muted/50 rounded-lg border">
+                <p className="text-sm text-foreground">{currentJob.message}</p>
+              </div>
+            )}
 
             {currentJob.base_generation_time && (
               <div className="flex items-center justify-between text-sm py-2 border-t">

@@ -263,7 +263,7 @@ def solve_lab_timetable(data: ProblemData):
                 f"INFEASIBLE: Cannot schedule {len(unschedulable_labs)} lab(s):\n{error_details}\n\n"
                 f"Diagnosis:\n"
                 f"- Total rooms: {len(rooms)}\n"
-                f"- Total time blocks: {len(days)} days × {len(time_blocks)} blocks = {len(days) * len(time_blocks)}\n"
+                f"- Total time blocks: {len(days)} days × {len(blocks)} blocks = {len(days) * len(blocks)}\n"
                 f"- Total valid assignments checked: {len(valid_assignments)}\n"
                 f"\nPlease check: (1) Lab room capacities, (2) Faculty availability, (3) Time block availability"
             )

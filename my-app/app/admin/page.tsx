@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Users, BookOpen, Building, Layers, Calendar, TrendingUp } from "lucide-react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
+import ClickSpark from "@/components/ClickSpark"
 
 export default async function AdminDashboardPage() {
   const supabase = await getSupabaseServerClient()
@@ -59,34 +60,44 @@ export default async function AdminDashboardPage() {
           </CardHeader>
           <CardContent className="space-y-2">
             <Link href="/admin/faculty" className="block">
-              <Button variant="outline" className="w-full justify-start bg-transparent">
-                <Users className="w-4 h-4 mr-2" />
-                Manage Faculty
-              </Button>
+              <ClickSpark sparkColor="#3b82f6" sparkSize={10} sparkRadius={15} sparkCount={8} duration={400}>
+                <Button variant="outline" className="w-full justify-start bg-transparent">
+                  <Users className="w-4 h-4 mr-2" />
+                  Manage Faculty
+                </Button>
+              </ClickSpark>
             </Link>
             <Link href="/admin/subjects" className="block">
-              <Button variant="outline" className="w-full justify-start bg-transparent">
-                <BookOpen className="w-4 h-4 mr-2" />
-                Manage Subjects
-              </Button>
+              <ClickSpark sparkColor="#8b5cf6" sparkSize={10} sparkRadius={15} sparkCount={8} duration={400}>
+                <Button variant="outline" className="w-full justify-start bg-transparent">
+                  <BookOpen className="w-4 h-4 mr-2" />
+                  Manage Subjects
+                </Button>
+              </ClickSpark>
             </Link>
             <Link href="/admin/classrooms" className="block">
-              <Button variant="outline" className="w-full justify-start bg-transparent">
-                <Building className="w-4 h-4 mr-2" />
-                Manage Classrooms
-              </Button>
+              <ClickSpark sparkColor="#f59e0b" sparkSize={10} sparkRadius={15} sparkCount={8} duration={400}>
+                <Button variant="outline" className="w-full justify-start bg-transparent">
+                  <Building className="w-4 h-4 mr-2" />
+                  Manage Classrooms
+                </Button>
+              </ClickSpark>
             </Link>
             <Link href="/admin/sections" className="block">
-              <Button variant="outline" className="w-full justify-start bg-transparent">
-                <Layers className="w-4 h-4 mr-2" />
-                Manage Sections
-              </Button>
+              <ClickSpark sparkColor="#ec4899" sparkSize={10} sparkRadius={15} sparkCount={8} duration={400}>
+                <Button variant="outline" className="w-full justify-start bg-transparent">
+                  <Layers className="w-4 h-4 mr-2" />
+                  Manage Sections
+                </Button>
+              </ClickSpark>
             </Link>
             <Link href="/admin/generate" className="block">
-              <Button className="w-full justify-start bg-success hover:bg-success/90 text-white">
-                <Calendar className="w-4 h-4 mr-2" />
-                Generate Timetable
-              </Button>
+              <ClickSpark sparkColor="#22c55e" sparkSize={12} sparkRadius={18} sparkCount={10} duration={450}>
+                <Button className="w-full justify-start bg-success hover:bg-success/90 text-white">
+                  <Calendar className="w-4 h-4 mr-2" />
+                  Generate Timetable
+                </Button>
+              </ClickSpark>
             </Link>
           </CardContent>
         </Card>

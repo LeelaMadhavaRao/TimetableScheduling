@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Users, ArrowLeft, Info } from "lucide-react"
 import Link from "next/link"
+import ClickSpark from "@/components/ClickSpark"
 
 export default async function FacultyPage() {
   const supabase = await getSupabaseServerClient()
@@ -23,13 +24,15 @@ export default async function FacultyPage() {
         <div className="space-y-1 flex-1">
           <div className="flex items-center gap-3">
             <Link href="/admin">
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                className="hover:bg-primary/10 transition-all duration-200 hover:scale-105"
-              >
-                <ArrowLeft className="w-5 h-5" />
-              </Button>
+              <ClickSpark sparkColor="#6366f1" sparkSize={10} sparkRadius={15} sparkCount={8} duration={400}>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="hover:bg-primary/10 transition-all duration-200 hover:scale-105"
+                >
+                  <ArrowLeft className="w-5 h-5" />
+                </Button>
+              </ClickSpark>
             </Link>
             <div>
               <h1 className="text-3xl font-bold text-foreground mb-1 bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">

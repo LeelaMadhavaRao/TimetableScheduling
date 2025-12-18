@@ -11,6 +11,7 @@ import { getSupabaseBrowserClient } from "@/lib/client"
 import type { TimetableJob } from "@/lib/database"
 import { generateTimetablePDF } from "@/lib/pdf-generator"
 import type { REALTIME_SUBSCRIBE_STATES } from "@supabase/supabase-js"
+import ClickSpark from "@/components/ClickSpark"
 
 interface ErrorDetail {
   section: string
@@ -348,23 +349,31 @@ export function GenerateTimetable() {
                 <p className="text-sm text-muted-foreground">Uses ILP to satisfy all hard constraints</p>
               </div>
             </div>
-            <Button
-              onClick={handleGenerateBase}
-              disabled={generating}
-              className="w-full bg-success hover:bg-success/90 text-white"
+            <ClickSpark
+              sparkColor="#22c55e"
+              sparkSize={12}
+              sparkRadius={20}
+              sparkCount={10}
+              duration={500}
             >
-              {generating && currentJob?.status === "generating_base" ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Generating...
-                </>
-              ) : (
-                <>
-                  <Play className="w-4 h-4 mr-2" />
-                  Generate Base Timetable
-                </>
-              )}
-            </Button>
+              <Button
+                onClick={handleGenerateBase}
+                disabled={generating}
+                className="w-full bg-success hover:bg-success/90 text-white"
+              >
+                {generating && currentJob?.status === "generating_base" ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <Play className="w-4 h-4 mr-2" />
+                    Generate Base Timetable
+                  </>
+                )}
+              </Button>
+            </ClickSpark>
           </div>
         </Card>
 
@@ -379,24 +388,32 @@ export function GenerateTimetable() {
                 <p className="text-sm text-muted-foreground">Uses GA to improve quality metrics</p>
               </div>
             </div>
-            <Button
-              onClick={handleOptimize}
-              disabled={generating || (!currentJob || currentJob.status !== "base_complete")}
-              className="w-full"
-              variant="outline"
+            <ClickSpark
+              sparkColor="#3b82f6"
+              sparkSize={12}
+              sparkRadius={20}
+              sparkCount={10}
+              duration={500}
             >
-              {generating && currentJob?.status === "optimizing" ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Optimizing...
-                </>
-              ) : (
-                <>
-                  <Zap className="w-4 h-4 mr-2" />
-                  Optimize Timetable
-                </>
-              )}
-            </Button>
+              <Button
+                onClick={handleOptimize}
+                disabled={generating || (!currentJob || currentJob.status !== "base_complete")}
+                className="w-full"
+                variant="outline"
+              >
+                {generating && currentJob?.status === "optimizing" ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Optimizing...
+                  </>
+                ) : (
+                  <>
+                    <Zap className="w-4 h-4 mr-2" />
+                    Optimize Timetable
+                  </>
+                )}
+              </Button>
+            </ClickSpark>
           </div>
         </Card>
       </div>
@@ -455,23 +472,39 @@ export function GenerateTimetable() {
 
             {(currentJob.status === "base_complete" || currentJob.status === "completed") && (
               <div className="pt-4 border-t space-y-2">
-                <Button onClick={handleViewTimetable} className="w-full" variant="default" disabled={generating}>
-                  <Eye className="w-4 h-4 mr-2" />
-                  View Timetable
-                </Button>
-                <Button onClick={handleDownloadPDF} className="w-full" variant="outline" disabled={generating}>
-                  {generating ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Generating PDF...
-                    </>
-                  ) : (
-                    <>
-                      <Download className="w-4 h-4 mr-2" />
-                      Download PDF
-                    </>
-                  )}
-                </Button>
+                <ClickSpark
+                  sparkColor="#3b82f6"
+                  sparkSize={10}
+                  sparkRadius={18}
+                  sparkCount={8}
+                  duration={450}
+                >
+                  <Button onClick={handleViewTimetable} className="w-full" variant="default" disabled={generating}>
+                    <Eye className="w-4 h-4 mr-2" />
+                    View Timetable
+                  </Button>
+                </ClickSpark>
+                <ClickSpark
+                  sparkColor="#8b5cf6"
+                  sparkSize={10}
+                  sparkRadius={18}
+                  sparkCount={8}
+                  duration={450}
+                >
+                  <Button onClick={handleDownloadPDF} className="w-full" variant="outline" disabled={generating}>
+                    {generating ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Generating PDF...
+                      </>
+                    ) : (
+                      <>
+                        <Download className="w-4 h-4 mr-2" />
+                        Download PDF
+                      </>
+                    )}
+                  </Button>
+                </ClickSpark>
               </div>
             )}
           </div>

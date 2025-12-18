@@ -2,6 +2,7 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Calendar, Users, BookOpen, Building, Play, Settings, Sparkles, ArrowRight, Zap } from "lucide-react"
+import ClickSpark from "@/components/ClickSpark"
 
 export default function HomePage() {
   return (
@@ -26,16 +27,20 @@ export default function HomePage() {
           </p>
           <div className="flex gap-4 justify-center">
             <Link href="/admin">
-              <Button size="lg" className="group">
-                Get Started
-                <ArrowRight className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" />
-              </Button>
+              <ClickSpark sparkColor="#3b82f6" sparkSize={14} sparkRadius={25} sparkCount={12} duration={500}>
+                <Button size="lg" className="group">
+                  Get Started
+                  <ArrowRight className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" />
+                </Button>
+              </ClickSpark>
             </Link>
             <Link href="/admin/generate">
-              <Button size="lg" variant="outline" className="bg-success/10 hover:bg-success/20 text-success border-success/20">
-                <Zap className="w-4 h-4 mr-2" />
-                Generate Now
-              </Button>
+              <ClickSpark sparkColor="#22c55e" sparkSize={14} sparkRadius={25} sparkCount={12} duration={500}>
+                <Button size="lg" variant="outline" className="bg-success/10 hover:bg-success/20 text-success border-success/20">
+                  <Zap className="w-4 h-4 mr-2" />
+                  Generate Now
+                </Button>
+              </ClickSpark>
             </Link>
           </div>
         </div>

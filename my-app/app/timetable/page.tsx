@@ -98,8 +98,8 @@ export default function TimetablePage() {
       setTimetableSlots(slotsData || [])
 
       // Extract unique section and faculty IDs from the timetable slots
-      const sectionIdsInTimetable = [...new Set(slotsData?.map(slot => slot.section_id) || [])]
-      const facultyIdsInTimetable = [...new Set(slotsData?.map(slot => slot.faculty_id) || [])]
+      const sectionIdsInTimetable = [...new Set(slotsData?.map((slot: { section_id: string }) => slot.section_id) || [])]
+      const facultyIdsInTimetable = [...new Set(slotsData?.map((slot: { faculty_id: string }) => slot.faculty_id) || [])]
 
       console.log("[TimetablePage] Section IDs in timetable:", sectionIdsInTimetable.length)
       console.log("[TimetablePage] Faculty IDs in timetable:", facultyIdsInTimetable.length)
@@ -143,7 +143,7 @@ export default function TimetablePage() {
   // Loading state with animated spinner
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
+      <div className="min-h-screen bg-linear-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
         <div className="container mx-auto px-4 py-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
           <div className="mb-6">
             <Link href="/">
@@ -153,7 +153,7 @@ export default function TimetablePage() {
               </Button>
             </Link>
           </div>
-          <Card className="flex flex-col items-center justify-center min-h-[400px] bg-white dark:bg-slate-900">
+          <Card className="flex flex-col items-center justify-center min-h-100 bg-white dark:bg-slate-900">
             <CardContent className="flex flex-col items-center gap-4 pt-6">
               <div className="relative">
                 <Loader2 className="w-16 h-16 animate-spin text-blue-600 dark:text-blue-400" />
@@ -179,7 +179,7 @@ export default function TimetablePage() {
   // Error state
   if (error) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
+      <div className="min-h-screen bg-linear-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
         <div className="container mx-auto px-4 py-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
           <div className="mb-6">
             <Link href="/">
@@ -212,7 +212,7 @@ export default function TimetablePage() {
   // No timetable available
   if (!latestJob) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
+      <div className="min-h-screen bg-linear-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
         <div className="container mx-auto px-4 py-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
           <div className="mb-6">
             <Link href="/">
@@ -222,7 +222,7 @@ export default function TimetablePage() {
               </Button>
             </Link>
           </div>
-          <Card className="flex flex-col items-center justify-center min-h-[400px] bg-white dark:bg-slate-900">
+          <Card className="flex flex-col items-center justify-center min-h-100 bg-white dark:bg-slate-900">
             <CardContent className="flex flex-col items-center gap-4 pt-6 text-center">
               <div className="p-4 rounded-full bg-slate-100 dark:bg-slate-800">
                 <Calendar className="w-12 h-12 text-slate-600 dark:text-slate-400" />
@@ -254,7 +254,7 @@ export default function TimetablePage() {
   const useOptimized = latestJob.status === "completed"
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
+    <div className="min-h-screen bg-linear-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
       <div className="container mx-auto px-4 py-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
         <div className="mb-6">
           <Link href="/">
@@ -284,7 +284,7 @@ export default function TimetablePage() {
         </div>
 
         <Card className="mb-6 hover:shadow-lg transition-shadow bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700">
-          <CardHeader className="bg-gradient-to-r from-blue-50 to-cyan-50 dark:from-blue-950/30 dark:to-cyan-950/30">
+          <CardHeader className="bg-linear-to-r from-blue-50 to-cyan-50 dark:from-blue-950/30 dark:to-cyan-950/30">
             <div className="flex items-center gap-2">
               <Calendar className="w-5 h-5 text-blue-600 dark:text-blue-400" />
               <CardTitle className="text-slate-900 dark:text-slate-100">
@@ -301,7 +301,7 @@ export default function TimetablePage() {
         </Card>
 
         {timetableSlots.length === 0 ? (
-          <Card className="flex flex-col items-center justify-center min-h-[300px] bg-white dark:bg-slate-900">
+          <Card className="flex flex-col items-center justify-center min-h-75 bg-white dark:bg-slate-900">
             <CardContent className="flex flex-col items-center gap-4 pt-6 text-center">
               <AlertCircle className="w-12 h-12 text-slate-400 dark:text-slate-600" />
               <div className="space-y-2">

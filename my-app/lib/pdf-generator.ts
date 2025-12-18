@@ -165,7 +165,7 @@ export async function generateTimetablePDF(
           const spanPeriods = slot.end_period - slot.start_period + 1
 
           if (isStartPeriod) {
-            // Only add cell for the START period of a multi-period slot
+            // Only add cell with content and rowSpan for the START period
             if (slot.subjects && slot.faculty && slot.classrooms) {
               const isLab = slot.subjects.subject_type === "lab"
               const cellContent = `${slot.subjects.code}\n${slot.subjects.name.substring(0, 20)}\n${slot.faculty.code}\n${slot.classrooms.name}`
@@ -187,9 +187,11 @@ export async function generateTimetablePDF(
             } else {
               row.push("")
             }
+          } else {
+            // For middle/end periods of a multi-period slot: push empty string
+            // This maintains consistent row length; didParseCell callback will handle the spanning
+            row.push("")
           }
-          // For middle/end periods of a span: do nothing (don't add to row)
-          // jsPDF-autoTable handles this automatically with rowSpan
         } else {
           // No slot at all - add empty cell
           row.push("")

@@ -46,14 +46,25 @@ export function GenerateTimetable() {
         "postgres_changes",
         { event: "*", schema: "public", table: "timetable_jobs" },
         (payload: { new: TimetableJob | null; old: TimetableJob | null; eventType: string }) => {
-          console.log("[GenerateTimetable] Real-time job update:", payload)
+          console.log("[GenerateTimetable] Real-time job update:", payload.new?.status, payload)
           if (payload.new) {
+            const newStatus = payload.new.status
+            console.log("[GenerateTimetable] Real-time update - Status:", newStatus, "Progress:", payload.new.progress)
+            
             setCurrentJob(payload.new)
             setLastUpdated(new Date())
+            
             // Update generating state based on job status
-            if (payload.new.status === "completed" || payload.new.status === "failed" || payload.new.status === "base_complete") {
+            const isComplete = newStatus === "completed" || newStatus === "failed" || newStatus === "base_complete"
+            const isGenerating = newStatus === "generating_base" || newStatus === "optimizing"
+            
+            console.log("[GenerateTimetable] Real-time status check - isComplete:", isComplete, "isGenerating:", isGenerating)
+            
+            if (isComplete) {
+              console.log("[GenerateTimetable] ✅ Real-time: Job complete, stopping loader")
               setGenerating(false)
-            } else if (payload.new.status === "generating_base" || payload.new.status === "optimizing") {
+            } else if (isGenerating) {
+              console.log("[GenerateTimetable] 🔄 Real-time: Job generating, showing loader")
               setGenerating(true)
             }
           }
@@ -88,39 +99,58 @@ export function GenerateTimetable() {
   const fetchLatestJob = async () => {
     try {
       const supabase = getSupabaseBrowserClient()
-      let query = supabase
+      
+      console.log("[GenerateTimetable] fetchLatestJob called")
+      
+      // Get the most recent job (no admin filter for now since edge function doesn't set created_by)
+      const { data, error } = await supabase
         .from("timetable_jobs")
         .select("*")
         .order("created_at", { ascending: false })
         .limit(1)
-      
-      // Filter by admin ID if available
-      if (adminId) {
-        query = query.eq("created_by", adminId)
-      }
-      
-      const { data, error } = await query.maybeSingle()
+        .maybeSingle()
 
       if (error) {
-        console.error("[GenerateTimetable] Error fetching job:", error)
+        console.error("[GenerateTimetable] ❌ Error fetching job:", error)
         setIsLoading(false)
         return
       }
 
-      if (data) {
-        console.log("[GenerateTimetable] Fetched job:", data.status, "Progress:", data.progress)
-        setCurrentJob(data)
-        setLastUpdated(new Date())
-        
-        // Update generating state based on job status
-        if (data.status === "completed" || data.status === "failed" || data.status === "base_complete") {
-          setGenerating(false)
-        } else if (data.status === "generating_base" || data.status === "optimizing") {
-          setGenerating(true)
-        }
+      if (!data) {
+        console.log("[GenerateTimetable] ⚠️ No job data returned from query")
+        setIsLoading(false)
+        return
+      }
+
+      console.log("[GenerateTimetable] ✅ Fetched job:", {
+        id: data.id,
+        status: data.status,
+        progress: data.progress,
+        message: data.message,
+        currentGeneratingState: generating
+      })
+      
+      setCurrentJob(data)
+      setLastUpdated(new Date())
+      
+      // Update generating state based on job status
+      const isComplete = data.status === "completed" || data.status === "failed" || data.status === "base_complete"
+      const isGenerating = data.status === "generating_base" || data.status === "optimizing"
+      
+      console.log("[GenerateTimetable] Status check - isComplete:", isComplete, "isGenerating:", isGenerating, "status:", data.status)
+      
+      if (isComplete) {
+        console.log("[GenerateTimetable] 🎉 Job complete, stopping loader")
+        setGenerating(false)
+      } else if (isGenerating) {
+        console.log("[GenerateTimetable] 🔄 Job generating, keeping loader active")
+        setGenerating(true)
+      } else {
+        console.log("[GenerateTimetable] ⚠️ Unknown status, stopping loader to be safe")
+        setGenerating(false)
       }
     } catch (err) {
-      console.error("[GenerateTimetable] Exception fetching job:", err)
+      console.error("[GenerateTimetable] 💥 Exception fetching job:", err)
     } finally {
       setIsLoading(false)
     }
@@ -133,9 +163,25 @@ export function GenerateTimetable() {
     setCurrentJob(null)  // Clear old job data to show fresh state
 
     try {
-      // Call Supabase Edge Function
       const supabase = getSupabaseBrowserClient()
       
+      // Step 1: Delete old timetable jobs for this administrator
+      if (adminId) {
+        console.log("[GenerateTimetable] Deleting old timetable jobs for admin:", adminId)
+        const { error: deleteError } = await supabase
+          .from('timetable_jobs')
+          .delete()
+          .eq('created_by', adminId)
+        
+        if (deleteError) {
+          console.error("[GenerateTimetable] Error deleting old jobs:", deleteError)
+          // Continue anyway - not critical if this fails
+        } else {
+          console.log("[GenerateTimetable] ✅ Old timetable jobs deleted successfully")
+        }
+      }
+      
+      // Step 2: Call Supabase Edge Function
       console.log("[GenerateTimetable] Calling Edge Function...", adminId ? `with admin ID: ${adminId}` : 'without admin ID')
       const { data, error } = await supabase.functions.invoke("generate-base-timetable", {
         method: "POST",
@@ -184,12 +230,15 @@ export function GenerateTimetable() {
       
       // Start polling immediately after successful start
       if (data?.success && data?.jobId) {
-        console.log("[GenerateTimetable] Job started with ID:", data.jobId)
-        // Wait a moment for job to be inserted, then fetch it
+        console.log("[GenerateTimetable] ✅ Job started with ID:", data.jobId)
+        // Wait for job to be inserted and edge function to update it
         setTimeout(() => {
-          console.log("[GenerateTimetable] Fetching new job...")
+          console.log("[GenerateTimetable] Fetching new job after 1.5s delay...")
           fetchLatestJob()
-        }, 500)
+        }, 1500)
+      } else {
+        console.error("[GenerateTimetable] ❌ Edge function did not return success/jobId:", data)
+        setGenerating(false)
       }
     } catch (error) {
       console.error("[GenerateTimetable] Exception:", error)
@@ -248,7 +297,8 @@ export function GenerateTimetable() {
   }
 
   const handleViewTimetable = () => {
-    router.push("/timetable")
+    // Force a fresh navigation with cache bust
+    router.push("/timetable?t=" + Date.now())
   }
 
   const handleDownloadPDF = async () => {
@@ -349,6 +399,67 @@ export function GenerateTimetable() {
 
   return (
     <div className="space-y-6">
+      {/* Full-screen loading overlay during generation */}
+      {generating && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center">
+          <Card className="p-8 bg-slate-900/95 border-slate-700 max-w-md mx-4 shadow-2xl">
+            <div className="flex flex-col items-center gap-6">
+              <div className="relative">
+                <div className="w-20 h-20 rounded-full border-4 border-primary/30 border-t-primary animate-spin" />
+                <div className="absolute inset-0 flex items-center justify-center">
+                  {currentJob?.status === "optimizing" ? (
+                    <Zap className="w-8 h-8 text-primary animate-pulse" />
+                  ) : (
+                    <Play className="w-8 h-8 text-success animate-pulse" />
+                  )}
+                </div>
+              </div>
+              <div className="text-center space-y-2">
+                <h3 className="text-xl font-bold text-white">
+                  {currentJob?.status === "optimizing" 
+                    ? "Optimizing Timetable..." 
+                    : "Generating Base Timetable..."}
+                </h3>
+                <p className="text-slate-300">
+                  {currentJob?.status === "optimizing"
+                    ? "Running Genetic Algorithm to improve quality"
+                    : "Using ILP solver to create a valid schedule"}
+                </p>
+              </div>
+              {currentJob && (
+                <div className="w-full space-y-2">
+                  <div className="flex justify-between text-sm text-slate-400">
+                    <span>Progress</span>
+                    <span className="font-medium text-white">{currentJob.progress}%</span>
+                  </div>
+                  <Progress value={currentJob.progress} className="h-2" />
+                  {currentJob.message && (
+                    <p className="text-xs text-slate-400 text-center mt-2">{currentJob.message}</p>
+                  )}
+                </div>
+              )}
+              <div className="flex items-center gap-2 text-xs text-slate-400">
+                <div className="w-2 h-2 bg-success rounded-full animate-pulse" />
+                <span>Live updating...</span>
+              </div>
+              {/* Emergency stop button if loader gets stuck */}
+              <Button
+                onClick={() => {
+                  console.log("[GenerateTimetable] Manual stop clicked")
+                  setGenerating(false)
+                  fetchLatestJob()
+                }}
+                variant="outline"
+                size="sm"
+                className="mt-4 w-full text-xs"
+              >
+                Refresh Status
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Card className="p-6 bg-slate-800/50 border-slate-700 backdrop-blur-xl">
           <div className="space-y-4">
@@ -450,6 +561,10 @@ export function GenerateTimetable() {
                     Last updated: {lastUpdated.toLocaleTimeString()}
                   </p>
                 )}
+                {/* Debug info */}
+                <p className="text-xs text-muted-foreground mt-1">
+                  Loader: {generating ? "ON" : "OFF"} • Status: {currentJob.status}
+                </p>
               </div>
               {getStatusBadge(currentJob.status)}
             </div>

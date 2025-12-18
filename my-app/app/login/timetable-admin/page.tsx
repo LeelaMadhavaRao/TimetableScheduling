@@ -30,7 +30,7 @@ export default function TimetableAdminLoginPage() {
       const result = await loginTimetableAdmin(username, password);
       
       if (result.success && result.session) {
-        login(result.session.session_token, 'timetable_admin');
+        await login(result.session.session_token, 'timetable_admin');
         router.push('/admin');
       } else {
         setError(result.message);

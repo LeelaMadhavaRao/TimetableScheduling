@@ -88,11 +88,14 @@ export function FacultyDialog({ faculty, departments, trigger }: FacultyDialogPr
               <Label htmlFor="code">Faculty Code *</Label>
               <Input
                 id="code"
-                placeholder="e.g., KSR"
+                placeholder="e.g., KSR-CSE"
                 value={formData.code}
                 onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
                 required
               />
+              <p className="text-xs text-slate-500">
+                💡 Include department code as suffix (e.g., KSR-CSE, JOHN-IT)
+              </p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="name">Full Name *</Label>

@@ -61,7 +61,8 @@ const RULES = {
   PERIOD_DURATION_MINS: 45,
   LUNCH_START_PERIOD: 4.5,
   LUNCH_END_PERIOD: 5,
-  MAX_THEORY_BLOCK_SIZE: 3, // Max periods to schedule in one block (2.25hr max)
+  MAX_THEORY_PERIODS_PER_DAY_PER_SUBJECT: 2, // CRITICAL: Theory subject max 2 periods/day (prevents 3-period blocks on same day)
+  MAX_THEORY_BLOCK_SIZE: 2, // Max periods to schedule in one block (changed from 3 to 2)
   MAX_SECTION_PERIODS_PER_DAY: 6, // Total periods per section per day (allows 4-5 subjects)
   THEORY_BLOCK_OPTIONS: [1.5, 2.25, 3], // hours per week
 }
@@ -442,6 +443,7 @@ class ILPTimetableGenerator {
 
     const labRooms = this.classrooms.filter((r) => r.roomType === "lab")
     console.log(`[ILP] Sending ${labCourses.length} labs to solver (${labRooms.length} rooms available)`)
+    console.log(`[ILP] 🔍 Lab rooms being sent:`, labRooms.map(r => ({ id: r.id, name: r.name, capacity: r.capacity })))
 
     // Serialize problem data as JSON
     const problemData = {
@@ -523,7 +525,17 @@ class ILPTimetableGenerator {
           continue
         }
 
-        console.log(`[ILP] Processing ${course.subjectCode} (${course.sectionName}): Day ${assignment.day}, P${assignment.startPeriod}-${assignment.endPeriod}`)
+        console.log(`[ILP] Processing ${course.subjectCode} (${course.sectionName}): Day ${assignment.day}, P${assignment.startPeriod}-${assignment.endPeriod}, Room=${assignment.roomId}`)
+
+        // 🔍 CRITICAL: Validate that the assigned room exists in our filtered classroom list
+        const assignedRoom = this.classrooms.find(r => r.id === assignment.roomId)
+        if (!assignedRoom) {
+          console.error(`[ERROR] 🚨 ILP solver assigned invalid room ${assignment.roomId} - not in our filtered classroom list!`)
+          console.error(`[ERROR] Available rooms:`, this.classrooms.map(r => ({ id: r.id, name: r.name })))
+          skippedLabs++
+          skippedDetails.push(`${course.subjectCode} (${course.sectionName}) - Invalid room ${assignment.roomId}`)
+          continue
+        }
 
         const success = this.addSlot(
           course,
@@ -808,8 +820,10 @@ class ILPTimetableGenerator {
       `[Edge Function] Scheduling THEORY ${course.subjectCode} for ${course.sectionName} - ${periodsNeeded} periods needed`,
     )
 
-    // Try to schedule in blocks (2 or 3 periods MINIMUM, never single period)
-    // Theory blocks: 2 periods (1.5hr), 3 periods (2.25hr)
+    // Try to schedule in blocks (2 periods ONLY per day, never 3)
+    // Theory constraint: MAX 2 periods per day per subject
+    // So for 3-period subjects, we schedule 2+2 (impossible) or 2 (and leave 1 unscheduled)
+    // Better: schedule 2 periods at a time across multiple days
     let attempts = 0
     const maxAttempts = 50 // Prevent infinite loops
     
@@ -817,13 +831,12 @@ class ILPTimetableGenerator {
       attempts++
       const remainingPeriods = periodsNeeded - periodsScheduled
       
-      // Determine block size: prefer 3 periods, but allow 2 periods
+      // Determine block size: ALWAYS schedule 2 periods max per day
       // NEVER schedule single-period theory blocks
+      // NEVER schedule 3 periods in one day (violates constraint)
       let periodsToSchedule: number
-      if (remainingPeriods >= 3) {
-        periodsToSchedule = Math.min(RULES.MAX_THEORY_BLOCK_SIZE, remainingPeriods)
-      } else if (remainingPeriods === 2) {
-        periodsToSchedule = 2
+      if (remainingPeriods >= 2) {
+        periodsToSchedule = 2  // Always 2 periods per day max
       } else if (remainingPeriods === 1) {
         // Cannot schedule 1 period - theory minimum is 2 periods
         console.warn(`[Edge Function] ⚠️ ${course.subjectCode} has 1 remaining period - cannot schedule (min 2 periods)`)
@@ -838,31 +851,10 @@ class ILPTimetableGenerator {
         if (success) {
           periodsScheduled += periodsToSchedule
         } else {
-          // Try smaller block if 3 failed
-          if (periodsToSchedule === 3 && remainingPeriods >= 2) {
-            const slot2 = this.findTheorySlot(course, 2)
-            if (slot2) {
-              const success2 = this.addSlot(course, slot2.day, slot2.startPeriod, slot2.endPeriod, slot2.classroomId)
-              if (success2) {
-                periodsScheduled += 2
-                continue
-              }
-            }
-          }
+          // Cannot add slot - break
           break
         }
       } else {
-        // Try smaller block if 3 failed
-        if (periodsToSchedule === 3 && remainingPeriods >= 2) {
-          const slot2 = this.findTheorySlot(course, 2)
-          if (slot2) {
-            const success = this.addSlot(course, slot2.day, slot2.startPeriod, slot2.endPeriod, slot2.classroomId)
-            if (success) {
-              periodsScheduled += 2
-              continue
-            }
-          }
-        }
         // Cannot find slot - break and accept partial schedule
         break
       }
@@ -1012,7 +1004,8 @@ class ILPTimetableGenerator {
     }
 
     // Check total section periods per day (not too many classes in one day)
-    if (!this.canScheduleTheoryOnDay(course.sectionId, day, end - start + 1)) {
+    // AND check that this specific subject doesn't exceed 2 periods per day
+    if (!this.canScheduleTheoryOnDay(course.sectionId, day, end - start + 1, course.subjectId)) {
       return null
     }
 
@@ -1107,19 +1100,44 @@ class ILPTimetableGenerator {
   }
 
   // Check if section can have more theory on this day (total section limit)
-  private canScheduleTheoryOnDay(sectionId: string, day: DayOfWeek, additionalPeriods: number): boolean {
+  private canScheduleTheoryOnDay(sectionId: string, day: DayOfWeek, additionalPeriods: number, subjectId?: string): boolean {
     const schedule = this.sectionSchedule.get(sectionId)
     if (!schedule) return true
 
     let periodsOnDay = 0
+    let subjectPeriodsOnDay = 0
+    
     for (let p = 1; p <= 8; p++) {
       if (schedule.has(`${day}-${p}`)) {
         periodsOnDay++
+        
+        // Count periods for THIS specific subject on this day
+        if (subjectId) {
+          const existingSlot = this.timetable.find(
+            slot => slot.sectionId === sectionId && 
+                   slot.subjectId === subjectId && 
+                   slot.day === day && 
+                   p >= slot.startPeriod && 
+                   p <= slot.endPeriod
+          )
+          if (existingSlot) {
+            subjectPeriodsOnDay++
+          }
+        }
       }
     }
 
     // Section can have up to MAX_SECTION_PERIODS_PER_DAY total (includes labs)
-    return periodsOnDay + additionalPeriods <= RULES.MAX_SECTION_PERIODS_PER_DAY
+    if (periodsOnDay + additionalPeriods > RULES.MAX_SECTION_PERIODS_PER_DAY) {
+      return false
+    }
+    
+    // CRITICAL: Theory subjects must have MAX 2 periods per day
+    if (subjectId && subjectPeriodsOnDay + additionalPeriods > 2) {
+      return false
+    }
+    
+    return true
   }
 
   private addSlot(
@@ -1500,6 +1518,16 @@ Deno.serve(async (req) => {
     })
     console.log("[Edge Function] 🔍 DEBUG - MECH-F003 availability windows:", mechF003Avail?.length || 0, mechF003Avail)
     console.log("[Edge Function] 🔍 DEBUG - CSE-F005 availability windows:", cseF005Avail?.length || 0, cseF005Avail)
+
+    // 🔍 DEBUG: Log classrooms being used
+    console.log("[Edge Function] 🔍 DEBUG - Classrooms fetched:", classrooms?.length || 0)
+    console.log("[Edge Function] 🔍 DEBUG - Classroom details:", JSON.stringify(classrooms?.map(r => ({
+      id: r.id,
+      name: r.name,
+      type: r.room_type,
+      capacity: r.capacity,
+      created_by: r.created_by
+    })), null, 2))
 
     if (!sectionSubjects || !classrooms) {
       await supabase

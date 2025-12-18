@@ -114,11 +114,14 @@ export function SubjectDialog({ subject, departments, faculty, trigger }: Subjec
                 <Label htmlFor="code">Subject Code *</Label>
                 <Input
                   id="code"
-                  placeholder="e.g., CS101"
+                  placeholder="e.g., JAVA-IT"
                   value={formData.code}
                   onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
                   required
                 />
+                <p className="text-xs text-slate-500">
+                  💡 Include department code as suffix (e.g., JAVA-IT, CS101-CSE)
+                </p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="type">Type *</Label>

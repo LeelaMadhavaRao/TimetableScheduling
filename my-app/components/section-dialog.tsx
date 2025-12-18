@@ -93,11 +93,14 @@ export function SectionDialog({ section, departments, subjects, trigger }: Secti
               <Label htmlFor="name">Section Name *</Label>
               <Input
                 id="name"
-                placeholder="e.g., CSE-A or Section 1"
+                placeholder="e.g., CSE-2A or IT-3B"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 required
               />
+              <p className="text-xs text-slate-500">
+                💡 Include department code as prefix (e.g., CSE-2A, IT-3B, PHY-1A)
+              </p>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">

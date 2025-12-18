@@ -1,4 +1,4 @@
-import { getSupabaseServerClient } from "@/lib/server"
+import { getSupabaseServerClient, getCurrentAdminId } from "@/lib/server"
 import { ClassroomList } from "@/components/classroom-list"
 import { ClassroomDialog } from "@/components/classroom-dialog"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -9,8 +9,21 @@ import ClickSpark from "@/components/ClickSpark"
 
 export default async function ClassroomsPage() {
   const supabase = await getSupabaseServerClient()
+  const adminId = await getCurrentAdminId()
 
-  const { data: classrooms } = await supabase.from("classrooms").select("*").order("name")
+  console.log('[Classrooms Page] Admin ID:', adminId)
+
+  // Filter by created_by if adminId exists
+  let classroomsQuery = supabase.from("classrooms").select("*").order("name")
+
+  if (adminId) {
+    classroomsQuery = classroomsQuery.eq("created_by", adminId)
+  }
+
+  const { data: classrooms, error: classroomsError } = await classroomsQuery
+
+  console.log('[Classrooms Page] Classrooms count:', classrooms?.length)
+  console.log('[Classrooms Page] Classrooms error:', classroomsError)
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">

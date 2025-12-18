@@ -169,7 +169,9 @@ export async function generateTimetablePDF(
             
             if (slot.subjects && slot.faculty && slot.classrooms) {
               const isLab = slot.subjects.subject_type === "lab"
-              const cellContent = `${slot.subjects.code}\n${slot.subjects.name.substring(0, 20)}\n${slot.faculty.code}\n${slot.classrooms.name}`
+              // Show faculty name along with code
+              const facultyInfo = `${slot.faculty.name} (${slot.faculty.code})`
+              const cellContent = `${slot.subjects.code}\n${slot.subjects.name.substring(0, 20)}\n${facultyInfo}\n${slot.classrooms.name}`
 
               row.push({
                 content: cellContent,
@@ -215,10 +217,10 @@ export async function generateTimetablePDF(
       body: tableData,
       theme: "grid",
       styles: {
-        fontSize: 8.5,
-        cellPadding: 4,
+        fontSize: 7, // Reduced font size
+        cellPadding: 2, // Reduced padding
         lineColor: [220, 220, 220],
-        lineWidth: 0.3,
+        lineWidth: 0.25,
         textColor: [20, 20, 20],
         halign: "center" as const,
         valign: "middle" as const,
@@ -227,20 +229,21 @@ export async function generateTimetablePDF(
         fillColor: [30, 58, 138],
         textColor: [255, 255, 255],
         fontStyle: "bold",
-        fontSize: 11,
+        fontSize: 9, // Reduced head font size
         lineColor: [20, 40, 100],
-        lineWidth: 0.5,
+        lineWidth: 0.4,
       },
       columnStyles: {
         0: { 
-          cellWidth: 22, 
+          cellWidth: 18, // Reduced width
           fontStyle: "bold", 
           fillColor: [240, 245, 255],
           textColor: [30, 58, 138],
           lineColor: [180, 200, 220],
         },
       },
-      margin: { left: 10, right: 10 },
+      margin: { left: 8, right: 8, bottom: 30 }, // Slightly smaller margins
+      pageBreak: 'avoid', // Prevent table splitting
       didParseCell: function (data) {
         // Remove empty cells created by rowspan
         if (data.cell.raw === "" && data.cell.section === "body") {
@@ -252,38 +255,37 @@ export async function generateTimetablePDF(
       },
     })
 
-    // Add footer with legend and stats
+    // Add footer with legend and stats - position dynamically after table
     const pageHeight = doc.internal.pageSize.height
-    const footerY = pageHeight - 30
+    // Use finalY from last table to position footer, ensuring it doesn't overlap
+    const tableEndY = (doc as any).lastAutoTable.finalY || 150
+    const footerY = Math.max(tableEndY + 10, pageHeight - 30)
     
     // Separator line
     doc.setDrawColor(200, 200, 200)
     doc.setLineWidth(0.3)
     doc.line(10, footerY, 287, footerY)
     
-    // Legend
-    doc.setFontSize(9)
+    // Legend (smaller, compact)
+    doc.setFontSize(8)
     doc.setFont("helvetica", "bold")
     doc.setTextColor(30, 58, 138)
-    doc.text("Legend:", 15, footerY + 6)
-    
+    doc.text("Legend:", 15, footerY + 5)
     // Theory legend
     doc.setFillColor(219, 234, 254)
-    doc.rect(60, footerY + 2, 8, 6, "F")
+    doc.rect(55, footerY + 1, 6, 5, "F")
     doc.setFont("helvetica", "normal")
-    doc.setFontSize(8)
+    doc.setFontSize(7)
     doc.setTextColor(0, 0, 0)
-    doc.text("Theory | ", 70, footerY + 6)
-    
+    doc.text("Theory | ", 63, footerY + 5)
     // Lab legend
     doc.setFillColor(254, 243, 199)
-    doc.rect(100, footerY + 2, 8, 6, "F")
-    doc.text("Lab | ", 110, footerY + 6)
-    
+    doc.rect(85, footerY + 1, 6, 5, "F")
+    doc.text("Lab | ", 93, footerY + 5)
     // Period info
-    doc.setFontSize(7)
+    doc.setFontSize(6)
     doc.setTextColor(100, 100, 100)
-    doc.text("Periods 1-8 | 45 min per period", 130, footerY + 6)
+    doc.text("Periods 1-8 | 45 min per period", 110, footerY + 5)
     
     // Statistics
     const uniqueSubjects = new Set(slots.map(s => s.subjects?.code).filter(Boolean)).size

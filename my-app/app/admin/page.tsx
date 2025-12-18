@@ -1,4 +1,4 @@
-import { getSupabaseServerClient } from "@/lib/server"
+import { getSupabaseServerClient, getCurrentAdminId } from "@/lib/server"
 import { StatsCard } from "@/components/stats-card"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Users, BookOpen, Building, Layers, Calendar, TrendingUp } from "lucide-react"
@@ -8,15 +8,38 @@ import ClickSpark from "@/components/ClickSpark"
 
 export default async function AdminDashboardPage() {
   const supabase = await getSupabaseServerClient()
+  const adminId = await getCurrentAdminId()
 
-  // Fetch statistics
+  console.log('[Dashboard] Admin ID:', adminId)
+
+  // Fetch statistics - filtered by current timetable administrator
+  let facultyQuery = supabase.from("faculty").select("*", { count: "exact", head: true })
+  let subjectsQuery = supabase.from("subjects").select("*", { count: "exact", head: true })
+  let classroomsQuery = supabase.from("classrooms").select("*", { count: "exact", head: true })
+  let sectionsQuery = supabase.from("sections").select("*", { count: "exact", head: true })
+  let jobsQuery = supabase.from("timetable_jobs").select("*", { count: "exact", head: true })
+
+  // Apply filtering if adminId exists
+  if (adminId) {
+    facultyQuery = facultyQuery.eq("created_by", adminId)
+    subjectsQuery = subjectsQuery.eq("created_by", adminId)
+    classroomsQuery = classroomsQuery.eq("created_by", adminId)
+    sectionsQuery = sectionsQuery.eq("created_by", adminId)
+    jobsQuery = jobsQuery.eq("created_by", adminId)
+  }
+
   const [facultyCount, subjectsCount, classroomsCount, sectionsCount, jobsCount] = await Promise.all([
-    supabase.from("faculty").select("*", { count: "exact", head: true }),
-    supabase.from("subjects").select("*", { count: "exact", head: true }),
-    supabase.from("classrooms").select("*", { count: "exact", head: true }),
-    supabase.from("sections").select("*", { count: "exact", head: true }),
-    supabase.from("timetable_jobs").select("*", { count: "exact", head: true }),
+    facultyQuery,
+    subjectsQuery,
+    classroomsQuery,
+    sectionsQuery,
+    jobsQuery,
   ])
+
+  console.log('[Dashboard] Faculty count:', facultyCount.count)
+  console.log('[Dashboard] Subjects count:', subjectsCount.count)
+  console.log('[Dashboard] Classrooms count:', classroomsCount.count)
+  console.log('[Dashboard] Sections count:', sectionsCount.count)
 
   return (
     <div className="space-y-8">

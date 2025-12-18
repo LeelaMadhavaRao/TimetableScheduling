@@ -88,11 +88,14 @@ export function ClassroomDialog({ classroom, trigger }: ClassroomDialogProps) {
               <Label htmlFor="name">Classroom Name *</Label>
               <Input
                 id="name"
-                placeholder="e.g., Room 101 or Lab A"
+                placeholder="e.g., CSE-LAB1 or IT-101"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 required
               />
+              <p className="text-xs text-slate-500">
+                💡 Include department code as prefix (e.g., CSE-LAB1, IT-101, ENG-LAB2)
+              </p>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">

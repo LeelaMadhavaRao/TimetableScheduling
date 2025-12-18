@@ -30,7 +30,7 @@ export default function AdminLoginPage() {
       const result = await loginAdmin(username, password);
       
       if (result.success && result.session) {
-        login(result.session.session_token, 'admin');
+        await login(result.session.session_token, 'admin');
         router.push('/dashboard/admin');
       } else {
         setError(result.message);
@@ -133,11 +133,7 @@ export default function AdminLoginPage() {
               </div>
             </div>
 
-            <div className="mt-4 p-3 rounded-md bg-slate-800/50 border border-slate-700">
-              <p className="text-xs text-slate-500 text-center">
-                Default credentials: <span className="text-purple-400">admin</span> / <span className="text-purple-400">admin123</span>
-              </p>
-            </div>
+            
           </CardContent>
         </Card>
       </div>

@@ -96,9 +96,29 @@ export default function FacultyDashboardPage() {
     const supabase = getSupabaseBrowserClient();
 
     try {
-      // Fetch all timetable entries for this faculty (from all timetable administrators)
+      // Step 1: Check the latest timetable job status
+      const { data: latestJob, error: jobError } = await supabase
+        .from('timetable_jobs')
+        .select('id, status')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (jobError) {
+        console.error('Error fetching timetable job:', jobError);
+      }
+
+      // Step 2: Determine which table to query based on job status
+      // If job status is 'completed', fetch from timetable_optimized
+      // Otherwise, fetch from timetable_base
+      const isOptimized = latestJob?.status === 'completed';
+      const tableName = isOptimized ? 'timetable_optimized' : 'timetable_base';
+      
+      console.log(`[Faculty Timetable] Fetching from ${tableName} (Job status: ${latestJob?.status || 'none'})`);
+
+      // Step 3: Fetch timetable entries for this faculty from the appropriate table
       const { data: slots, error } = await supabase
-        .from('timetable_base')
+        .from(tableName)
         .select(`
           *,
           sections(name),

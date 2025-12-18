@@ -16,7 +16,7 @@ interface AuthContextType {
   session: AuthSession | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  login: (sessionToken: string, role: UserRole) => void;
+  login: (sessionToken: string, role: UserRole) => Promise<void>;
   logout: () => Promise<void>;
   refreshSession: () => Promise<void>;
 }
@@ -74,10 +74,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     refreshSession();
   }, [refreshSession]);
 
-  const login = (sessionToken: string, userRole: UserRole) => {
+  const login = async (sessionToken: string, userRole: UserRole) => {
+    // Set in localStorage for client-side access
     localStorage.setItem(SESSION_KEY, sessionToken);
     localStorage.setItem(ROLE_KEY, userRole);
-    refreshSession();
+    
+    // Also set cookies for server-side access
+    document.cookie = `${SESSION_KEY}=${sessionToken}; path=/; max-age=${24 * 60 * 60}`; // 24 hours
+    document.cookie = `${ROLE_KEY}=${userRole}; path=/; max-age=${24 * 60 * 60}`;
+    
+    await refreshSession();
   };
 
   const logout = async () => {
@@ -87,8 +93,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await authLogout(sessionToken);
     }
     
+    // Clear localStorage
     localStorage.removeItem(SESSION_KEY);
     localStorage.removeItem(ROLE_KEY);
+    
+    // Clear cookies
+    document.cookie = `${SESSION_KEY}=; path=/; max-age=0`;
+    document.cookie = `${ROLE_KEY}=; path=/; max-age=0`;
+    
     setUser(null);
     setRole(null);
     setSession(null);

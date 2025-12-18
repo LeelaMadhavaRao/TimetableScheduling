@@ -1,4 +1,4 @@
-import { getSupabaseServerClient } from "@/lib/server"
+import { getSupabaseServerClient, getCurrentAdminId } from "@/lib/server"
 import { FacultyList } from "@/components/faculty-list"
 import { FacultyDialog } from "@/components/faculty-dialog"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -9,10 +9,24 @@ import ClickSpark from "@/components/ClickSpark"
 
 export default async function FacultyPage() {
   const supabase = await getSupabaseServerClient()
+  const adminId = await getCurrentAdminId()
 
-  const { data: faculty, error } = await supabase.from("faculty").select("*, departments(name, code)").order("name")
+  console.log('[Faculty Page] Admin ID:', adminId)
 
-  const { data: departments } = await supabase.from("departments").select("*").order("name")
+  // Filter by created_by if adminId exists
+  let facultyQuery = supabase.from("faculty").select("*, departments(name, code)").order("name")
+  let departmentsQuery = supabase.from("departments").select("*").order("name")
+
+  if (adminId) {
+    facultyQuery = facultyQuery.eq("created_by", adminId)
+    departmentsQuery = departmentsQuery.eq("created_by", adminId)
+  }
+
+  const { data: faculty, error } = await facultyQuery
+  const { data: departments } = await departmentsQuery
+
+  console.log('[Faculty Page] Faculty count:', faculty?.length)
+  console.log('[Faculty Page] Faculty error:', error)
 
   if (error) {
     console.error("[v0] Error fetching faculty:", error)

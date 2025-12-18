@@ -30,7 +30,7 @@ export default function FacultyLoginPage() {
       const result = await loginFaculty(facultyCode, phone);
       
       if (result.success && result.session) {
-        login(result.session.session_token, 'faculty');
+        await login(result.session.session_token, 'faculty');
         router.push('/faculty');
       } else {
         setError(result.message);

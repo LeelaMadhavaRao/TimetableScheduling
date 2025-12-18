@@ -1,4 +1,4 @@
-import { getSupabaseServerClient } from "@/lib/server"
+import { getSupabaseServerClient, getCurrentAdminId } from "@/lib/server"
 import { SectionList } from "@/components/section-list"
 import { SectionDialog } from "@/components/section-dialog"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -9,16 +9,31 @@ import ClickSpark from "@/components/ClickSpark"
 
 export default async function SectionsPage() {
   const supabase = await getSupabaseServerClient()
+  const adminId = await getCurrentAdminId()
 
-  const { data: sections } = await supabase
+  console.log('[Sections Page] Admin ID:', adminId)
+
+  // Filter by created_by if adminId exists
+  let sectionsQuery = supabase
     .from("sections")
     .select("*, departments(name, code), section_subjects(*, subjects(*, subject_faculty(faculty(*))))")
     .order("year_level")
     .order("name")
+  let departmentsQuery = supabase.from("departments").select("*").order("name")
+  let subjectsQuery = supabase.from("subjects").select("*, subject_faculty(faculty(*))").order("name")
 
-  const { data: departments } = await supabase.from("departments").select("*").order("name")
+  if (adminId) {
+    sectionsQuery = sectionsQuery.eq("created_by", adminId)
+    departmentsQuery = departmentsQuery.eq("created_by", adminId)
+    subjectsQuery = subjectsQuery.eq("created_by", adminId)
+  }
 
-  const { data: subjects } = await supabase.from("subjects").select("*, subject_faculty(faculty(*))").order("name")
+  const { data: sections, error: sectionsError } = await sectionsQuery
+  const { data: departments } = await departmentsQuery
+  const { data: subjects } = await subjectsQuery
+
+  console.log('[Sections Page] Sections count:', sections?.length)
+  console.log('[Sections Page] Sections error:', sectionsError)
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">

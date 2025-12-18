@@ -153,26 +153,34 @@ export async function generateTimetablePDF(
           const isStartPeriod = slot.start_period === periodIndex + 1
           const spanPeriods = slot.end_period - slot.start_period + 1
 
-          if (isStartPeriod && slot.subjects && slot.faculty && slot.classrooms) {
-            const isLab = slot.subjects.subject_type === "lab"
-            const cellContent = `${slot.subjects.code}\n${slot.subjects.name.substring(0, 20)}\n${slot.faculty.code}\n${slot.classrooms.name}`
+          if (isStartPeriod) {
+            // Only add cell for the START period of a multi-period slot
+            if (slot.subjects && slot.faculty && slot.classrooms) {
+              const isLab = slot.subjects.subject_type === "lab"
+              const cellContent = `${slot.subjects.code}\n${slot.subjects.name.substring(0, 20)}\n${slot.faculty.code}\n${slot.classrooms.name}`
 
-            row.push({
-              content: cellContent,
-              rowSpan: spanPeriods,
-              styles: {
-                fillColor: isLab ? [254, 243, 199] : [219, 234, 254], // Yellow for lab, light blue for theory
-                textColor: [0, 0, 0],
-                fontSize: 7.5,
-                halign: "center" as const,
-                valign: "middle" as const,
-                fontStyle: "normal",
-                lineColor: [180, 200, 220],
-                lineWidth: 0.2,
-              },
-            })
+              row.push({
+                content: cellContent,
+                rowSpan: spanPeriods,
+                styles: {
+                  fillColor: isLab ? [254, 243, 199] : [219, 234, 254], // Yellow for lab, light blue for theory
+                  textColor: [0, 0, 0],
+                  fontSize: 7.5,
+                  halign: "center" as const,
+                  valign: "middle" as const,
+                  fontStyle: "normal",
+                  lineColor: [180, 200, 220],
+                  lineWidth: 0.2,
+                },
+              })
+            } else {
+              row.push("")
+            }
           }
+          // For middle/end periods of a span: do nothing (don't add to row)
+          // jsPDF-autoTable handles this automatically with rowSpan
         } else {
+          // No slot at all - add empty cell
           row.push("")
         }
       })

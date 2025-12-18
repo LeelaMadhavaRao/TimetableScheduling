@@ -501,6 +501,13 @@ class ILPTimetableGenerator {
       console.log(`[ILP] Solution status: ${result.status}`)
       console.log(`[ILP] Processing ${result.assignments.length} lab assignments...`)
 
+      // 🔍 DEBUG: Log first few assignments to see format
+      console.log("[ILP] 🔍 DEBUG - Sample assignments from solver:")
+      for (let i = 0; i < Math.min(3, result.assignments.length); i++) {
+        const a = result.assignments[i]
+        console.log(`  Assignment ${i}: Section=${a.sectionId}, Subject=${a.subjectId}, Day=${a.day}, Periods=${a.startPeriod}-${a.endPeriod}, Room=${a.roomId}`)
+      }
+
       // Process solution from solver
       let assignedLabs = 0
       let skippedLabs = 0
@@ -515,6 +522,8 @@ class ILPTimetableGenerator {
           skippedLabs++
           continue
         }
+
+        console.log(`[ILP] Processing ${course.subjectCode} (${course.sectionName}): Day ${assignment.day}, P${assignment.startPeriod}-${assignment.endPeriod}`)
 
         const success = this.addSlot(
           course,
@@ -1357,6 +1366,19 @@ Deno.serve(async (req) => {
     const generationTime = Date.now() - startTime
 
     console.log("[Edge Function] Generation completed in", generationTime, "ms")
+    
+    // 🔍 DEBUG: Analyze generated timetable
+    const labSlotCount = timetableSlots.filter(s => (s.endPeriod - s.startPeriod + 1) === 4).length
+    const theorySlotCount = timetableSlots.filter(s => (s.endPeriod - s.startPeriod + 1) < 4).length
+    console.log(`[Edge Function] 🔍 DEBUG - Generated slots: ${timetableSlots.length} total (${labSlotCount} labs with 4 periods, ${theorySlotCount} theory/partial)`)
+    
+    // Log first few lab slots
+    const labSlots = timetableSlots.filter(s => (s.endPeriod - s.startPeriod + 1) === 4)
+    console.log(`[Edge Function] 🔍 DEBUG - Sample lab slots from timetable:`)
+    for (let i = 0; i < Math.min(3, labSlots.length); i++) {
+      const s = labSlots[i]
+      console.log(`  Lab ${i}: Day=${s.day}, Periods=${s.startPeriod}-${s.endPeriod} (${s.endPeriod - s.startPeriod + 1} periods)`)
+    }
 
     // Update progress
     await supabase
@@ -1375,6 +1397,24 @@ Deno.serve(async (req) => {
       start_period: slot.startPeriod,
       end_period: slot.endPeriod,
     }))
+
+    // 🔍 DEBUG: Log sample slots before database insert
+    console.log(`[Edge Function] 🔍 DEBUG - Preparing to insert ${slotsToInsert.length} slots`)
+    const labSlots = slotsToInsert.filter(s => {
+      const slot = timetableSlots.find(ts => 
+        ts.sectionId === s.section_id && 
+        ts.subjectId === s.subject_id &&
+        ts.day === s.day_of_week &&
+        ts.startPeriod === s.start_period
+      )
+      // Find if this is a lab by checking if it's 4 periods
+      return slot && (slot.endPeriod - slot.startPeriod + 1) === 4
+    })
+    console.log(`[Edge Function] 🔍 DEBUG - Lab slots to insert: ${labSlots.length}`)
+    for (let i = 0; i < Math.min(3, labSlots.length); i++) {
+      const s = labSlots[i]
+      console.log(`  Lab ${i}: Day=${s.day_of_week}, Periods=${s.start_period}-${s.end_period} (${s.end_period - s.start_period + 1} periods)`)
+    }
 
     const { error: insertError } = await supabase.from("timetable_base").insert(slotsToInsert)
 

@@ -27,6 +27,17 @@ export async function generateTimetablePDF(
   jobId: string,
   isOptimized: boolean,
 ) {
+  // 🔍 DEBUG: Log incoming data to verify periods
+  console.log(`[PDF Generator] Starting PDF generation for job ${jobId}`)
+  console.log(`[PDF Generator] Total slots received: ${timetableSlots.length}`)
+  
+  const labSlots = timetableSlots.filter(s => s.subjects?.subject_type === 'lab')
+  console.log(`[PDF Generator] Lab slots: ${labSlots.length}`)
+  labSlots.forEach((slot, i) => {
+    const span = slot.end_period - slot.start_period + 1
+    console.log(`  Lab ${i}: ${slot.subjects?.code} (${slot.sections?.name}) - Day ${slot.day_of_week}, P${slot.start_period}-${slot.end_period} (${span} periods)${span !== 4 ? ' ❌ NOT 4 PERIODS!' : ' ✅'}`)
+  })
+  
   const doc = new jsPDF({
     orientation: "landscape",
     unit: "mm",

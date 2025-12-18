@@ -9,14 +9,14 @@ WHERE subject_type = 'lab';
 
 -- Verify the changes
 SELECT 
-  name,
-  code,
-  subject_type,
-  periods_per_week,
+  s.name,
+  s.code,
+  s.subject_type,
+  s.periods_per_week,
   d.code as dept_code
 FROM subjects s
 JOIN departments d ON s.department_id = d.id
-WHERE subject_type = 'lab'
-ORDER BY d.code, code;
+WHERE s.subject_type = 'lab'
+ORDER BY d.code, s.code;
 
 -- Expected result: All labs should show periods_per_week = 1

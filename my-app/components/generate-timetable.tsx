@@ -118,6 +118,7 @@ export function GenerateTimetable() {
     console.log("[GenerateTimetable] Starting base timetable generation...")
     setGenerating(true)
     setShowErrorDialog(false)  // Clear previous errors
+    setCurrentJob(null)  // Clear old job data to show fresh state
 
     try {
       // Call Supabase Edge Function
@@ -171,8 +172,11 @@ export function GenerateTimetable() {
       // Start polling immediately after successful start
       if (data?.success && data?.jobId) {
         console.log("[GenerateTimetable] Job started with ID:", data.jobId)
-        // Fetch immediately and continue polling
-        await fetchLatestJob()
+        // Wait a moment for job to be inserted, then fetch it
+        setTimeout(() => {
+          console.log("[GenerateTimetable] Fetching new job...")
+          fetchLatestJob()
+        }, 500)
       }
     } catch (error) {
       console.error("[GenerateTimetable] Exception:", error)
@@ -218,7 +222,10 @@ export function GenerateTimetable() {
       
       // Start polling immediately
       if (data?.success) {
-        await fetchLatestJob()
+        setTimeout(() => {
+          console.log("[GenerateTimetable] Fetching optimized job...")
+          fetchLatestJob()
+        }, 500)
       }
     } catch (error) {
       console.error("[GenerateTimetable] Exception:", error)

@@ -159,41 +159,29 @@ export async function generateTimetablePDF(
       DAYS.forEach((day, dayIndex) => {
         const slot = timetableData[sectionName]?.[dayIndex]?.[periodIndex + 1]
 
-        if (slot) {
-          // Check if this is the start period of the slot
+        if (slot && slot.subjects && slot.faculty && slot.classrooms) {
+          const isLab = slot.subjects.subject_type === "lab"
           const isStartPeriod = slot.start_period === periodIndex + 1
-          const spanPeriods = slot.end_period - slot.start_period + 1
-
-          if (isStartPeriod) {
-            // Only add cell with content and rowSpan for the START period
-            if (slot.subjects && slot.faculty && slot.classrooms) {
-              const isLab = slot.subjects.subject_type === "lab"
-              const cellContent = `${slot.subjects.code}\n${slot.subjects.name.substring(0, 20)}\n${slot.faculty.code}\n${slot.classrooms.name}`
-
-              row.push({
-                content: cellContent,
-                rowSpan: spanPeriods,
-                styles: {
-                  fillColor: isLab ? [254, 243, 199] : [219, 234, 254], // Yellow for lab, light blue for theory
-                  textColor: [0, 0, 0],
-                  fontSize: 7.5,
-                  halign: "center" as const,
-                  valign: "middle" as const,
-                  fontStyle: "normal",
-                  lineColor: [180, 200, 220],
-                  lineWidth: 0.2,
-                },
-              })
-            } else {
-              row.push("")
-            }
-          } else {
-            // For middle/end periods of a multi-period slot: push empty string
-            // This maintains consistent row length; didParseCell callback will handle the spanning
-            row.push("")
-          }
+          const isMiddlePeriod = slot.start_period < periodIndex + 1 && slot.end_period >= periodIndex + 1
+          
+          // For multi-period slots, show content in all periods but style differently
+          const cellContent = `${slot.subjects.code}\n${slot.subjects.name.substring(0, 20)}\n${slot.faculty.code}\n${slot.classrooms.name}`
+          
+          row.push({
+            content: cellContent,
+            styles: {
+              fillColor: isLab ? [254, 243, 199] : [219, 234, 254],
+              textColor: [0, 0, 0],
+              fontSize: 7.5,
+              halign: "center" as const,
+              valign: "middle" as const,
+              fontStyle: "normal",
+              lineColor: [180, 200, 220],
+              lineWidth: isStartPeriod ? 0.5 : 0.1, // Thicker border at start
+            },
+          })
         } else {
-          // No slot at all - add empty cell
+          // No slot - add empty cell
           row.push("")
         }
       })
@@ -242,15 +230,6 @@ export async function generateTimetablePDF(
         },
       },
       margin: { left: 10, right: 10 },
-      didParseCell: function (data) {
-        // Remove empty cells created by rowspan
-        if (data.cell.raw === "" && data.cell.section === "body") {
-          const slot = timetableData[sectionName]?.[data.column.index - 1]?.[data.row.index + 1]
-          if (slot && slot.start_period < data.row.index + 1 && slot.end_period >= data.row.index + 1) {
-            data.cell.text = []
-          }
-        }
-      },
     })
 
     // Add footer with legend and stats

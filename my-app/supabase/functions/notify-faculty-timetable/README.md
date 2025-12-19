@@ -6,9 +6,12 @@ This Supabase Edge Function sends WhatsApp notifications to faculty members when
 
 - ✅ Automatic notification when base/optimized timetable is generated
 - ✅ Manual notification button in admin dashboard
-- ✅ Sends timetable summary with weekly schedule
+- ✅ **Enhanced message template with emojis and formatting**
+- ✅ **PDF attachment of individual faculty timetables**
+- ✅ **Automatic PDF cleanup in Supabase Storage**
+- ✅ Sends timetable summary with weekly schedule and statistics
 - ✅ Logs all notifications for audit
-- ✅ Uses WhatsApp Business Meta API
+- ✅ Uses WATI (WhatsApp Team Inbox) API
 
 ## Required Environment Variables
 
@@ -16,53 +19,42 @@ Set these in your Supabase Dashboard → Edge Functions → Secrets:
 
 | Variable | Description | Where to Get |
 |----------|-------------|--------------|
-| `WHATSAPP_PHONE_NUMBER_ID` | Your WhatsApp Business phone number ID | Meta Business Manager → WhatsApp Manager → Phone Numbers |
-| `WHATSAPP_ACCESS_TOKEN` | Permanent access token for Meta API | Meta Developer Portal → Your App → WhatsApp → API Setup |
-| `WHATSAPP_BUSINESS_ACCOUNT_ID` | WhatsApp Business Account ID | Meta Business Manager → Business Settings |
+| `WATI_API_URL` | WATI API endpoint | `https://live-mt-server.wati.io/api/v1/sendTemplateMessage` |
+| `WATI_ACCESS_TOKEN` | Your WATI access token | WATI Dashboard → API Docs → Access Token |
+| `FRONTEND_URL` | Your app's URL | e.g., `https://yourapp.vercel.app` |
 | `SUPABASE_URL` | Your Supabase project URL | Already set automatically |
 | `SUPABASE_SERVICE_ROLE_KEY` | Service role key for database access | Supabase Dashboard → Settings → API |
-| `APP_URL` | Your app's URL | e.g., `https://yourapp.vercel.app` |
 
-## Meta WhatsApp Business Setup
+## WATI WhatsApp Business Setup
 
-### Step 1: Create Meta Business Account
-1. Go to [Meta Business Suite](https://business.facebook.com)
-2. Create a business account if you don't have one
+### Step 1: Create WATI Account
+1. Go to [WATI](https://www.wati.io)
+2. Sign up for an account and choose a plan
+3. Complete WhatsApp Business verification
 
-### Step 2: Create Meta Developer App
-1. Go to [Meta for Developers](https://developers.facebook.com)
-2. Create a new app → Select "Business" type
-3. Add "WhatsApp" product to your app
+### Step 2: Get API Credentials
+1. Login to WATI Dashboard
+2. Go to **API Docs** section
+3. Copy your **Access Token**
+4. Note the API URL: `https://live-mt-server.wati.io/api/v1/sendTemplateMessage`
 
-### Step 3: Get API Credentials
-1. In your app, go to WhatsApp → API Setup
-2. Note down:
-   - **Phone Number ID**: Under "From" section
-   - **WhatsApp Business Account ID**: In the URL or settings
-3. Generate a **Permanent Access Token**:
-   - Go to Business Settings → Users → System Users
-   - Create a system user
-   - Generate token with `whatsapp_business_messaging` permission
+### Step 3: Setup Message Template (Optional)
+WATI allows sending messages without pre-approved templates for existing contacts.
 
-### Step 4: Create Message Template (Required for first contact)
-1. Go to WhatsApp Manager → Message Templates
-2. Create a new template named `timetable_notification`:
-   ```
-   Template Name: timetable_notification
-   Category: Utility
-   Language: English
-   
-   Body:
-   Dear {{1}},
-   
-   Your {{2}} timetable has been generated successfully!
-   
-   Please login to view your complete schedule and download the PDF.
-   
-   Best regards,
-   Timetable Scheduling System
-   ```
-3. Submit for approval (takes 24-48 hours)
+## Supabase Storage Setup
+
+### Create Faculty Timetables Bucket
+Run the migration script:
+```bash
+psql -U postgres -d postgres -f scripts/013_storage_faculty_timetables_bucket.sql
+```
+
+Or create manually:
+1. Go to Supabase Dashboard → Storage
+2. Create new bucket: `faculty-timetables`
+3. Set to **Public**
+4. Allow MIME types: `application/pdf`
+5. File size limit: **5MB**
 
 ## Database Setup
 
@@ -90,10 +82,9 @@ npx supabase link --project-ref YOUR_PROJECT_REF
 npx supabase functions deploy notify-faculty-timetable
 
 # Set secrets
-npx supabase secrets set WHATSAPP_PHONE_NUMBER_ID=your_phone_number_id
-npx supabase secrets set WHATSAPP_ACCESS_TOKEN=your_access_token
-npx supabase secrets set WHATSAPP_BUSINESS_ACCOUNT_ID=your_business_account_id
-npx supabase secrets set APP_URL=https://yourapp.com
+npx supabase secrets set WATI_API_URL=https://live-mt-server.wati.io/api/v1/sendTemplateMessage
+npx supabase secrets set WATI_ACCESS_TOKEN=your_wati_access_token
+npx supabase secrets set FRONTEND_URL=https://yourapp.com
 ```
 
 ## Usage
@@ -153,56 +144,79 @@ Faculty receive a WhatsApp message with:
 
 Example:
 ```
+⚠️ *Important Notification*
+
 📅 *TIMETABLE NOTIFICATION*
 
-Dear *Dr. John Smith*,
+Dear *Mr. Karthik R*,
 
-Your BASE timetable has been generated.
+Your *Base* timetable has been successfully generated! 🎉
 
-📊 *Summary:*
+📊 *Your Teaching Schedule:*
 • Total Classes: 12
-• Theory: 8
-• Lab: 4
+• Subjects: 3
+• Days Active: 5
 
-📆 *Weekly Schedule:*
+📖 *Sample Schedule:*
+Monday 09:00-10:00 - CS101 (CSE-A)
+Monday 11:00-12:00 - CS102 (CSE-B) [Lab]
+Tuesday 10:00-11:00 - CS101 (CSE-A)
 
-*Monday:*
-  P1: CS101 (CSE-A) @ CR-101
-  P3: CS102 (CSE-B) @ CR-102 [Lab]
+🔗 *Access Your Complete Timetable:*
+https://yourapp.com/login/faculty
 
-*Tuesday:*
-  P2: CS101 (CSE-A) @ CR-101
-  ...
+📄 *Download Your Timetable PDF:*
+https://your-storage.supabase.co/.../CSE-F001_base_1234567890.pdf
 
-🔗 Login to view full timetable and download PDF.
+_Thank you for your attention._
 
-_Generated on 12/19/2024, 3:45:00 PM_
+Best regards,
+Timetable Management Team
 ```
 
 ## Troubleshooting
 
-### "Template not found" Error
-- Ensure `timetable_notification` template is created and approved
-- Check template name matches exactly
-
 ### "Invalid phone number" Error
-- Phone numbers must be in international format (e.g., 923001234567)
+- Phone numbers must be in international format (e.g., 919876543210)
 - No + prefix, no spaces, no dashes
 
-### "Authentication error"
-- Check WHATSAPP_ACCESS_TOKEN is valid
-- Token might have expired - regenerate if needed
+### "WATI API Authentication error"
+- Check WATI_ACCESS_TOKEN is valid
+- Token might have expired - regenerate from WATI Dashboard
 
-### "User not opted in"
-- Users must first message your WhatsApp Business number
-- Or use approved template messages for first contact
+### "Storage bucket not found"
+- Ensure `faculty-timetables` bucket exists in Supabase Storage
+- Run migration script: `013_storage_faculty_timetables_bucket.sql`
+
+### "PDF generation failed"
+- Check jsPDF imports are working (esm.sh CDN)
+- Verify timetable data is properly formatted
+
+### "WhatsApp message not delivered"
+- Ensure faculty phone number is correct and has WhatsApp
+- Check WATI account has sufficient credits
+- Verify phone number format (91XXXXXXXXXX)
 
 ## Cost Considerations
 
-WhatsApp Business API charges per conversation:
-- Business-initiated conversations: ~$0.05-0.15 per message
-- User-initiated (within 24h window): Free
-- Template messages: Charged as business-initiated
+WATI pricing varies by plan. Typical costs:
+- Startup Plan: ₹1,999/month (1000 conversations)
+- Growth Plan: ₹4,999/month (5000 conversations)
+- Check current pricing at [wati.io/pricing](https://www.wati.io/pricing)
+
+## PDF Storage Management
+
+PDFs are automatically cleaned up:
+- Old faculty PDFs deleted before new upload
+- Each faculty has one PDF per job/timetable type
+- Manual cleanup query (optional):
+
+```sql
+-- Delete PDFs older than 30 days
+DELETE FROM storage.objects 
+WHERE bucket_id = 'faculty-timetables' 
+AND created_at < NOW() - INTERVAL '30 days';
+```
 
 ## Logs
 

@@ -534,6 +534,26 @@ Deno.serve(async (req) => {
 
     console.log("[Edge Function] Job completed successfully")
 
+    // 📱 Trigger WhatsApp notifications to faculty
+    console.log("[Edge Function] 📱 Sending WhatsApp notifications to faculty...")
+    try {
+      const notificationResponse = await supabase.functions.invoke('notify-faculty-timetable', {
+        body: {
+          jobId: jobId,
+          timetableType: 'optimized'
+        }
+      })
+      
+      if (notificationResponse.error) {
+        console.error("[Edge Function] ❌ Notification error:", notificationResponse.error)
+      } else {
+        console.log("[Edge Function] ✅ Notifications sent:", notificationResponse.data)
+      }
+    } catch (notifyError) {
+      console.error("[Edge Function] ❌ Failed to send notifications:", notifyError)
+      // Don't fail the job if notifications fail
+    }
+
     return new Response(
       JSON.stringify({
         success: true,

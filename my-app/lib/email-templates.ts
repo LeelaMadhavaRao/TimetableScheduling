@@ -19,6 +19,13 @@ export interface RequestRejectedEmailData {
   reason?: string
 }
 
+export interface AdminUpdatedEmailData {
+  adminName: string
+  username: string
+  updatedFields: string[]
+  loginUrl: string
+}
+
 export function generateAdminCreatedEmail(data: AdminCreatedEmailData): { subject: string; html: string; text: string } {
   const subject = 'Welcome! Your Timetable Administrator Account Has Been Created'
   
@@ -290,3 +297,96 @@ Timetable Scheduling System
   
   return { subject, html, text }
 }
+
+export function generateAdminUpdatedEmail(data: AdminUpdatedEmailData): { subject: string; html: string; text: string } {
+  const subject = 'Your Timetable Administrator Account Has Been Updated'
+  
+  const fieldsUpdatedList = data.updatedFields.join(', ')
+  
+  const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background-color: #10b981; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
+    .content { background-color: #f9fafb; padding: 30px; border-radius: 0 0 8px 8px; }
+    .update-box { background-color: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #10b981; }
+    .button { display: inline-block; background-color: #10b981; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 20px 0; }
+    .footer { text-align: center; margin-top: 30px; font-size: 12px; color: #6b7280; }
+    .info { background-color: #dbeafe; padding: 15px; border-radius: 6px; margin: 20px 0; border-left: 4px solid #3b82f6; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>🔄 Account Information Updated</h1>
+    </div>
+    <div class="content">
+      <h2>Hello ${data.adminName},</h2>
+      <p>Your Timetable Administrator account details have been updated by the System Administrator.</p>
+      
+      <div class="update-box">
+        <h3>📝 Updated Information</h3>
+        <p>The following details were modified:</p>
+        <ul>
+          ${data.updatedFields.map(field => `<li><strong>${field}</strong></li>`).join('')}
+        </ul>
+      </div>
+      
+      ${data.updatedFields.includes('Password') ? `
+      <div class="info">
+        <p><strong>🔑 Password Changed:</strong></p>
+        <p>Your password has been updated. If you did not request this change, please contact the System Administrator immediately.</p>
+      </div>
+      ` : ''}
+      
+      <div style="text-align: center;">
+        <a href="${data.loginUrl}" class="button">Login to Dashboard</a>
+      </div>
+      
+      <p><strong>Your Username:</strong> ${data.username}</p>
+      
+      <p>If you have any questions about these changes or did not expect this update, please contact the System Administrator.</p>
+      
+      <p>Best regards,<br>
+      <strong>Timetable Scheduling System</strong></p>
+    </div>
+    <div class="footer">
+      <p>This is an automated message. Please do not reply to this email.</p>
+      <p>&copy; ${new Date().getFullYear()} Timetable Scheduling System. All rights reserved.</p>
+    </div>
+  </div>
+</body>
+</html>
+  `
+  
+  const text = `
+Account Information Updated
+
+Hello ${data.adminName},
+
+Your Timetable Administrator account details have been updated by the System Administrator.
+
+Updated Information:
+${data.updatedFields.map(field => `- ${field}`).join('\n')}
+
+Your Username: ${data.username}
+
+${data.updatedFields.includes('Password') ? `
+PASSWORD CHANGED:
+Your password has been updated. If you did not request this change, please contact the System Administrator immediately.
+` : ''}
+
+Login URL: ${data.loginUrl}
+
+If you have any questions about these changes or did not expect this update, please contact the System Administrator.
+
+Best regards,
+Timetable Scheduling System
+  `
+  
+  return { subject, html, text }
+}
+

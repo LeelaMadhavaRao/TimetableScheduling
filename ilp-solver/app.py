@@ -121,13 +121,24 @@ def solve_lab_timetable(data: ProblemData):
         courses = data.courses
         rooms = data.rooms
         rules = data.rules
+        lab_periods = rules.labPeriods  # Dynamic lab duration (3 or 4 periods)
         
-        # Block definitions: Morning (M) = periods 1-4, Afternoon (A) = periods 5-8
-        blocks = ["M", "A"]
+        # Block definitions based on lab_periods:
+        # For 3-period labs: Morning can start at 1 or 2, Afternoon can start at 5 or 6
+        # For 4-period labs: Morning starts at 1, Afternoon starts at 5
+        blocks = ["M", "A"]  # Morning and Afternoon blocks
+        
+        # Generate actual periods for each block based on lab duration
+        # Morning block: starts at period 1, covers lab_periods periods
+        # Afternoon block: starts at period 5, covers lab_periods periods
         block_periods = {
-            "M": list(range(1, 5)),  # [1, 2, 3, 4]
-            "A": list(range(5, 9)),  # [5, 6, 7, 8]
+            "M": list(range(1, 1 + lab_periods)),      # e.g., [1,2,3] for 3-period labs
+            "A": list(range(5, 5 + lab_periods)),      # e.g., [5,6,7] for 3-period labs
         }
+        
+        print(f"[Solver] 📋 Block configuration (lab_periods={lab_periods}):")
+        print(f"[Solver]   Morning block: periods {block_periods['M']}")
+        print(f"[Solver]   Afternoon block: periods {block_periods['A']}")
         
         days = list(range(rules.daysPerWeek))  # 0-5 (Mon-Sat)
         
@@ -144,12 +155,12 @@ def solve_lab_timetable(data: ProblemData):
                     for period in range(slot.startPeriod, slot.endPeriod + 1):
                         avail_set.add((slot.dayOfWeek, period))
                 faculty_avail_map[fa.facultyId] = avail_set
-                # Count blocks this faculty can teach
+                # Count blocks this faculty can teach (based on dynamic lab_periods)
                 block_count = 0
                 for slot in fa.slots:
-                    # Count 4-period blocks within this slot
-                    block_count += max(0, slot.endPeriod - slot.startPeriod - 3 + 1)
-                print(f"[Solver]   {fa.facultyId}: {len(fa.slots)} windows, {len(avail_set)} period-slots, ~{block_count} possible 4-period blocks")
+                    # Count lab-period blocks within this slot
+                    block_count += max(0, slot.endPeriod - slot.startPeriod - lab_periods + 2)
+                print(f"[Solver]   {fa.facultyId}: {len(fa.slots)} windows, {len(avail_set)} period-slots, ~{block_count} possible {lab_periods}-period blocks")
                 print(f"[Solver]      Windows: {[(s.dayOfWeek, s.startPeriod, s.endPeriod) for s in fa.slots]}")
         
         print(f"\n[Solver] Problem size: {len(courses)} labs, {len(rooms)} rooms")
@@ -231,14 +242,14 @@ def solve_lab_timetable(data: ProblemData):
                 if len(faculty_slots_list) == 0:
                     blocking_reasons.append(f"Faculty {course.facultyCode} has NO availability windows")
                 else:
-                    # Check if faculty slots allow 4-period blocks
+                    # Check if faculty slots allow lab-period blocks (dynamic)
                     valid_blocks = []
                     for slot in faculty_slots_list:
-                        for start_p in range(slot.startPeriod, slot.endPeriod - 3 + 1):
+                        for start_p in range(slot.startPeriod, slot.endPeriod - lab_periods + 2):
                             valid_blocks.append((slot.dayOfWeek, start_p))
                     if len(valid_blocks) == 0:
-                        blocking_reasons.append(f"Faculty windows don't allow 4-period blocks")
-                    print(f"[Solver]   Possible 4-period blocks for faculty: {len(valid_blocks)}")
+                        blocking_reasons.append(f"Faculty windows don't allow {lab_periods}-period blocks")
+                    print(f"[Solver]   Possible {lab_periods}-period blocks for faculty: {len(valid_blocks)}")
                 
                 # Track labs that cannot be scheduled
                 unschedulable_labs.append({

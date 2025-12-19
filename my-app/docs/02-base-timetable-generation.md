@@ -2,16 +2,24 @@
 
 ## Overview
 
-The base timetable generation is the first phase of the scheduling process. It creates a **valid, conflict-free schedule** that satisfies all hard constraints. This document explains how the base generation works through the API route and local ILP generator.
+The base timetable generation is the first phase of the scheduling process. It creates a **valid, conflict-free schedule** that satisfies all hard constraints. This process now uses an **external ILP solver microservice** for lab scheduling and a local constraint-based greedy algorithm for theory classes.
 
-## Entry Point: API Route
+## Architecture Changes
 
-**File**: `app/api/timetable/generate-base/route.ts`
+**Key Update**: Labs are now scheduled using an external Python microservice (OR-Tools CP-SAT solver) for optimal constraint satisfaction, while theory classes use a local greedy algorithm with improved distribution.
+
+## Entry Point: Edge Function
+
+**File**: `supabase/functions/generate-base-timetable/index.ts`
 
 ### Request Flow
 
 ```typescript
-POST /api/timetable/generate-base
+POST /functions/v1/generate-base-timetable
+Headers: {
+  Authorization: Bearer <session_token>
+  apikey: <anon_key>
+}
 Body: { adminId: string }  // Optional, for multi-tenant filtering
 ```
 
@@ -77,12 +85,65 @@ const courses: CourseAssignment[] = sectionSubjects.map((ss) => ({
   studentCount: ss.sections.student_count,
   yearLevel: ss.sections.year_level,
 }))
+
+// NEW: Separate labs and theory for different scheduling approaches
+const labCourses = courses.filter(c => c.subjectType === "lab")
+const theoryCourses = courses.filter(c => c.subjectType === "theory")
 ```
 
-#### Step 5: Run ILP Generator
+#### Step 5: Call External ILP Solver for Labs
 ```typescript
-const generator = new ILPTimetableGenerator(courses, classroomOptions, facultyAvailability)
-const timetableSlots = generator.generate()
+// PHASE 1: Schedule all labs using external OR-Tools CP-SAT solver
+const ilpResponse = await fetch(`${ILP_SOLVER_URL}/solve-labs`, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    courses: labCourses.map(c => ({
+      sectionId: c.sectionId,
+      sectionName: c.sectionName,
+      subjectId: c.subjectId,
+      subjectCode: c.subjectCode,
+      facultyId: c.facultyId,
+      facultyCode: c.facultyCode,
+      studentCount: c.studentCount,
+      yearLevel: c.yearLevel
+    })),
+    rooms: classrooms.filter(r => r.roomType === "lab"),
+    facultyAvailability: facultyAvailabilityForSolver,
+    rules: {
+      labPeriods: 4,
+      daysPerWeek: 6,
+      periodsPerDay: 8
+    }
+  })
+})
+
+const { success, assignments, status } = await ilpResponse.json()
+```
+
+#### Step 6: Schedule Theory Classes Locally
+```typescript
+// PHASE 2: Schedule theory classes using local greedy algorithm
+// Theory classes are distributed with max 2 consecutive periods
+const THEORY_RULES = {
+  MAX_THEORY_PERIODS_PER_DAY_PER_SUBJECT: 2,  // No more than 2 periods of same subject per day
+  MAX_THEORY_BLOCK_SIZE: 2,                    // Maximum consecutive periods
+  MAX_SECTION_PERIODS_PER_DAY: 6,              // Total limit per section
+}
+
+for (const course of theoryCourses) {
+  let periodsScheduled = 0
+  while (periodsScheduled < course.periodsPerWeek) {
+    const remainingPeriods = course.periodsPerWeek - periodsScheduled
+    const periodsToSchedule = Math.min(THEORY_RULES.MAX_THEORY_PERIODS_PER_DAY_PER_SUBJECT, remainingPeriods)
+    
+    const slot = findTheorySlot(course, periodsToSchedule)
+    if (slot) {
+      addSlot(course, slot.day, slot.startPeriod, slot.endPeriod, slot.classroomId)
+      periodsScheduled += periodsToSchedule
+    }
+  }
+}
 ```
 
 #### Step 6: Save Results

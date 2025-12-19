@@ -88,7 +88,7 @@ export function SectionDialog({ section, departments, subjects, trigger }: Secti
               {section ? "Update section details" : "Add a new section with student count"}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
+          <div className="space-y-4 py-4 max-h-[70vh] overflow-y-auto">
             <div className="space-y-2">
               <Label htmlFor="name">Section Name *</Label>
               <Input

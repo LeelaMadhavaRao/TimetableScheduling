@@ -83,7 +83,7 @@ export function ClassroomDialog({ classroom, trigger }: ClassroomDialogProps) {
               {classroom ? "Update classroom details" : "Add a new classroom with capacity and type"}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
+          <div className="space-y-4 py-4 max-h-[70vh] overflow-y-auto">
             <div className="space-y-2">
               <Label htmlFor="name">Classroom Name *</Label>
               <Input

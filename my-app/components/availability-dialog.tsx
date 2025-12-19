@@ -87,7 +87,7 @@ export function AvailabilityDialog({ faculty, open, onOpenChange }: Availability
           <DialogDescription>Manage available time slots for this faculty member</DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div className="space-y-4 max-h-[70vh] overflow-y-auto">
           <div className="border rounded-lg p-4">
             <h4 className="font-semibold mb-3">Add Availability Slot</h4>
             <div className="grid grid-cols-3 gap-3">

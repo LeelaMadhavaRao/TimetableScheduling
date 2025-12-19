@@ -83,7 +83,7 @@ export function FacultyDialog({ faculty, departments, trigger }: FacultyDialogPr
               {faculty ? "Update faculty member details" : "Add a new faculty member with their information"}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
+          <div className="space-y-4 py-4 max-h-[70vh] overflow-y-auto">
             <div className="space-y-2">
               <Label htmlFor="code">Faculty Code *</Label>
               <Input

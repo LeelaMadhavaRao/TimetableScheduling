@@ -96,13 +96,39 @@ export class ILPTimetableGenerator {
       this.scheduleCourse(course)
     }
 
-    console.log("[v0] Phase 2: Scheduling", theoryCourses.length, "theory courses")
-    for (const course of theoryCourses) {
+    // Prioritize theory courses by faculty workload (heaviest workload first)
+    const sortedTheoryCourses = this.prioritizeTheoryCourses(theoryCourses)
+    console.log("[v0] Phase 2: Scheduling", sortedTheoryCourses.length, "theory courses (prioritized by faculty workload)")
+    for (const course of sortedTheoryCourses) {
       this.scheduleCourse(course)
     }
 
     console.log("[v0] Generation complete. Total slots:", this.timetable.length)
     return this.timetable
+  }
+
+  // Prioritize theory courses by faculty workload - heavily-loaded faculty get scheduled first
+  private prioritizeTheoryCourses(theoryCourses: CourseAssignment[]): CourseAssignment[] {
+    // Calculate faculty workload (total periods they need to teach)
+    const facultyWorkload = new Map<string, number>()
+    for (const course of theoryCourses) {
+      const current = facultyWorkload.get(course.facultyId) || 0
+      facultyWorkload.set(course.facultyId, current + course.periodsPerWeek)
+    }
+
+    // Sort by faculty workload (highest first) - this ensures overloaded faculty get scheduled first
+    return theoryCourses.slice().sort((a, b) => {
+      const aWorkload = facultyWorkload.get(a.facultyId) || 0
+      const bWorkload = facultyWorkload.get(b.facultyId) || 0
+      
+      // Primary: higher workload first
+      if (bWorkload !== aWorkload) {
+        return bWorkload - aWorkload
+      }
+      
+      // Secondary: more periods per week first
+      return b.periodsPerWeek - a.periodsPerWeek
+    })
   }
 
   private scheduleCourse(course: CourseAssignment): void {
@@ -115,11 +141,11 @@ export class ILPTimetableGenerator {
     )
 
     if (course.subjectType === "lab") {
-      // Labs require 4 consecutive periods (3 hours)
+      // Labs require 3 consecutive periods (2.25 hours) once per week
       const slot = this.findLabSlot(course)
       if (slot) {
         this.addSlot(course, slot.day, slot.startPeriod, slot.endPeriod, slot.classroomId)
-        periodsScheduled = RULES.LAB_PERIODS
+        periodsScheduled = course.periodsPerWeek // Use actual periods from course definition
       } else {
         console.log("[v0] WARNING: Could not schedule lab for", course.sectionName, course.subjectName)
       }
@@ -155,6 +181,7 @@ export class ILPTimetableGenerator {
     classroomId: string
   } | null {
     const labRooms = this.classrooms.filter((r) => r.roomType === "lab" && r.capacity >= course.studentCount)
+    const labPeriods = RULES.LAB_PERIODS // 3 consecutive periods
 
     // Priority order: Mon-Fri morning, Sat morning, then Sat afternoon (only for first year)
     const daysToTry: DayOfWeek[] = [0, 1, 2, 3, 4] // Mon-Fri
@@ -168,21 +195,27 @@ export class ILPTimetableGenerator {
     }
 
     for (const day of daysToTry) {
-      // Try morning slots (P1-4, P2-5, etc.)
+      // Try all possible 3-period lab slots
       if (day === 5) {
-        // Saturday: only morning (P1-4)
-        const slot = this.tryLabSlot(course, labRooms, day, 1, 4)
-        if (slot) return slot
+        // Saturday: morning slots (P1-3, P2-4)
+        for (let start = 1; start <= 4 - labPeriods + 1; start++) {
+          const end = start + labPeriods - 1
+          const slot = this.tryLabSlot(course, labRooms, day, start as Period, end as Period)
+          if (slot) return slot
+        }
 
         // Saturday afternoon for first year only
         if (course.yearLevel === 1) {
-          const afternoonSlot = this.tryLabSlot(course, labRooms, day, 5, 8)
-          if (afternoonSlot) return afternoonSlot
+          for (let start = 5; start <= 8 - labPeriods + 1; start++) {
+            const end = start + labPeriods - 1
+            const afternoonSlot = this.tryLabSlot(course, labRooms, day, start as Period, end as Period)
+            if (afternoonSlot) return afternoonSlot
+          }
         }
       } else {
-        // Weekdays: try all possible 4-period slots
-        for (let start = 1; start <= 5; start++) {
-          const end = start + 3
+        // Weekdays: try all possible 3-period slots
+        for (let start = 1; start <= 8 - labPeriods + 1; start++) {
+          const end = start + labPeriods - 1
           if (end <= 8) {
             const slot = this.tryLabSlot(course, labRooms, day as DayOfWeek, start as Period, end as Period)
             if (slot) return slot
@@ -237,9 +270,15 @@ export class ILPTimetableGenerator {
   } | null {
     const theoryRooms = this.classrooms.filter((r) => r.roomType === "theory" && r.capacity >= course.studentCount)
 
+    if (theoryRooms.length === 0) {
+      console.log(`[v0] ERROR: No theory rooms available for ${course.sectionName} (need capacity ${course.studentCount})`)
+      return null
+    }
+
     // Try to avoid days where this section already has this subject
     const daysToTry: DayOfWeek[] = [0, 1, 2, 3, 4, 5]
 
+    let failureReason = ""
     for (const day of daysToTry) {
       // For Saturday and other years (2-4), only try morning
       const maxPeriod = day === 5 && course.yearLevel !== 1 ? 4 : 8
@@ -249,7 +288,8 @@ export class ILPTimetableGenerator {
         if (end > maxPeriod) continue
 
         // Check if this would exceed daily theory limit for this section
-        if (!this.canScheduleTheoryOnDay(course.sectionId, day, periods)) {
+        if (!this.canScheduleTheoryOnDay(course.sectionId, day, periods, course.subjectId)) {
+          failureReason = "daily limit exceeded"
           continue
         }
 
@@ -257,6 +297,11 @@ export class ILPTimetableGenerator {
         if (slot) return slot
       }
     }
+
+    // Log detailed failure info
+    console.log(`[v0] DIAGNOSTIC: Failed to find slot for ${course.sectionName} - ${course.subjectCode} (${course.facultyCode})`)
+    console.log(`[v0]   Faculty ${course.facultyCode} schedule:`, Array.from(this.facultySchedule.get(course.facultyId) || []).join(', '))
+    console.log(`[v0]   Rooms available: ${theoryRooms.length}, Failure: ${failureReason || 'no available faculty/room combo'}`)
 
     return null
   }
@@ -290,6 +335,17 @@ export class ILPTimetableGenerator {
   }
 
   private isFacultyAvailable(facultyId: string, day: DayOfWeek, start: Period, end: Period): boolean {
+    // CRITICAL: First check if faculty is already scheduled at this time
+    const schedule = this.facultySchedule.get(facultyId)
+    if (schedule) {
+      for (let p = start; p <= end; p++) {
+        if (schedule.has(`${day}-${p}`)) {
+          return false // Faculty is already teaching at this time
+        }
+      }
+    }
+    
+    // Then check declared availability slots
     const availability = this.facultyAvailability.get(facultyId)
     if (!availability || availability.length === 0) return true // No restrictions
 
@@ -343,19 +399,45 @@ export class ILPTimetableGenerator {
     return true
   }
 
-  private canScheduleTheoryOnDay(sectionId: string, day: DayOfWeek, additionalPeriods: number): boolean {
+  private canScheduleTheoryOnDay(sectionId: string, day: DayOfWeek, additionalPeriods: number, subjectId?: string): boolean {
     const schedule = this.sectionSchedule.get(sectionId) || new Set()
 
     // Count how many periods this section already has on this day
     let periodsOnDay = 0
+    let subjectPeriodsOnDay = 0
+    
     for (let p = 1; p <= 8; p++) {
       if (schedule.has(`${day}-${p}`)) {
         periodsOnDay++
+        
+        // Count periods for THIS specific subject on this day
+        if (subjectId) {
+          const existingSlot = this.timetable.find(
+            slot => slot.sectionId === sectionId && 
+                   slot.subjectId === subjectId && 
+                   slot.day === day && 
+                   p >= slot.startPeriod && 
+                   p <= slot.endPeriod
+          )
+          if (existingSlot) {
+            subjectPeriodsOnDay++
+          }
+        }
       }
     }
 
-    // Check if adding more periods would exceed the daily limit
-    return periodsOnDay + additionalPeriods <= RULES.MAX_THEORY_PERIODS_PER_DAY
+    // Section can have up to 6 periods total per day (includes labs)
+    const MAX_SECTION_PERIODS_PER_DAY = 6
+    if (periodsOnDay + additionalPeriods > MAX_SECTION_PERIODS_PER_DAY) {
+      return false
+    }
+    
+    // CRITICAL: Theory subjects must have MAX 2 periods per day (per subject)
+    if (subjectId && subjectPeriodsOnDay + additionalPeriods > RULES.MAX_THEORY_PERIODS_PER_DAY) {
+      return false
+    }
+    
+    return true
   }
 
   private addSlot(

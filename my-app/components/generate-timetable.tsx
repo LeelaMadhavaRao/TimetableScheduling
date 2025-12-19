@@ -17,10 +17,37 @@ import { useAuth } from "@/contexts/AuthContext"
 interface ErrorDetail {
   section: string
   subject: string
+  faculty?: string
   type: string
   expected: number | string
   scheduled: number
   reason: string
+}
+
+interface ReducedCourse {
+  courseId: string
+  originalPeriods: number
+  newPeriods: number
+}
+
+interface Diagnostics {
+  summary: {
+    labRooms: number
+    theoryRooms: number
+    labBlocksNeeded: number
+    labBlocksAvailable: number
+    labUtilization: string
+    theoryPeriodsNeeded: number
+    theoryPeriodsAvailable: number
+    theoryUtilization: string
+  }
+  issues: {
+    labFailures: number
+    theoryFailures: number
+    facultyWithLimitedAvailability: number
+  }
+  reducedCourses?: ReducedCourse[]
+  suggestions: string[]
 }
 
 export function GenerateTimetable() {
@@ -30,6 +57,7 @@ export function GenerateTimetable() {
   const [generating, setGenerating] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [errorDetails, setErrorDetails] = useState<ErrorDetail[]>([])
+  const [diagnostics, setDiagnostics] = useState<Diagnostics | null>(null)
   const [showErrorDialog, setShowErrorDialog] = useState(false)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   
@@ -160,6 +188,7 @@ export function GenerateTimetable() {
     console.log("[GenerateTimetable] Starting base timetable generation...")
     setGenerating(true)
     setShowErrorDialog(false)  // Clear previous errors
+    setDiagnostics(null)  // Clear previous diagnostics
     setCurrentJob(null)  // Clear old job data to show fresh state
 
     try {
@@ -217,20 +246,43 @@ export function GenerateTimetable() {
         })))
         setShowErrorDialog(true)
         setGenerating(false)
+        // Fetch updated job to show failed status in UI
+        setTimeout(() => fetchLatestJob(), 500)
         return
       }
       
       // Handle incomplete schedule errors
       if (!data?.success && data?.error === "INCOMPLETE_SCHEDULE" && data?.details) {
         setErrorDetails(data.details)
+        if (data.diagnostics) {
+          setDiagnostics(data.diagnostics)
+        }
         setShowErrorDialog(true)
         setGenerating(false)
+        // Fetch updated job to show failed status in UI
+        setTimeout(() => fetchLatestJob(), 500)
         return
       }
       
       // Start polling immediately after successful start
       if (data?.success && data?.jobId) {
         console.log("[GenerateTimetable] ✅ Job started with ID:", data.jobId)
+        
+        // If fallback was applied, store the info for display
+        if (data.reducedCoursesInfo) {
+          console.log("[GenerateTimetable] 🔄 Fallback applied:", data.reducedCoursesInfo)
+          setDiagnostics({
+            summary: {
+              labRooms: 0, theoryRooms: 0,
+              labBlocksNeeded: 0, labBlocksAvailable: 0, labUtilization: "N/A",
+              theoryPeriodsNeeded: 0, theoryPeriodsAvailable: 0, theoryUtilization: "N/A",
+            },
+            issues: { labFailures: 0, theoryFailures: 0, facultyWithLimitedAvailability: 0 },
+            reducedCourses: data.reducedCoursesInfo.reducedCourses,
+            suggestions: [data.reducedCoursesInfo.fallbackMessage]
+          })
+        }
+        
         // Wait for job to be inserted and edge function to update it
         setTimeout(() => {
           console.log("[GenerateTimetable] Fetching new job after 1.5s delay...")
@@ -597,6 +649,29 @@ export function GenerateTimetable() {
               </div>
             )}
 
+            {/* Show reduced courses info on success */}
+            {(currentJob.status === "base_complete" || currentJob.status === "completed") && 
+             diagnostics?.reducedCourses && diagnostics.reducedCourses.length > 0 && (
+              <div className="rounded-lg border-2 border-amber-500/50 bg-amber-50 dark:bg-amber-950/20 p-3 mt-2">
+                <h4 className="font-semibold text-xs mb-1 text-amber-700 dark:text-amber-300 flex items-center gap-1">
+                  🔄 Fallback Applied
+                </h4>
+                <p className="text-xs text-amber-600 dark:text-amber-400 mb-2">
+                  {diagnostics.reducedCourses.length} theory subject(s) reduced to 2 periods/week due to tight room capacity:
+                </p>
+                <div className="flex flex-wrap gap-1">
+                  {diagnostics.reducedCourses.slice(0, 6).map((course, idx) => (
+                    <Badge key={idx} variant="outline" className="text-xs bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200">
+                      {course.courseId.split('-').pop()?.slice(0, 8)} ({course.originalPeriods}→{course.newPeriods})
+                    </Badge>
+                  ))}
+                  {diagnostics.reducedCourses.length > 6 && (
+                    <Badge variant="outline" className="text-xs">+{diagnostics.reducedCourses.length - 6} more</Badge>
+                  )}
+                </div>
+              </div>
+            )}
+
             {(currentJob.status === "base_complete" || currentJob.status === "completed") && (
               <div className="pt-4 border-t space-y-2">
                 <ClickSpark
@@ -661,9 +736,66 @@ export function GenerateTimetable() {
               </Button>
             </div>
 
+            {/* Diagnostics Summary */}
+            {diagnostics && (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="p-3 bg-muted/50 rounded-lg text-center">
+                  <p className="text-2xl font-bold">{diagnostics.summary.labRooms}</p>
+                  <p className="text-xs text-muted-foreground">Lab Rooms</p>
+                </div>
+                <div className="p-3 bg-muted/50 rounded-lg text-center">
+                  <p className="text-2xl font-bold">{diagnostics.summary.theoryRooms}</p>
+                  <p className="text-xs text-muted-foreground">Theory Rooms</p>
+                </div>
+                <div className={`p-3 rounded-lg text-center ${Number(diagnostics.summary.labUtilization.replace('%', '')) > 90 ? 'bg-destructive/20' : 'bg-muted/50'}`}>
+                  <p className="text-2xl font-bold">{diagnostics.summary.labUtilization}</p>
+                  <p className="text-xs text-muted-foreground">Lab Usage</p>
+                </div>
+                <div className={`p-3 rounded-lg text-center ${Number(diagnostics.summary.theoryUtilization.replace('%', '')) > 80 ? 'bg-destructive/20' : 'bg-muted/50'}`}>
+                  <p className="text-2xl font-bold">{diagnostics.summary.theoryUtilization}</p>
+                  <p className="text-xs text-muted-foreground">Theory Usage</p>
+                </div>
+              </div>
+            )}
+
+            {/* Reduced Courses Info - Fallback Applied */}
+            {diagnostics?.reducedCourses && diagnostics.reducedCourses.length > 0 && (
+              <div className="rounded-lg border-2 border-amber-500/50 bg-amber-50 dark:bg-amber-950/20 p-4">
+                <h4 className="font-semibold text-sm mb-2 text-amber-700 dark:text-amber-300 flex items-center gap-2">
+                  🔄 Fallback Applied: Reduced Periods
+                </h4>
+                <p className="text-xs text-amber-600 dark:text-amber-400 mb-2">
+                  Due to tight room capacity, {diagnostics.reducedCourses.length} theory subject(s) were reduced from 4 to 2 periods/week:
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {diagnostics.reducedCourses.map((course, idx) => (
+                    <Badge key={idx} variant="outline" className="bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200">
+                      {course.courseId.split('-').pop()} ({course.originalPeriods}→{course.newPeriods}p)
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* AI-Generated Suggestions */}
+            {diagnostics?.suggestions && diagnostics.suggestions.length > 0 && (
+              <div className="rounded-lg border-2 border-primary/50 bg-primary/5 p-4">
+                <h4 className="font-semibold text-sm mb-2 text-primary flex items-center gap-2">
+                  💡 System Recommendations
+                </h4>
+                <ul className="space-y-2">
+                  {diagnostics.suggestions.map((suggestion, idx) => (
+                    <li key={idx} className="text-sm">
+                      {suggestion}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
             <div className="rounded-lg border bg-muted/50 p-4 space-y-3">
               <h4 className="font-medium text-sm">Issues Found ({errorDetails.length}):</h4>
-              <div className="space-y-2 max-h-96 overflow-y-auto">
+              <div className="space-y-2 max-h-60 overflow-y-auto">
                 {errorDetails.map((detail, idx) => (
                   <div
                     key={idx}
@@ -672,6 +804,7 @@ export function GenerateTimetable() {
                     <div className="flex items-center justify-between">
                       <div className="font-medium text-sm">
                         {detail.section} - {detail.subject}
+                        {detail.faculty && <span className="text-muted-foreground ml-2">({detail.faculty})</span>}
                       </div>
                       <Badge variant="outline" className="text-xs">
                         {detail.type}
@@ -695,14 +828,13 @@ export function GenerateTimetable() {
 
             <div className="rounded-lg border bg-blue-50 dark:bg-blue-950/20 p-4">
               <h4 className="font-medium text-sm mb-2 text-blue-900 dark:text-blue-100">
-                💡 Suggested Actions:
+                📋 Quick Actions:
               </h4>
               <ul className="space-y-1 text-sm text-blue-800 dark:text-blue-200">
-                <li>• <strong>Faculty Availability:</strong> Check if faculty have enough available time slots</li>
-                <li>• <strong>Room Capacity:</strong> Ensure classrooms can accommodate section sizes</li>
-                <li>• <strong>Lab Rooms:</strong> Verify sufficient lab rooms are available for all lab courses</li>
-                <li>• <strong>Time Conflicts:</strong> Check for overlapping sections or faculty assignments</li>
-                <li>• <strong>Weekly Hours:</strong> Review subject weekly hour requirements (theory: 1.5-3hrs, labs: 4hrs)</li>
+                <li>• <strong>Add Lab Room:</strong> Go to Classrooms → Add a new lab room with adequate capacity</li>
+                <li>• <strong>Add Theory Room:</strong> Go to Classrooms → Add more theory classrooms</li>
+                <li>• <strong>Fix Faculty Availability:</strong> Go to Faculty → Edit faculty → Set availability slots</li>
+                <li>• <strong>Reduce Load:</strong> Remove some section-subject mappings in Sections tab</li>
               </ul>
             </div>
 

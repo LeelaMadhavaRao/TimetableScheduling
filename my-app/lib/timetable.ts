@@ -17,7 +17,7 @@ export const LUNCH_BREAK = { start: "12:00", end: "1:30" }
 
 // Scheduling rules
 export const RULES = {
-  LAB_PERIODS: 4, // 4 consecutive periods = 3 hours
+  LAB_PERIODS: 3, // 3 consecutive periods = 2.25 hours (once per week)
   PERIOD_DURATION_MINS: 45,
   SATURDAY_MORNING_ONLY: true,
   SATURDAY_AFTERNOON_FOR_FIRST_YEAR_LABS: true, // Only if labs overflow

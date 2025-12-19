@@ -97,7 +97,7 @@ export function SectionSubjectsDialog({ section, subjects, open, onOpenChange }:
           <DialogDescription>Assign subjects with faculty to this section</DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div className="space-y-4 max-h-[70vh] overflow-y-auto">
           <div className="border rounded-lg p-4">
             <h4 className="font-semibold mb-3">Add Subject</h4>
             <div className="grid grid-cols-2 gap-3">

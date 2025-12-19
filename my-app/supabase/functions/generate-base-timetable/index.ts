@@ -57,7 +57,7 @@ interface TimetableSlot {
 
 // Constants
 const RULES = {
-  LAB_PERIODS: 4,
+  LAB_PERIODS: 3, // 3 consecutive periods = 2.25 hours (once per week)
   PERIOD_DURATION_MINS: 45,
   LUNCH_START_PERIOD: 4.5,
   LUNCH_END_PERIOD: 5,
@@ -87,6 +87,14 @@ class ILPTimetableGenerator {
   // Stores remaining available slots for each faculty/room
   private facultyDynamicAvailability: Map<string, Set<string>> = new Map()  // facultyId -> Set of "day-period" available
   private roomDynamicAvailability: Map<string, Set<string>> = new Map()     // roomId -> Set of "day-period" available
+  
+  // FACULTY WORKLOAD: For day-balancing constraint
+  // Stores total theory periods each faculty needs to teach
+  private facultyTotalWorkload: Map<string, number> = new Map()  // facultyId -> total theory periods needed
+  private facultyMaxPerDay: Map<string, number> = new Map()      // facultyId -> max periods per day (calculated)
+  
+  // RELAXED MODE: Disables day-balancing constraint for more flexibility
+  private relaxedMode: boolean = false
   
   private courseProgress: Map<string, number> = new Map()
 
@@ -127,11 +135,25 @@ class ILPTimetableGenerator {
     }
     
     // Initialize DYNAMIC availability from declared availability
-    // If no availability declared, assume ALL periods are available
+    // CRITICAL: Initialize for ALL faculty (including theory-only faculty not in initial courses)
+    const allFacultyIds = new Set<string>()
+    
+    // Add faculty from courses
     for (const course of courses) {
-      if (!this.facultyDynamicAvailability.has(course.facultyId)) {
+      allFacultyIds.add(course.facultyId)
+    }
+    
+    // Add faculty from facultyAvailability array (includes theory-only faculty)
+    for (const slot of facultyAvailability) {
+      allFacultyIds.add(slot.facultyId)
+    }
+    
+    console.log(`[Init] Initializing dynamic availability for ${allFacultyIds.size} faculty members`)
+    
+    for (const facultyId of allFacultyIds) {
+      if (!this.facultyDynamicAvailability.has(facultyId)) {
         const availableSlots = new Set<string>()
-        const facultyAvail = this.facultyAvailability.get(course.facultyId) || []
+        const facultyAvail = this.facultyAvailability.get(facultyId) || []
         
         if (facultyAvail.length === 0) {
           // No restrictions - all periods on all days available
@@ -149,7 +171,8 @@ class ILPTimetableGenerator {
           }
         }
         
-        this.facultyDynamicAvailability.set(course.facultyId, availableSlots)
+        this.facultyDynamicAvailability.set(facultyId, availableSlots)
+        console.log(`[Init] Faculty ${facultyId}: ${availableSlots.size} available slots`)
       }
     }
     
@@ -162,6 +185,26 @@ class ILPTimetableGenerator {
         }
       }
       this.roomDynamicAvailability.set(room.id, availableSlots)
+    }
+    
+    // Calculate faculty THEORY workload for day-balancing
+    // This ensures high-workload faculty spread their teaching across all days
+    const theoryCourses = courses.filter(c => c.subjectType === 'theory')
+    for (const course of theoryCourses) {
+      const current = this.facultyTotalWorkload.get(course.facultyId) || 0
+      this.facultyTotalWorkload.set(course.facultyId, current + course.periodsPerWeek)
+    }
+    
+    // Calculate max periods per day for each faculty
+    // Formula: ceil(totalWorkload / 6 days) + 3 buffer
+    // This prevents over-scheduling on certain days while allowing flexibility
+    for (const [facultyId, totalWorkload] of this.facultyTotalWorkload.entries()) {
+      // For faculty with 32 periods: 32/6 = 5.3 -> ceil = 6, +3 buffer = 9
+      // For faculty with 28 periods: 28/6 = 4.7 -> ceil = 5, +3 buffer = 8
+      // This allows imbalance but prevents extreme clustering
+      const maxPerDay = Math.ceil(totalWorkload / 6) + 3
+      this.facultyMaxPerDay.set(facultyId, maxPerDay)
+      console.log(`[Init] Faculty ${facultyId}: ${totalWorkload} theory periods, max ${maxPerDay}/day`)
     }
   }
 
@@ -209,6 +252,13 @@ class ILPTimetableGenerator {
     // Calculate difficulty score for each course
     // Higher score = harder to schedule = higher priority
     
+    // CRITICAL: Calculate faculty workload first (total periods they need to teach)
+    const facultyWorkload = new Map<string, number>()
+    for (const course of theoryCourses) {
+      const current = facultyWorkload.get(course.facultyId) || 0
+      facultyWorkload.set(course.facultyId, current + course.periodsPerWeek)
+    }
+    
     const courseDifficulty = new Map<string, number>()
     
     for (const course of theoryCourses) {
@@ -236,6 +286,11 @@ class ILPTimetableGenerator {
         difficulty += 5
       }
       
+      // 6. CRITICAL: Faculty with high workload = much harder (weight: 2 per period)
+      // This ensures heavily-loaded faculty get scheduled first
+      const workload = facultyWorkload.get(course.facultyId) || 0
+      difficulty += workload * 2
+      
       const courseId = `${course.sectionId}-${course.subjectId}`
       courseDifficulty.set(courseId, difficulty)
     }
@@ -245,6 +300,134 @@ class ILPTimetableGenerator {
       const aId = `${a.sectionId}-${a.subjectId}`
       const bId = `${b.sectionId}-${b.subjectId}`
       return (courseDifficulty.get(bId) || 0) - (courseDifficulty.get(aId) || 0)
+    })
+  }
+
+  // Store ILP error for diagnostics
+  private ilpError: string | null = null
+  
+  getILPError(): string | null {
+    return this.ilpError
+  }
+
+  /**
+   * STRATEGY 1: Section-First Ordering
+   * Schedule ALL courses for each section together before moving to next section.
+   * Within each section, prioritize high-workload faculty first.
+   * This prevents section fragmentation - ensures each section's schedule is built coherently.
+   */
+  private orderBySectionFirst(theoryCourses: CourseAssignment[]): CourseAssignment[] {
+    // Calculate faculty workload for prioritization
+    const facultyWorkload = new Map<string, number>()
+    for (const course of theoryCourses) {
+      const current = facultyWorkload.get(course.facultyId) || 0
+      facultyWorkload.set(course.facultyId, current + course.periodsPerWeek)
+    }
+    
+    // Group courses by section
+    const coursesBySection = new Map<string, CourseAssignment[]>()
+    for (const course of theoryCourses) {
+      const existing = coursesBySection.get(course.sectionId) || []
+      existing.push(course)
+      coursesBySection.set(course.sectionId, existing)
+    }
+    
+    // Sort sections by total faculty workload (sections with busier faculty first)
+    const sortedSections = Array.from(coursesBySection.entries())
+      .sort((a, b) => {
+        const aTotalWorkload = a[1].reduce((sum, c) => facultyWorkload.get(c.facultyId) || 0, 0)
+        const bTotalWorkload = b[1].reduce((sum, c) => facultyWorkload.get(c.facultyId) || 0, 0)
+        return bTotalWorkload - aTotalWorkload
+      })
+    
+    // Within each section, sort by faculty workload (highest first)
+    const result: CourseAssignment[] = []
+    for (const [, courses] of sortedSections) {
+      const sortedCourses = courses.slice().sort((a, b) => {
+        const aWorkload = facultyWorkload.get(a.facultyId) || 0
+        const bWorkload = facultyWorkload.get(b.facultyId) || 0
+        return bWorkload - aWorkload
+      })
+      result.push(...sortedCourses)
+    }
+    
+    console.log(`[Phase 2A] Section-first: ${sortedSections.length} sections, high-workload faculty first within each`)
+    return result
+  }
+
+  /**
+   * STRATEGY 2: Faculty-Interleaved Ordering
+   * Schedule one section per faculty at a time in round-robin.
+   * Prevents any single faculty from having all their sections scheduled consecutively.
+   */
+  private orderByFacultyInterleaved(theoryCourses: CourseAssignment[]): CourseAssignment[] {
+    // Group courses by faculty
+    const coursesByFaculty = new Map<string, CourseAssignment[]>()
+    for (const course of theoryCourses) {
+      const existing = coursesByFaculty.get(course.facultyId) || []
+      existing.push(course)
+      coursesByFaculty.set(course.facultyId, existing)
+    }
+    
+    // Sort faculty by workload (highest first) to prioritize busy faculty
+    const sortedFaculty = Array.from(coursesByFaculty.entries())
+      .sort((a, b) => {
+        const aWorkload = a[1].reduce((sum, c) => sum + c.periodsPerWeek, 0)
+        const bWorkload = b[1].reduce((sum, c) => sum + c.periodsPerWeek, 0)
+        return bWorkload - aWorkload
+      })
+    
+    // Interleave: take one course from each faculty in round-robin fashion
+    const result: CourseAssignment[] = []
+    let maxCourses = 0
+    for (const [, courses] of sortedFaculty) {
+      maxCourses = Math.max(maxCourses, courses.length)
+    }
+    
+    for (let i = 0; i < maxCourses; i++) {
+      for (const [, courses] of sortedFaculty) {
+        if (i < courses.length) {
+          result.push(courses[i])
+        }
+      }
+    }
+    
+    console.log(`[Phase 2A] Faculty-interleaved: ${sortedFaculty.length} faculty, ${result.length} courses`)
+    return result
+  }
+
+  /**
+   * STRATEGY 3: Most Constrained First (MCV Heuristic)
+   * Schedule courses where faculty has the LEAST remaining availability first.
+   * This is a constraint satisfaction heuristic - most constrained variable first.
+   */
+  private orderByMostConstrainedFirst(theoryCourses: CourseAssignment[]): CourseAssignment[] {
+    // Calculate effective availability for each course
+    // Lower = more constrained = higher priority
+    const courseConstraint = new Map<string, number>()
+    
+    for (const course of theoryCourses) {
+      const courseId = `${course.sectionId}-${course.subjectId}`
+      
+      // Get faculty's available slots
+      const facultySlots = this.facultyDynamicAvailability.get(course.facultyId)?.size || 48
+      
+      // Get section's available slots (48 - already scheduled)
+      const sectionScheduled = this.sectionSchedule.get(course.sectionId)?.size || 0
+      const sectionSlots = 48 - sectionScheduled
+      
+      // Constraint = minimum of faculty and section availability
+      // Divide by periods needed to get "flexibility"
+      const flexibility = Math.min(facultySlots, sectionSlots) / course.periodsPerWeek
+      
+      courseConstraint.set(courseId, flexibility)
+    }
+    
+    // Sort by flexibility (lowest first = most constrained first)
+    return theoryCourses.slice().sort((a, b) => {
+      const aId = `${a.sectionId}-${a.subjectId}`
+      const bId = `${b.sectionId}-${b.subjectId}`
+      return (courseConstraint.get(aId) || 0) - (courseConstraint.get(bId) || 0)
     })
   }
 
@@ -258,22 +441,123 @@ class ILPTimetableGenerator {
     return shuffled
   }
 
+  // Track which courses had periods reduced for reporting
+  private reducedCourses: { courseId: string; originalPeriods: number; newPeriods: number }[] = []
+  private fallbackApplied: boolean = false
+  
+  getReducedCourses(): { courseId: string; originalPeriods: number; newPeriods: number }[] {
+    return this.reducedCourses
+  }
+
+  isFallbackApplied(): boolean {
+    return this.fallbackApplied
+  }
+
+  /**
+   * FALLBACK: Reduce theory periods when ILP fails or allocation is too tight
+   * NEW STRATEGY: 1 subject per section reduced from 4 to 2 periods/week
+   * This gives each section: (4 subjects × 4 periods) + (1 subject × 2 periods) = 18 periods/week
+   * For 15 sections: 15 × 18 = 270 periods (vs 288 available = 93.75% utilization)
+   */
+  private applyTheoryPeriodReductionFallback(theoryCourses: CourseAssignment[], theoryRooms: ClassroomOption[]): CourseAssignment[] {
+    // Calculate theory capacity
+    const theoryPeriodsAvailable = theoryRooms.length * 48 // 6 days * 8 periods per room
+    const theoryPeriodsNeeded = theoryCourses.reduce((sum, c) => sum + c.periodsPerWeek, 0)
+    const utilization = theoryPeriodsNeeded / theoryPeriodsAvailable
+    
+    console.log(`[Fallback] Theory capacity check: ${theoryPeriodsNeeded} periods needed, ${theoryPeriodsAvailable} available (${(utilization * 100).toFixed(0)}% utilization)`)
+    
+    // Only apply fallback if utilization exceeds 95%
+    if (utilization <= 0.95) {
+      console.log(`[Fallback] Utilization ${(utilization * 100).toFixed(0)}% <= 95%, no reduction needed`)
+      return theoryCourses
+    }
+    
+    console.log(`[Fallback] ⚠️ Utilization ${(utilization * 100).toFixed(0)}% > 95% - applying period reduction fallback`)
+    this.fallbackApplied = true
+    
+    // Group theory courses by section
+    const coursesBySection = new Map<string, CourseAssignment[]>()
+    for (const course of theoryCourses) {
+      if (!coursesBySection.has(course.sectionId)) {
+        coursesBySection.set(course.sectionId, [])
+      }
+      coursesBySection.get(course.sectionId)!.push(course)
+    }
+    
+    // NEW STRATEGY: Reduce exactly 1 subject per section from 4 to 2 periods
+    // This saves 2 periods per section (4-2=2)
+    const modifiedCourses: CourseAssignment[] = []
+    
+    for (const [sectionId, sectionCourses] of coursesBySection) {
+      // Sort by faculty availability - reduce subjects with most flexible faculty first
+      const sortedCourses = sectionCourses.slice().sort((a, b) => {
+        const aAvail = this.facultyAvailability.get(a.facultyId)?.length || 48
+        const bAvail = this.facultyAvailability.get(b.facultyId)?.length || 48
+        return bAvail - aAvail // Higher availability = reduce first
+      })
+      
+      let reductionApplied = false
+      
+      for (const course of sortedCourses) {
+        // Reduce exactly 1 course per section from 4 to 2 periods
+        if (!reductionApplied && course.periodsPerWeek >= 4) {
+          const newPeriods = 2 // Reduce from 4 to 2 periods/week
+          
+          this.reducedCourses.push({
+            courseId: `${course.subjectCode} (${course.sectionName})`,
+            originalPeriods: course.periodsPerWeek,
+            newPeriods: newPeriods
+          })
+          
+          console.log(`[Fallback] 📉 Reducing ${course.subjectCode} (${course.sectionName}): ${course.periodsPerWeek} → ${newPeriods} periods/week`)
+          
+          modifiedCourses.push({
+            ...course,
+            periodsPerWeek: newPeriods
+          })
+          
+          reductionApplied = true
+        } else {
+          // Keep original periods
+          modifiedCourses.push(course)
+        }
+      }
+    }
+    
+    const newTotalPeriods = modifiedCourses.reduce((sum, c) => sum + c.periodsPerWeek, 0)
+    const newUtilization = newTotalPeriods / theoryPeriodsAvailable
+    const periodsSaved = theoryPeriodsNeeded - newTotalPeriods
+    
+    console.log(`[Fallback] ✅ After reduction: ${newTotalPeriods} periods needed (${(newUtilization * 100).toFixed(0)}% utilization)`)
+    console.log(`[Fallback] Reduced ${this.reducedCourses.length} courses, saved ${periodsSaved} periods`)
+    
+    return modifiedCourses
+  }
+
   async generate(): Promise<TimetableSlot[]> {
     console.log(`[Generation] Starting - ${this.courses.length} courses (${this.courses.filter(c => c.subjectType === "lab").length} labs, ${this.courses.filter(c => c.subjectType === "theory").length} theory)`)
 
     const labCourses = this.courses.filter((c) => c.subjectType === "lab")
-    const theoryCourses = this.courses.filter((c) => c.subjectType === "theory")
+    let theoryCourses = this.courses.filter((c) => c.subjectType === "theory")
+    
+    // Get theory rooms for capacity check
+    const theoryRooms = this.classrooms.filter((c) => c.roomType === "theory")
 
     // PRIORITIZATION: Sort labs by difficulty
     const prioritizedLabs = this.prioritizeLabCourses(labCourses)
 
     console.log("[Phase 1] Scheduling labs using ILP solver...")
     
+    let ilpFailed = false
     try {
       const labsScheduled = await this.scheduleLabsWithExternalSolver(prioritizedLabs)
       console.log(`[Phase 1] ✅ Complete - ${labsScheduled}/${prioritizedLabs.length} labs scheduled`)
     } catch (error) {
-      console.error(`[ERROR] ILP solver failed:`, error instanceof Error ? error.message : String(error))
+      ilpFailed = true
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      this.ilpError = errorMessage
+      console.error(`[ERROR] ILP solver failed:`, errorMessage)
       console.log(`[Phase 1] Falling back to greedy algorithm...`)
       
       let labsScheduled = 0
@@ -282,13 +566,18 @@ class ILPTimetableGenerator {
         if (scheduled) labsScheduled++
       }
       console.log(`[Phase 1] Greedy fallback: ${labsScheduled}/${labCourses.length} labs scheduled`)
+      
+      // If greedy also failed to schedule all labs, this is a critical error
+      if (labsScheduled < labCourses.length) {
+        console.error(`[Phase 1] ❌ CRITICAL: Only ${labsScheduled}/${labCourses.length} labs scheduled. Lab room shortage likely.`)
+      }
     }
 
     // ==========================================
-    // PHASE 2: ENHANCED GREEDY FOR THEORY
-    // Multi-start strategy: try multiple orderings, keep best result
+    // PHASE 2: THEORY SCHEDULING
+    // Strategy: Use GREEDY first, then ILP fallback if greedy fails
     // ==========================================
-    console.log(`[Phase 2] Enhanced Greedy: Scheduling ${theoryCourses.length} theory courses...`)
+    console.log(`[Phase 2] Theory scheduling: ${theoryCourses.length} courses...`)
     
     // Save current state (after labs are scheduled)
     const labTimetable = [...this.timetable]
@@ -298,9 +587,50 @@ class ILPTimetableGenerator {
     const labFacultyDynamic = new Map(this.facultyDynamicAvailability)
     const labRoomDynamic = new Map(this.roomDynamicAvailability)
     
-    // Multi-start configuration
-    const NUM_ATTEMPTS = 3
-    let bestResult: {
+    // ==========================================
+    // CRITICAL: Log faculty availability AFTER labs are scheduled
+    // ==========================================
+    console.warn(`[Phase 2] 📊 FACULTY AVAILABILITY AFTER LABS:`)
+    
+    // Calculate theory periods needed per faculty
+    const facultyTheoryNeeded = new Map<string, number>()
+    const facultyTheorySections = new Map<string, string[]>()
+    for (const course of theoryCourses) {
+      const current = facultyTheoryNeeded.get(course.facultyId) || 0
+      facultyTheoryNeeded.set(course.facultyId, current + course.periodsPerWeek)
+      
+      const sections = facultyTheorySections.get(course.facultyId) || []
+      sections.push(`${course.sectionName}-${course.subjectCode}`)
+      facultyTheorySections.set(course.facultyId, sections)
+    }
+    
+    // Log faculty with heavy theory load and their remaining availability
+    for (const [facultyId, periodsNeeded] of facultyTheoryNeeded.entries()) {
+      if (periodsNeeded >= 16) { // Faculty with 4+ sections (4 periods each)
+        const remainingSlots = labFacultyDynamic.get(facultyId)?.size || 0
+        const labSlotsTaken = labFacultySchedule.get(facultyId)?.size || 0
+        const course = theoryCourses.find(c => c.facultyId === facultyId)
+        const facultyCode = course?.facultyCode || facultyId
+        
+        if (remainingSlots < periodsNeeded) {
+          console.error(`[Phase 2] ❌ OVERLOAD: Faculty ${facultyCode} needs ${periodsNeeded} theory periods but only has ${remainingSlots} slots remaining (${labSlotsTaken} used by labs)`)
+          const sections = facultyTheorySections.get(facultyId) || []
+          console.error(`[Phase 2]    Courses: ${sections.join(', ')}`)
+        } else {
+          console.warn(`[Phase 2] ⚠️ Heavy Load: Faculty ${facultyCode} needs ${periodsNeeded} theory periods, has ${remainingSlots} remaining (${labSlotsTaken} used by labs)`)
+        }
+      }
+    }
+
+    // Calculate available slots after lab scheduling
+    const totalPeriodsNeeded = theoryCourses.reduce((sum, c) => sum + c.periodsPerWeek, 0)
+    
+    // ==========================================
+    // PHASE 2A: GREEDY SCHEDULING for theory (Primary approach)
+    // ==========================================
+    console.log(`[Phase 2A] Enhanced Greedy: Scheduling theory courses...`)
+    let greedyTheorySuccess = false
+    let bestGreedyResult: {
       timetable: TimetableSlot[]
       totalPeriods: number
       fullyScheduled: number
@@ -308,11 +638,14 @@ class ILPTimetableGenerator {
       failed: number
     } | null = null
     
-    // Total periods needed for all theory courses
-    const totalPeriodsNeeded = theoryCourses.reduce((sum, c) => sum + c.periodsPerWeek, 0)
+    // Multiple attempts with different orderings to find best schedule
+    // More attempts = better chance of finding valid schedule
+    // Attempts 1-10: Normal mode with day-balancing
+    // Attempts 11-15: Relaxed mode without day-balancing constraint
+    const NUM_ATTEMPTS = 15
     
     for (let attempt = 1; attempt <= NUM_ATTEMPTS; attempt++) {
-      // Reset to post-lab state
+      // Reset to post-lab state for each attempt
       this.timetable = [...labTimetable]
       this.facultySchedule = new Map([...labFacultySchedule].map(([k, v]) => [k, new Set(v)]))
       this.roomSchedule = new Map([...labRoomSchedule].map(([k, v]) => [k, new Set(v)]))
@@ -321,20 +654,57 @@ class ILPTimetableGenerator {
       this.roomDynamicAvailability = new Map([...labRoomDynamic].map(([k, v]) => [k, new Set(v)]))
       this.courseProgress = new Map()
       
+      // RELAXED MODE: Disable day-balancing for attempts 11+
+      // This gives more flexibility when strict constraints fail
+      this.relaxedMode = attempt > 10
+      if (this.relaxedMode && attempt === 11) {
+        console.log(`[Phase 2A] 🔓 Entering RELAXED MODE (no day-balancing constraint)`)
+      }
+      
       // Determine ordering strategy for this attempt
+      // Each strategy addresses different types of conflicts
       let orderedCourses: CourseAssignment[]
-      if (attempt === 1) {
-        // Attempt 1: Priority-based ordering (hardest first)
-        orderedCourses = this.prioritizeTheoryCourses(theoryCourses)
-        console.log(`[Phase 2] Attempt ${attempt}/${NUM_ATTEMPTS}: Priority-based ordering (hardest first)`)
-      } else if (attempt === 2) {
-        // Attempt 2: Reverse priority (easiest first - fills gaps)
-        orderedCourses = this.prioritizeTheoryCourses(theoryCourses).reverse()
-        console.log(`[Phase 2] Attempt ${attempt}/${NUM_ATTEMPTS}: Reverse priority (easiest first)`)
-      } else {
-        // Attempt 3+: Randomized ordering
-        orderedCourses = this.shuffleArray(theoryCourses)
-        console.log(`[Phase 2] Attempt ${attempt}/${NUM_ATTEMPTS}: Randomized ordering`)
+      switch (attempt) {
+        case 1:
+          // Strategy 1: Section-First - schedule all courses for each section together
+          // Prevents section fragmentation (CSE-2A gets all its courses before CSE-2B)
+          orderedCourses = this.orderBySectionFirst(theoryCourses)
+          console.log(`[Phase 2A] Attempt ${attempt}/${NUM_ATTEMPTS}: Section-first ordering`)
+          break
+        case 2:
+          // Strategy 2: Most Constrained First - prioritize courses with fewest options
+          orderedCourses = this.orderByMostConstrainedFirst(theoryCourses)
+          console.log(`[Phase 2A] Attempt ${attempt}/${NUM_ATTEMPTS}: Most-constrained-first ordering`)
+          break
+        case 3:
+          // Strategy 3: Faculty-interleaved - spread sections across faculty
+          orderedCourses = this.orderByFacultyInterleaved(theoryCourses)
+          console.log(`[Phase 2A] Attempt ${attempt}/${NUM_ATTEMPTS}: Faculty-interleaved ordering`)
+          break
+        case 4:
+          // Strategy 4: Priority-based (hardest courses first)
+          orderedCourses = this.prioritizeTheoryCourses(theoryCourses)
+          console.log(`[Phase 2A] Attempt ${attempt}/${NUM_ATTEMPTS}: Priority-based ordering`)
+          break
+        case 5:
+          // Strategy 5: Reverse section-first (last sections first)
+          orderedCourses = this.orderBySectionFirst(theoryCourses).reverse()
+          console.log(`[Phase 2A] Attempt ${attempt}/${NUM_ATTEMPTS}: Reverse section-first ordering`)
+          break
+        case 11:
+          // Relaxed: Section-first without day-balancing
+          orderedCourses = this.orderBySectionFirst(theoryCourses)
+          console.log(`[Phase 2A] Attempt ${attempt}/${NUM_ATTEMPTS}: RELAXED Section-first`)
+          break
+        case 12:
+          // Relaxed: Most constrained first
+          orderedCourses = this.orderByMostConstrainedFirst(theoryCourses)
+          console.log(`[Phase 2A] Attempt ${attempt}/${NUM_ATTEMPTS}: RELAXED Most-constrained-first`)
+          break
+        default:
+          // Remaining attempts: Randomized ordering for diversity
+          orderedCourses = this.shuffleArray(theoryCourses)
+          console.log(`[Phase 2A] Attempt ${attempt}/${NUM_ATTEMPTS}: Randomized ordering`)
       }
       
       // Schedule theory courses with this ordering
@@ -357,75 +727,132 @@ class ILPTimetableGenerator {
       }
       
       const successRate = (totalPeriodsScheduled / totalPeriodsNeeded * 100).toFixed(1)
-      console.log(`[Phase 2] Attempt ${attempt} result: ${fullyScheduled} full, ${partiallyScheduled} partial, ${failed} failed (${successRate}% periods scheduled)`)
+      console.log(`[Phase 2A] Attempt ${attempt} result: ${fullyScheduled} full, ${partiallyScheduled} partial, ${failed} failed (${successRate}% periods scheduled)`)
       
       // Check if this is the best result so far
-      if (!bestResult || totalPeriodsScheduled > bestResult.totalPeriods) {
-        bestResult = {
+      if (!bestGreedyResult || totalPeriodsScheduled > bestGreedyResult.totalPeriods) {
+        bestGreedyResult = {
           timetable: [...this.timetable],
           totalPeriods: totalPeriodsScheduled,
           fullyScheduled,
           partiallyScheduled,
           failed
         }
-        console.log(`[Phase 2] ⭐ New best result: ${successRate}% periods scheduled`)
+        console.log(`[Phase 2A] ⭐ New best result: ${successRate}% periods scheduled`)
         
         // Early exit if we achieved 100% scheduling
         if (totalPeriodsScheduled === totalPeriodsNeeded) {
-          console.log(`[Phase 2] 🎯 Perfect schedule achieved! Skipping remaining attempts.`)
+          console.log(`[Phase 2A] 🎯 Perfect schedule achieved! Skipping remaining attempts.`)
+          greedyTheorySuccess = true
           break
         }
       }
     }
     
-    // Use best result
-    if (bestResult) {
-      this.timetable = bestResult.timetable
-      const finalSuccessRate = (bestResult.totalPeriods / totalPeriodsNeeded * 100).toFixed(1)
-      console.log(`[Phase 2] ✅ Complete - Best result: ${bestResult.fullyScheduled} fully scheduled, ${bestResult.partiallyScheduled} partial, ${bestResult.failed} failed`)
-      console.log(`[Phase 2] 📊 Final success rate: ${finalSuccessRate}% (${bestResult.totalPeriods}/${totalPeriodsNeeded} periods)`)
+    // Use best greedy result
+    if (bestGreedyResult) {
+      this.timetable = bestGreedyResult.timetable
+      const finalSuccessRate = (bestGreedyResult.totalPeriods / totalPeriodsNeeded * 100).toFixed(1)
+      console.log(`[Phase 2A] ✅ Greedy complete - Best result: ${bestGreedyResult.fullyScheduled} fully scheduled, ${bestGreedyResult.partiallyScheduled} partial, ${bestGreedyResult.failed} failed`)
+      console.log(`[Phase 2A] 📊 Greedy success rate: ${finalSuccessRate}% (${bestGreedyResult.totalPeriods}/${totalPeriodsNeeded} periods)`)
       
-      // ILP FALLBACK: If greedy achieves < 80% success, try ILP solver for theory
-      if (bestResult.totalPeriods / totalPeriodsNeeded < 0.8) {
-        console.warn(`[Phase 2] ⚠️ Greedy success rate below 80% - triggering ILP fallback for theory scheduling...`)
+      // Check if greedy was successful enough (≥80%)
+      if (bestGreedyResult.totalPeriods / totalPeriodsNeeded >= 0.8) {
+        greedyTheorySuccess = true
+        console.log(`[Phase 2A] ✅ Greedy achieved ≥80% success - proceeding without ILP fallback`)
+      }
+    }
+
+    // ==========================================
+    // PHASE 2B: ILP FALLBACK for theory (only if greedy failed)
+    // ==========================================
+    if (!greedyTheorySuccess) {
+      console.warn(`[Phase 2B] ⚠️ Greedy success rate below 80% - triggering ILP fallback for theory scheduling...`)
+      
+      // Reset to post-lab state
+      this.timetable = [...labTimetable]
+      this.facultySchedule = new Map([...labFacultySchedule].map(([k, v]) => [k, new Set(v)]))
+      this.roomSchedule = new Map([...labRoomSchedule].map(([k, v]) => [k, new Set(v)]))
+      this.sectionSchedule = new Map([...labSectionSchedule].map(([k, v]) => [k, new Set(v)]))
+      this.facultyDynamicAvailability = new Map([...labFacultyDynamic].map(([k, v]) => [k, new Set(v)]))
+      this.roomDynamicAvailability = new Map([...labRoomDynamic].map(([k, v]) => [k, new Set(v)]))
+      this.courseProgress = new Map()
+      
+      try {
+        console.log(`[Phase 2B] 🔄 Attempting ILP solver for theory courses...`)
+        const ilpResult = await this.scheduleTheoryWithILP(theoryCourses)
         
-        try {
-          // Get unscheduled theory courses
-          const unscheduledTheory: CourseAssignment[] = []
-          for (const course of theoryCourses) {
-            const courseId = `${course.sectionId}-${course.subjectId}`
-            const scheduled = this.courseProgress.get(courseId) || 0
-            if (scheduled < course.periodsPerWeek) {
-              // Add course with remaining periods
-              unscheduledTheory.push({
-                ...course,
-                periodsPerWeek: course.periodsPerWeek - scheduled
-              })
-            }
+        if (ilpResult.success && ilpResult.periodsScheduled > 0) {
+          // ILP succeeded - use its results
+          for (const slot of ilpResult.slots) {
+            this.timetable.push(slot)
+            // Update tracking
+            const slotKey = `${slot.day}-${slot.startPeriod}`
+            if (!this.facultySchedule.has(slot.facultyId)) this.facultySchedule.set(slot.facultyId, new Set())
+            if (!this.roomSchedule.has(slot.classroomId)) this.roomSchedule.set(slot.classroomId, new Set())
+            if (!this.sectionSchedule.has(slot.sectionId)) this.sectionSchedule.set(slot.sectionId, new Set())
+            this.facultySchedule.get(slot.facultyId)!.add(slotKey)
+            this.roomSchedule.get(slot.classroomId)!.add(slotKey)
+            this.sectionSchedule.get(slot.sectionId)!.add(slotKey)
           }
           
-          if (unscheduledTheory.length > 0) {
-            console.log(`[Phase 2] 🔄 ILP fallback: Attempting to schedule ${unscheduledTheory.length} remaining theory courses...`)
+          const successRate = (ilpResult.periodsScheduled / totalPeriodsNeeded * 100).toFixed(1)
+          console.log(`[Phase 2B] ✅ ILP theory scheduling succeeded: ${ilpResult.periodsScheduled}/${totalPeriodsNeeded} periods (${successRate}%)`)
+        } else {
+          console.warn(`[Phase 2B] ⚠️ ILP solver returned no valid solution`)
+        }
+      } catch (ilpError) {
+        const errorMsg = ilpError instanceof Error ? ilpError.message : String(ilpError)
+        console.warn(`[Phase 2B] ⚠️ ILP theory solver failed: ${errorMsg}`)
+        
+        // Check if it's INFEASIBLE - apply fallback
+        if (errorMsg.includes('INFEASIBLE') || errorMsg.includes('No valid slots')) {
+          console.log(`[Phase 2B] 🔄 ILP INFEASIBLE - Applying period reduction fallback...`)
+          
+          // Apply fallback: reduce 1 subject per section from 4 to 2 periods
+          theoryCourses = this.applyTheoryPeriodReductionFallback(theoryCourses, theoryRooms)
+          
+          // Retry ILP with reduced courses
+          console.log(`[Phase 2B] 🔄 Retrying ILP with reduced theory courses...`)
+          try {
+            const retryResult = await this.scheduleTheoryWithILP(theoryCourses)
             
-            const ilpResult = await this.scheduleTheoryWithILP(unscheduledTheory)
-            
-            if (ilpResult.success && ilpResult.periodsScheduled > 0) {
-              // Merge ILP results with current timetable
-              for (const slot of ilpResult.slots) {
+            if (retryResult.success && retryResult.periodsScheduled > 0) {
+              // Reset to lab state and apply retry result
+              this.timetable = [...labTimetable]
+              this.facultySchedule = new Map([...labFacultySchedule].map(([k, v]) => [k, new Set(v)]))
+              this.roomSchedule = new Map([...labRoomSchedule].map(([k, v]) => [k, new Set(v)]))
+              this.sectionSchedule = new Map([...labSectionSchedule].map(([k, v]) => [k, new Set(v)]))
+              
+              for (const slot of retryResult.slots) {
                 this.timetable.push(slot)
+                const slotKey = `${slot.day}-${slot.startPeriod}`
+                if (!this.facultySchedule.has(slot.facultyId)) this.facultySchedule.set(slot.facultyId, new Set())
+                if (!this.roomSchedule.has(slot.classroomId)) this.roomSchedule.set(slot.classroomId, new Set())
+                if (!this.sectionSchedule.has(slot.sectionId)) this.sectionSchedule.set(slot.sectionId, new Set())
+                this.facultySchedule.get(slot.facultyId)!.add(slotKey)
+                this.roomSchedule.get(slot.classroomId)!.add(slotKey)
+                this.sectionSchedule.get(slot.sectionId)!.add(slotKey)
               }
               
-              const newTotal = bestResult.totalPeriods + ilpResult.periodsScheduled
-              const newSuccessRate = (newTotal / totalPeriodsNeeded * 100).toFixed(1)
-              console.log(`[Phase 2] ✅ ILP fallback scheduled ${ilpResult.periodsScheduled} additional periods`)
-              console.log(`[Phase 2] 📊 Updated success rate: ${newSuccessRate}% (${newTotal}/${totalPeriodsNeeded} periods)`)
-            } else {
-              console.warn(`[Phase 2] ⚠️ ILP fallback did not improve scheduling`)
+              const newTotal = theoryCourses.reduce((sum, c) => sum + c.periodsPerWeek, 0)
+              const successRate = (retryResult.periodsScheduled / newTotal * 100).toFixed(1)
+              console.log(`[Phase 2B] ✅ ILP retry succeeded after fallback: ${retryResult.periodsScheduled}/${newTotal} periods (${successRate}%)`)
+            }
+          } catch (retryError) {
+            console.warn(`[Phase 2B] ⚠️ ILP retry also failed:`, retryError instanceof Error ? retryError.message : String(retryError))
+            // Fall back to best greedy result
+            if (bestGreedyResult) {
+              console.log(`[Phase 2B] 🔄 Reverting to greedy result...`)
+              this.timetable = bestGreedyResult.timetable
             }
           }
-        } catch (ilpError) {
-          console.error(`[Phase 2] ❌ ILP fallback failed:`, ilpError instanceof Error ? ilpError.message : String(ilpError))
-          console.log(`[Phase 2] Continuing with greedy result...`)
+        } else {
+          // Non-INFEASIBLE error, fall back to greedy
+          if (bestGreedyResult) {
+            console.log(`[Phase 2B] 🔄 ILP failed, using greedy result...`)
+            this.timetable = bestGreedyResult.timetable
+          }
         }
       }
     }
@@ -497,7 +924,22 @@ class ILPTimetableGenerator {
       console.log(`[ILP] Solver completed in ${solveTime}ms - Status: ${result.status}`)
       
       if (!result.success) {
-        throw new Error(result.message || "Solver failed to find a solution")
+        // Provide detailed error for INFEASIBLE problems
+        const labBlocksNeeded = labCourses.length
+        const labBlocksAvailable = labRooms.length * 12 // 2 blocks/day * 6 days
+        const utilizationPercent = (labBlocksNeeded / labBlocksAvailable * 100).toFixed(0)
+        
+        let detailedMessage = result.message || "Solver failed to find a solution"
+        if (result.status === "INFEASIBLE" || detailedMessage.includes("INFEASIBLE")) {
+          detailedMessage = `Lab scheduling INFEASIBLE: ${labRooms.length} lab rooms provide ${labBlocksAvailable} blocks, but ${labBlocksNeeded} labs need scheduling (${utilizationPercent}% utilization). `
+          if (labBlocksNeeded >= labBlocksAvailable) {
+            const roomsNeeded = Math.ceil(labBlocksNeeded / 12 * 1.5) // 50% slack
+            detailedMessage += `Add ${roomsNeeded - labRooms.length} more lab room(s) to achieve 50% slack.`
+          } else {
+            detailedMessage += `Faculty conflicts may be preventing valid assignments. Check if the same faculty teaches too many sections.`
+          }
+        }
+        throw new Error(detailedMessage)
       }
 
       console.log(`[ILP] Solution status: ${result.status}`)
@@ -699,7 +1141,7 @@ class ILPTimetableGenerator {
     const slot = this.findLabSlot(course)
     if (slot) {
       this.addSlot(course, slot.day, slot.startPeriod, slot.endPeriod, slot.classroomId)
-      this.courseProgress.set(courseId, RULES.LAB_PERIODS)
+      this.courseProgress.set(courseId, course.periodsPerWeek) // Use actual periods from course
       console.log(
         `[Edge Function] ✅ SUCCESSFULLY scheduled LAB at Day ${slot.day}, Periods ${slot.startPeriod}-${slot.endPeriod}`
       )
@@ -718,22 +1160,33 @@ class ILPTimetableGenerator {
   } | null {
     const labRooms = this.classrooms.filter((r) => r.roomType === "lab" && r.capacity >= course.studentCount)
     if (labRooms.length === 0) return null
-
+    
+    const labPeriods = course.periodsPerWeek // Use actual periods (3 for labs)
     const daysToTry: DayOfWeek[] = [0, 1, 2, 3, 4, 5]
 
     for (const day of daysToTry) {
       if (day === 5) {
-        const slot = this.tryLabSlot(course, labRooms, day, 1, 4)
-        if (slot) return slot
+        // Saturday: morning slots
+        for (let start = 1; start <= 4 - labPeriods + 1; start++) {
+          const end = start + labPeriods - 1
+          const slot = this.tryLabSlot(course, labRooms, day, start as Period, end as Period)
+          if (slot) return slot
+        }
+        // Saturday afternoon for first year only
         if (course.yearLevel === 1) {
-          const afternoonSlot = this.tryLabSlot(course, labRooms, day, 5, 8)
-          if (afternoonSlot) return afternoonSlot
+          for (let start = 5; start <= 8 - labPeriods + 1; start++) {
+            const end = start + labPeriods - 1
+            const afternoonSlot = this.tryLabSlot(course, labRooms, day, start as Period, end as Period)
+            if (afternoonSlot) return afternoonSlot
+          }
         }
       } else {
-        const morningSlot = this.tryLabSlot(course, labRooms, day, 1, 4)
-        if (morningSlot) return morningSlot
-        const afternoonSlot = this.tryLabSlot(course, labRooms, day, 5, 8)
-        if (afternoonSlot) return afternoonSlot
+        // Weekdays: try all possible lab period slots
+        for (let start = 1; start <= 8 - labPeriods + 1; start++) {
+          const end = start + labPeriods - 1
+          const slot = this.tryLabSlot(course, labRooms, day, start as Period, end as Period)
+          if (slot) return slot
+        }
       }
     }
 
@@ -817,7 +1270,10 @@ class ILPTimetableGenerator {
     let periodsScheduled = 0
 
     console.log(
-      `[Edge Function] Scheduling THEORY ${course.subjectCode} for ${course.sectionName} - ${periodsNeeded} periods needed`,
+      `[Theory] 🔵 START: ${course.subjectCode} (${course.subjectName}) for ${course.sectionName}`,
+    )
+    console.log(
+      `[Theory]   Faculty: ${course.facultyCode} | Students: ${course.studentCount} | Periods: ${periodsNeeded}`,
     )
 
     // Try to schedule in blocks (2 periods ONLY per day, never 3)
@@ -850,17 +1306,63 @@ class ILPTimetableGenerator {
         const success = this.addSlot(course, slot.day, slot.startPeriod, slot.endPeriod, slot.classroomId)
         if (success) {
           periodsScheduled += periodsToSchedule
+          console.log(`[Theory]   ✅ Assigned ${periodsToSchedule} periods: Day ${slot.day}, Periods ${slot.startPeriod}-${slot.endPeriod}, Room ${slot.classroomId}`)
         } else {
-          // Cannot add slot - break
+          console.error(`[Theory]   ❌ Failed to add slot despite finding one - Day ${slot.day}, Periods ${slot.startPeriod}-${slot.endPeriod}`)
           break
         }
       } else {
-        // Cannot find slot - break and accept partial schedule
+        console.warn(`[Theory]   ⚠️ No valid slot found for ${periodsToSchedule} periods (${periodsScheduled}/${periodsNeeded} scheduled so far)`)
         break
       }
     }
 
     this.courseProgress.set(courseId, periodsScheduled)
+    
+    if (periodsScheduled === periodsNeeded) {
+      console.log(`[Theory] ✅ COMPLETE: ${course.subjectCode} fully scheduled (${periodsScheduled}/${periodsNeeded} periods)`)
+    } else if (periodsScheduled > 0) {
+      console.warn(`[Theory] ⚠️ PARTIAL: ${course.subjectCode} (${course.sectionName}) partially scheduled (${periodsScheduled}/${periodsNeeded} periods)`)
+    } else {
+      // DETAILED ERROR LOGGING for failed scheduling
+      console.error(`[Theory] ❌ FAILED: ${course.subjectCode} (${course.sectionName}) - NO periods scheduled`)
+      console.error(`[Theory] ❌ ERROR DETAILS:`)
+      console.error(`[Theory]   - Faculty: ${course.facultyCode} (${course.facultyId})`)
+      console.error(`[Theory]   - Section: ${course.sectionName} (${course.sectionId})`)
+      console.error(`[Theory]   - Periods needed: ${periodsNeeded}`)
+      
+      // Log faculty availability
+      const facultyAvail = this.facultyDynamicAvailability.get(course.facultyId)
+      const facultySlotsRemaining = facultyAvail ? facultyAvail.size : 0
+      console.error(`[Theory]   - Faculty slots remaining: ${facultySlotsRemaining}`)
+      if (facultyAvail) {
+        const daySlots: Map<number, number> = new Map()
+        for (const slot of facultyAvail) {
+          const day = parseInt(slot.split('-')[0])
+          daySlots.set(day, (daySlots.get(day) || 0) + 1)
+        }
+        console.error(`[Theory]   - Faculty availability by day: ${JSON.stringify(Object.fromEntries(daySlots))}`)
+      }
+      
+      // Log section schedule
+      const sectionSched = this.sectionSchedule.get(course.sectionId)
+      const sectionSlotsTaken = sectionSched ? sectionSched.size : 0
+      console.error(`[Theory]   - Section slots taken: ${sectionSlotsTaken}`)
+      if (sectionSched) {
+        const daySlots: Map<number, number> = new Map()
+        for (const slot of sectionSched) {
+          const day = parseInt(slot.split('-')[0])
+          daySlots.set(day, (daySlots.get(day) || 0) + 1)
+        }
+        console.error(`[Theory]   - Section schedule by day: ${JSON.stringify(Object.fromEntries(daySlots))}`)
+      }
+      
+      // Log faculty total workload
+      const facultyTotalSlots = this.facultySchedule.get(course.facultyId)
+      const facultySlotsTaken = facultyTotalSlots ? facultyTotalSlots.size : 0
+      console.error(`[Theory]   - Faculty total slots taken: ${facultySlotsTaken}/48`)
+    }
+    
     return periodsScheduled
   }
 
@@ -874,6 +1376,15 @@ class ILPTimetableGenerator {
     classroomId: string
   } | null {
     const theoryRooms = this.classrooms.filter((r) => r.roomType === "theory" && r.capacity >= course.studentCount)
+    
+    console.log(`[Theory]   🔍 Finding slot for ${periodsNeeded} periods...`)
+    console.log(`[Theory]   Available rooms: ${theoryRooms.length} (need capacity ≥${course.studentCount})`)
+    
+    if (theoryRooms.length === 0) {
+      console.error(`[Theory]   ❌ NO ROOMS: No theory rooms with capacity ≥${course.studentCount} available`)
+      console.error(`[Theory]   All rooms: ${this.classrooms.filter(r => r.roomType === "theory").map(r => `${r.name}(${r.capacity})`).join(", ")}`)
+      return null
+    }
 
     // ==========================================
     // ENHANCED SLOT FINDING: Better Distribution
@@ -882,9 +1393,17 @@ class ILPTimetableGenerator {
     // 1. Calculate section's current load per day (for distribution)
     const sectionDayLoad = this.getSectionDayLoad(course.sectionId)
     
-    // 2. Sort days by current load (prefer days with fewer classes)
+    // 2. Calculate FACULTY's current load per day (CRITICAL for preventing fragmentation)
+    const facultyDayLoad = this.getFacultyDayLoad(course.facultyId)
+    
+    // 3. Sort days by COMBINED load (prefer days where BOTH section AND faculty are less busy)
+    // This prevents faculty from being scheduled too heavily on certain days
     const daysToTry: DayOfWeek[] = ([0, 1, 2, 3, 4, 5] as DayOfWeek[])
-      .sort((a, b) => (sectionDayLoad.get(a) || 0) - (sectionDayLoad.get(b) || 0))
+      .sort((a, b) => {
+        const aLoad = (sectionDayLoad.get(a) || 0) + (facultyDayLoad.get(a) || 0)
+        const bLoad = (sectionDayLoad.get(b) || 0) + (facultyDayLoad.get(b) || 0)
+        return aLoad - bLoad
+      })
     
     // 3. Preferred time slots (morning first, then afternoon)
     // Slots ordered by preference: 1-2, 1-3, 2-3, 2-4, 5-6, 5-7, 6-7, 6-8
@@ -910,7 +1429,9 @@ class ILPTimetableGenerator {
       (slot.end - slot.start + 1) === periodsNeeded
     )
     
-    // PASS 1: Try preferred slots with faculty gap rule enforced
+    // PASS 1: Try preferred time slots (morning first) - NO gap rule (handled in optimization)
+    console.log(`[Theory]   📍 PASS 1: Trying preferred time slots...`)
+    let pass1Attempts = 0
     for (const day of daysToTry) {
       const maxPeriod = day === 5 && course.yearLevel !== 1 ? 4 : 8
 
@@ -919,18 +1440,21 @@ class ILPTimetableGenerator {
         const end = timeSlot.end
         
         if (end > maxPeriod) continue
+        pass1Attempts++
         
-        // Check faculty gap rule in pass 1
-        if (!this.checkFacultyGapRule(course.facultyId, day as DayOfWeek, start as Period, end as Period)) {
-          continue
-        }
-
+        // NO gap rule check - optimization phase handles faculty gaps
         const slot = this.tryTheorySlot(course, theoryRooms, day as DayOfWeek, start as Period, end as Period)
-        if (slot) return slot
+        if (slot) {
+          console.log(`[Theory]   ✅ PASS 1 SUCCESS after ${pass1Attempts} attempts`)
+          return slot
+        }
       }
     }
+    console.log(`[Theory]   ⚠️ PASS 1 FAILED: No slot found after ${pass1Attempts} attempts`)
     
-    // PASS 2: Try any valid slot (sequential order) with gap rule
+    // PASS 2: Try all sequential slots (any day, any valid time)
+    console.log(`[Theory]   📍 PASS 2: Trying all sequential slots...`)
+    let pass2Attempts = 0
     for (const day of daysToTry) {
       const maxPeriod = day === 5 && course.yearLevel !== 1 ? 4 : 8
 
@@ -940,32 +1464,49 @@ class ILPTimetableGenerator {
 
         // Don't split across lunch (periods 4 and 5)
         if (start <= 4 && end > 4) continue
-        
-        // Check faculty gap rule in pass 2
-        if (!this.checkFacultyGapRule(course.facultyId, day as DayOfWeek, start as Period, end as Period)) {
-          continue
-        }
+        pass2Attempts++
 
         const slot = this.tryTheorySlot(course, theoryRooms, day as DayOfWeek, start as Period, end as Period)
-        if (slot) return slot
+        if (slot) {
+          console.log(`[Theory]   ✅ PASS 2 SUCCESS after ${pass2Attempts} attempts`)
+          return slot
+        }
       }
     }
+    console.log(`[Theory]   ❌ PASS 2 FAILED: No valid slot found after ${pass2Attempts} attempts`)
+    console.error(`[Theory]   ❌ ALL PASSES FAILED: Cannot schedule ${periodsNeeded} periods for ${course.subjectCode}`)
     
-    // PASS 3: Relax faculty gap rule if no slot found (fallback)
+    // Detailed failure analysis
+    console.error(`[Theory]   ❌ FAILURE ANALYSIS for ${course.subjectCode} (${course.sectionName}):`)
+    const facultyAvail = this.facultyDynamicAvailability.get(course.facultyId)
+    console.error(`[Theory]   Faculty ${course.facultyCode}: ${facultyAvail?.size || 0} slots remaining`)
+    
+    // Check each day individually
     for (const day of daysToTry) {
       const maxPeriod = day === 5 && course.yearLevel !== 1 ? 4 : 8
-
-      for (let start = 1; start <= maxPeriod - periodsNeeded + 1; start++) {
-        const end = start + periodsNeeded - 1
-        if (end > maxPeriod) continue
-
-        // Don't split across lunch
-        if (start <= 4 && end > 4) continue
-
-        // Skip gap rule check - accept any valid slot
-        const slot = this.tryTheorySlot(course, theoryRooms, day as DayOfWeek, start as Period, end as Period)
-        if (slot) return slot
+      let dayReason = ''
+      
+      // Check faculty availability on this day
+      let facultyAvailOnDay = 0
+      for (let p = 1; p <= maxPeriod; p++) {
+        if (facultyAvail?.has(`${day}-${p}`)) facultyAvailOnDay++
       }
+      
+      // Check section availability on this day
+      const sectionSched = this.sectionSchedule.get(course.sectionId)
+      let sectionBusyOnDay = 0
+      for (let p = 1; p <= maxPeriod; p++) {
+        if (sectionSched?.has(`${day}-${p}`)) sectionBusyOnDay++
+      }
+      
+      if (facultyAvailOnDay < periodsNeeded) {
+        dayReason = `Faculty only has ${facultyAvailOnDay}/${periodsNeeded} periods available`
+      } else if (sectionBusyOnDay >= maxPeriod - periodsNeeded + 1) {
+        dayReason = `Section already has ${sectionBusyOnDay}/${maxPeriod} periods scheduled`
+      } else {
+        dayReason = 'Room conflicts or constraint violations'
+      }
+      console.error(`[Theory]     Day ${day}: ${dayReason}`)
     }
 
     return null
@@ -986,6 +1527,46 @@ class ILPTimetableGenerator {
     return dayLoad
   }
 
+  // Helper: Get current load per day for a faculty member (ALL periods - labs + theory)
+  private getFacultyDayLoad(facultyId: string): Map<DayOfWeek, number> {
+    const dayLoad = new Map<DayOfWeek, number>()
+    const schedule = this.facultySchedule.get(facultyId)
+    
+    if (!schedule) return dayLoad
+    
+    for (const key of schedule) {
+      const day = parseInt(key.split('-')[0]) as DayOfWeek
+      dayLoad.set(day, (dayLoad.get(day) || 0) + 1)
+    }
+    
+    return dayLoad
+  }
+
+  // Helper: Get THEORY-ONLY load per day for a faculty member
+  // This excludes lab periods which are scheduled separately
+  // Used for day-balancing constraint during theory scheduling
+  private getFacultyTheoryDayLoad(facultyId: string): Map<DayOfWeek, number> {
+    const dayLoad = new Map<DayOfWeek, number>()
+    
+    // Only count theory slots from the timetable
+    for (const slot of this.timetable) {
+      if (slot.facultyId !== facultyId) continue
+      
+      // Look up the course to check if it's theory
+      const course = this.courses.find(
+        c => c.sectionId === slot.sectionId && c.subjectId === slot.subjectId
+      )
+      
+      // Only count theory courses (skip labs)
+      if (course && course.subjectType === 'theory') {
+        const periodsInSlot = slot.endPeriod - slot.startPeriod + 1
+        dayLoad.set(slot.day, (dayLoad.get(slot.day) || 0) + periodsInSlot)
+      }
+    }
+    
+    return dayLoad
+  }
+
   private tryTheorySlot(
     course: CourseAssignment,
     rooms: ClassroomOption[],
@@ -995,17 +1576,27 @@ class ILPTimetableGenerator {
   ): { day: DayOfWeek; startPeriod: Period; endPeriod: Period; classroomId: string } | null {
     // CRITICAL CHECK 1: Is section already scheduled at this time?
     if (this.isSectionAlreadyScheduled(course.sectionId, day, start, end)) {
+      // Don't log - too verbose for normal operation
       return null
     }
 
     // CRITICAL CHECK 2: Check faculty DYNAMIC availability (updated after each assignment)
     if (!this.isFacultyDynamicallyAvailable(course.facultyId, day, start, end)) {
+      // Don't log - too verbose for normal operation
       return null
     }
 
     // Check total section periods per day (not too many classes in one day)
     // AND check that this specific subject doesn't exceed 2 periods per day
     if (!this.canScheduleTheoryOnDay(course.sectionId, day, end - start + 1, course.subjectId)) {
+      // Don't log - too verbose for normal operation
+      return null
+    }
+    
+    // CRITICAL CHECK 4: Day-balancing for high-workload faculty
+    // Prevents over-scheduling on certain days, leaving room for all sections
+    if (!this.canFacultyTeachMoreOnDay(course.facultyId, day, end - start + 1)) {
+      // Don't log - too verbose for normal operation
       return null
     }
 
@@ -1018,7 +1609,7 @@ class ILPTimetableGenerator {
         return { day, startPeriod: start, endPeriod: end, classroomId: room.id }
       }
     }
-
+    
     return null
   }
 
@@ -1043,7 +1634,7 @@ class ILPTimetableGenerator {
   private isFacultyDynamicallyAvailable(facultyId: string, day: DayOfWeek, start: Period, end: Period): boolean {
     const availableSlots = this.facultyDynamicAvailability.get(facultyId)
     if (!availableSlots) {
-      console.error(`[ILP] No dynamic availability found for faculty ${facultyId}`)
+      console.error(`[ERROR] No dynamic availability found for faculty ${facultyId}`)
       return false
     }
 
@@ -1051,7 +1642,7 @@ class ILPTimetableGenerator {
     for (let p = start; p <= end; p++) {
       const key = `${day}-${p}`
       if (!availableSlots.has(key)) {
-        console.log(`[ILP] Faculty ${facultyId} NOT dynamically available at ${key}`)
+        // Don't log every check - too verbose
         return false
       }
     }
@@ -1097,6 +1688,33 @@ class ILPTimetableGenerator {
     }
 
     return true
+  }
+
+  /**
+   * Day-balancing constraint for high-workload faculty
+   * Prevents faculty from teaching too many THEORY periods on any single day
+   * This ensures slots remain available for all sections
+   * DISABLED in relaxed mode for more flexibility
+   * 
+   * NOTE: Uses getFacultyTheoryDayLoad() to count ONLY theory periods,
+   * NOT lab periods. This is because maxPerDay is calculated from theory
+   * workload only, so we must compare apples-to-apples.
+   */
+  private canFacultyTeachMoreOnDay(facultyId: string, day: DayOfWeek, additionalPeriods: number): boolean {
+    // In relaxed mode, skip this constraint entirely
+    if (this.relaxedMode) return true
+    
+    const maxPerDay = this.facultyMaxPerDay.get(facultyId)
+    if (!maxPerDay) return true // No limit for faculty not in workload map
+    
+    // Count current THEORY periods this faculty has on this day (excludes labs)
+    // This is critical - maxPerDay is calculated from theory workload only,
+    // so we must only count theory periods to avoid false constraint violations
+    const facultyTheoryDayLoad = this.getFacultyTheoryDayLoad(facultyId)
+    const currentLoad = facultyTheoryDayLoad.get(day) || 0
+    
+    // Allow if adding these periods stays within daily limit
+    return (currentLoad + additionalPeriods) <= maxPerDay
   }
 
   // Check if section can have more theory on this day (total section limit)
@@ -1287,8 +1905,12 @@ async function validateScheduleCompleteness(
   supabase: any,
   expectedCourses: CourseAssignment[],
   generatedSlots: TimetableSlot[],
-  jobId: string
-): Promise<{ complete: boolean; missing: any[] }> {
+  jobId: string,
+  classrooms: ClassroomOption[],
+  facultyAvailability: FacultyAvailabilitySlot[],
+  ilpError?: string | null,
+  reducedCourses?: { courseId: string; originalPeriods: number; newPeriods: number }[]
+): Promise<{ complete: boolean; missing: any[]; diagnostics: any }> {
   const missing: any[] = []
   
   // Group slots by section+subject
@@ -1299,6 +1921,11 @@ async function validateScheduleCompleteness(
     slotsBySubject.set(key, (slotsBySubject.get(key) || 0) + periods)
   }
   
+  // Track failure types for diagnostics
+  let labFailures = 0
+  let theoryFailures = 0
+  const failedFaculty = new Set<string>()
+  
   // Check each expected course - MINIMUM 1 period for theory, full block for labs
   for (const course of expectedCourses) {
     const key = `${course.sectionId}-${course.subjectId}`
@@ -1307,25 +1934,31 @@ async function validateScheduleCompleteness(
     if (course.subjectType === 'lab') {
       // Labs MUST have exactly 1 block (4 periods)
       if (scheduledPeriods === 0) {
+        labFailures++
+        failedFaculty.add(course.facultyId)
         missing.push({
           section: course.sectionName,
           subject: course.subjectCode,
+          faculty: course.facultyCode,
           type: 'lab',
           expected: '1 lab block (4 periods)',
           scheduled: 0,
-          reason: 'Lab not scheduled'
+          reason: 'Lab not scheduled - check lab room availability or faculty conflicts'
         })
       }
     } else {
       // Theory: Accept partial schedules but MINIMUM 1 period (45 mins/week)
       if (scheduledPeriods === 0) {
+        theoryFailures++
+        failedFaculty.add(course.facultyId)
         missing.push({
           section: course.sectionName,
           subject: course.subjectCode,
+          faculty: course.facultyCode,
           type: 'theory',
           expected: course.periodsPerWeek,
           scheduled: 0,
-          reason: 'Theory not scheduled - minimum 1 period required'
+          reason: 'Theory not scheduled - check classroom availability or faculty conflicts'
         })
       }
       // Log warning for partial schedules but don't fail
@@ -1335,9 +1968,128 @@ async function validateScheduleCompleteness(
     }
   }
   
+  // Generate diagnostics and suggestions
+  const diagnostics = generateDiagnostics(
+    expectedCourses,
+    classrooms,
+    facultyAvailability,
+    labFailures,
+    theoryFailures,
+    failedFaculty,
+    ilpError,
+    reducedCourses
+  )
+  
   return {
     complete: missing.length === 0,
-    missing
+    missing,
+    diagnostics
+  }
+}
+
+// Generate diagnostic information and suggestions
+function generateDiagnostics(
+  courses: CourseAssignment[],
+  classrooms: ClassroomOption[],
+  facultyAvailability: FacultyAvailabilitySlot[],
+  labFailures: number,
+  theoryFailures: number,
+  failedFaculty: Set<string>,
+  ilpError?: string | null,
+  reducedCourses?: { courseId: string; originalPeriods: number; newPeriods: number }[]
+): any {
+  const labCourses = courses.filter(c => c.subjectType === 'lab')
+  const theoryCourses = courses.filter(c => c.subjectType === 'theory')
+  const labRooms = classrooms.filter(r => r.roomType === 'lab')
+  const theoryRooms = classrooms.filter(r => r.roomType === 'theory')
+  
+  // Calculate capacity metrics
+  const labBlocksNeeded = labCourses.length // Each lab needs 1 block of 4 periods
+  const labBlocksAvailable = labRooms.length * 12 // 2 possible blocks per day * 6 days
+  const labUtilization = labBlocksNeeded / labBlocksAvailable * 100
+  
+  const theoryPeriodsNeeded = theoryCourses.reduce((sum, c) => sum + c.periodsPerWeek, 0)
+  const theoryPeriodsAvailable = theoryRooms.length * 48 // 8 periods * 6 days
+  const theoryUtilization = theoryPeriodsNeeded / theoryPeriodsAvailable * 100
+  
+  // Check faculty availability issues
+  const facultyWithLimitedAvailability: string[] = []
+  const uniqueFaculty = [...new Set(courses.map(c => c.facultyId))]
+  for (const facultyId of uniqueFaculty) {
+    const avail = facultyAvailability.filter(a => a.facultyId === facultyId)
+    const totalSlots = avail.reduce((sum, a) => sum + (a.endPeriod - a.startPeriod + 1), 0)
+    if (totalSlots < 24) { // Less than 4 hours per day average
+      const course = courses.find(c => c.facultyId === facultyId)
+      facultyWithLimitedAvailability.push(course?.facultyCode || facultyId)
+    }
+  }
+  
+  // Generate suggestions based on failures
+  const suggestions: string[] = []
+  
+  // Add ILP solver error to suggestions if present
+  if (ilpError) {
+    suggestions.unshift(`🔴 ILP Solver Error: ${ilpError}`)
+  }
+  
+  if (labFailures > 0) {
+    if (labUtilization >= 100) {
+      const roomsNeeded = Math.ceil(labBlocksNeeded / 12 * 1.5) // Target 67% utilization
+      suggestions.push(`🔴 CRITICAL: Lab room shortage! ${labRooms.length} lab rooms provide ${labBlocksAvailable} blocks, but ${labBlocksNeeded} labs need scheduling (${labUtilization.toFixed(0)}% utilization = NO SLACK!). Add ${roomsNeeded - labRooms.length} more lab room(s) for 50% slack.`)
+    } else if (labUtilization > 80) {
+      suggestions.push(`🔴 CRITICAL: Lab room shortage! ${labRooms.length} lab rooms can only fit ${labBlocksAvailable} blocks, but ${labBlocksNeeded} are needed (${labUtilization.toFixed(0)}% utilization). Add ${Math.ceil((labBlocksNeeded - labBlocksAvailable * 0.8) / 12)} more lab room(s).`)
+    } else {
+      suggestions.push(`⚠️ Lab scheduling failed despite capacity. Check if same faculty teaches too many sections (faculty can't be in two places at once).`)
+    }
+  }
+  
+  if (theoryFailures > 0) {
+    if (theoryUtilization > 80) {
+      suggestions.push(`🔴 CRITICAL: Theory room shortage! ${theoryRooms.length} theory rooms provide ${theoryPeriodsAvailable} slots, but ${theoryPeriodsNeeded} are needed (${theoryUtilization.toFixed(0)}% utilization). Add ${Math.ceil((theoryPeriodsNeeded - theoryPeriodsAvailable * 0.7) / 48)} more theory room(s).`)
+    } else {
+      suggestions.push(`⚠️ Theory scheduling failed despite capacity. Check for faculty conflicts or section schedule fragmentation.`)
+    }
+  }
+  
+  if (failedFaculty.size > 0 && facultyWithLimitedAvailability.length > 0) {
+    const limitedFacultyInFailures = facultyWithLimitedAvailability.filter(f => 
+      [...failedFaculty].some(fid => courses.find(c => c.facultyId === fid)?.facultyCode === f)
+    )
+    if (limitedFacultyInFailures.length > 0) {
+      suggestions.push(`⚠️ Faculty availability issue: ${limitedFacultyInFailures.join(', ')} have limited available time slots. Increase their availability in the faculty management.`)
+    }
+  }
+  
+  if (suggestions.length === 0 && (labFailures > 0 || theoryFailures > 0)) {
+    suggestions.push(`ℹ️ Scheduling failed due to complex constraint interactions. Try reducing the number of sections or subjects.`)
+  }
+  
+  // Add info about reduced courses if fallback was applied
+  if (reducedCourses && reducedCourses.length > 0) {
+    const reducedCount = reducedCourses.length
+    const totalPeriodsReduced = reducedCourses.reduce((sum, c) => sum + (c.originalPeriods - c.newPeriods), 0)
+    suggestions.unshift(`🔄 FALLBACK APPLIED: Reduced ${reducedCount} theory subject(s) from 4→2 periods/week (saved ${totalPeriodsReduced} periods) to fit within room capacity.`)
+  }
+  
+  return {
+    summary: {
+      labRooms: labRooms.length,
+      theoryRooms: theoryRooms.length,
+      labBlocksNeeded,
+      labBlocksAvailable,
+      labUtilization: `${labUtilization.toFixed(1)}%`,
+      theoryPeriodsNeeded,
+      theoryPeriodsAvailable,
+      theoryUtilization: `${theoryUtilization.toFixed(1)}%`,
+    },
+    issues: {
+      labFailures,
+      theoryFailures,
+      facultyWithLimitedAvailability: facultyWithLimitedAvailability.length,
+      ilpError: ilpError || null,
+    },
+    reducedCourses: reducedCourses || [],
+    suggestions
   }
 }
 
@@ -1536,9 +2288,9 @@ Deno.serve(async (req) => {
         .eq("id", job.id)
       
       return new Response(
-        JSON.stringify({ error: "Missing required data" }),
+        JSON.stringify({ success: false, error: "Missing required data", jobId: job.id }),
         {
-          status: 400,
+          status: 200, // Return 200 so frontend can parse error details
           headers: {
             "Content-Type": "application/json",
             "Access-Control-Allow-Origin": "*",
@@ -1672,12 +2424,14 @@ Deno.serve(async (req) => {
       
       return new Response(
         JSON.stringify({ 
+          success: false,
           error: "CONFLICTS_DETECTED",
           conflicts: conflicts.slice(0, 10),
+          jobId: job.id,
           message: `Generated timetable contains ${conflicts.length} conflicts` 
         }),
         {
-          status: 422,
+          status: 200, // Return 200 so frontend can parse error details
           headers: {
             "Content-Type": "application/json",
             "Access-Control-Allow-Origin": "*",
@@ -1711,15 +2465,18 @@ Deno.serve(async (req) => {
 
     // VALIDATION: Check completeness
     console.log("[Edge Function] Validating schedule completeness...")
-    const validation = await validateScheduleCompleteness(supabase, courses, timetableSlots, job.id)
+    const ilpError = generator.getILPError()
+    const reducedCourses = generator.getReducedCourses()
+    const validation = await validateScheduleCompleteness(supabase, courses, timetableSlots, job.id, classroomOptions, facultyAvailability, ilpError, reducedCourses)
     
     if (!validation.complete) {
       console.error("[Edge Function] ❌ INCOMPLETE SCHEDULE:", validation.missing)
+      console.error("[Edge Function] 📊 Diagnostics:", JSON.stringify(validation.diagnostics, null, 2))
       await supabase
         .from("timetable_jobs")
         .update({
           status: "failed",
-          message: `Incomplete schedule: ${validation.missing.length} subject(s) not fully scheduled`,
+          message: `Incomplete schedule: ${validation.missing.length} subject(s) not fully scheduled. ${validation.diagnostics.suggestions[0] || ''}`,
         })
         .eq("id", job.id)
       
@@ -1728,10 +2485,12 @@ Deno.serve(async (req) => {
           success: false,
           error: "INCOMPLETE_SCHEDULE",
           details: validation.missing,
+          diagnostics: validation.diagnostics,
+          jobId: job.id,
           message: `Generated timetable is incomplete. ${validation.missing.length} subject(s) not fully scheduled.`,
         }),
         {
-          status: 422,
+          status: 200, // Return 200 so frontend can parse error details
           headers: {
             "Content-Type": "application/json",
             "Access-Control-Allow-Origin": "*",
@@ -1754,6 +2513,12 @@ Deno.serve(async (req) => {
       .eq("id", job.id)
 
     console.log("[Edge Function] Job completed successfully")
+    
+    // Include reduced courses info in success response
+    const reducedCoursesInfo = reducedCourses.length > 0 ? {
+      reducedCourses,
+      fallbackMessage: `⚠️ Due to tight room capacity, ${reducedCourses.length} theory subject(s) were reduced from 4 to 2 periods/week to fit the schedule`
+    } : null
 
     return new Response(
       JSON.stringify({
@@ -1761,6 +2526,7 @@ Deno.serve(async (req) => {
         jobId: job.id,
         slotsGenerated: timetableSlots.length,
         generationTime,
+        ...(reducedCoursesInfo && { reducedCoursesInfo }),
       }),
       {
         headers: {

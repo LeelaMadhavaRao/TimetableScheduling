@@ -1,12 +1,12 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
-import { Play, Zap, CheckCircle, AlertCircle, Loader2, Eye, Download } from "lucide-react"
+import { Play, Zap, CheckCircle, AlertCircle, Loader2, Eye, Download, Bell } from "lucide-react"
 import { getSupabaseBrowserClient } from "@/lib/client"
 import type { TimetableJob } from "@/lib/database"
 import { generateTimetablePDF } from "@/lib/pdf-generator"
@@ -32,9 +32,53 @@ export function GenerateTimetable() {
   const [errorDetails, setErrorDetails] = useState<ErrorDetail[]>([])
   const [showErrorDialog, setShowErrorDialog] = useState(false)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+  const [notificationStatus, setNotificationStatus] = useState<'idle' | 'sending' | 'sent' | 'failed'>('idle')
+  
+  // Track which jobs we've already sent notifications for
+  const notifiedJobsRef = useRef<Set<string>>(new Set())
   
   // Get admin ID if user is a timetable administrator
   const adminId = role === 'timetable_admin' && user ? (user as { id: string }).id : null
+
+  // Function to send notifications to faculty
+  const sendFacultyNotifications = async (jobId: string, timetableType: 'base' | 'optimized') => {
+    // Check if we've already notified for this job
+    if (notifiedJobsRef.current.has(`${jobId}-${timetableType}`)) {
+      console.log("[GenerateTimetable] Already sent notifications for this job")
+      return
+    }
+    
+    try {
+      setNotificationStatus('sending')
+      console.log("[GenerateTimetable] Sending WhatsApp notifications to faculty...")
+      
+      const supabase = getSupabaseBrowserClient()
+      const { data, error } = await supabase.functions.invoke('notify-faculty-timetable', {
+        method: 'POST',
+        body: {
+          jobId,
+          timetableType,
+          adminId
+        }
+      })
+      
+      if (error) {
+        console.error("[GenerateTimetable] Notification error:", error)
+        setNotificationStatus('failed')
+        return
+      }
+      
+      console.log("[GenerateTimetable] Notification result:", data)
+      notifiedJobsRef.current.add(`${jobId}-${timetableType}`)
+      setNotificationStatus('sent')
+      
+      // Reset status after 5 seconds
+      setTimeout(() => setNotificationStatus('idle'), 5000)
+    } catch (err) {
+      console.error("[GenerateTimetable] Failed to send notifications:", err)
+      setNotificationStatus('failed')
+    }
+  }
 
   useEffect(() => {
     // Subscribe to job updates
@@ -49,6 +93,7 @@ export function GenerateTimetable() {
           console.log("[GenerateTimetable] Real-time job update:", payload.new?.status, payload)
           if (payload.new) {
             const newStatus = payload.new.status
+            const oldStatus = payload.old?.status
             console.log("[GenerateTimetable] Real-time update - Status:", newStatus, "Progress:", payload.new.progress)
             
             setCurrentJob(payload.new)
@@ -63,6 +108,15 @@ export function GenerateTimetable() {
             if (isComplete) {
               console.log("[GenerateTimetable] ✅ Real-time: Job complete, stopping loader")
               setGenerating(false)
+              
+              // Auto-send notifications when timetable generation completes
+              if (newStatus === "base_complete" && oldStatus !== "base_complete") {
+                console.log("[GenerateTimetable] 📱 Triggering base timetable notifications...")
+                sendFacultyNotifications(payload.new.id, 'base')
+              } else if (newStatus === "completed" && oldStatus !== "completed") {
+                console.log("[GenerateTimetable] 📱 Triggering optimized timetable notifications...")
+                sendFacultyNotifications(payload.new.id, 'optimized')
+              }
             } else if (isGenerating) {
               console.log("[GenerateTimetable] 🔄 Real-time: Job generating, showing loader")
               setGenerating(true)
@@ -632,6 +686,51 @@ export function GenerateTimetable() {
                     )}
                   </Button>
                 </ClickSpark>
+                
+                {/* WhatsApp Notification Button */}
+                <ClickSpark
+                  sparkColor="#25D366"
+                  sparkSize={10}
+                  sparkRadius={18}
+                  sparkCount={8}
+                  duration={450}
+                >
+                  <Button 
+                    onClick={() => sendFacultyNotifications(
+                      currentJob.id, 
+                      currentJob.status === "completed" ? 'optimized' : 'base'
+                    )} 
+                    className="w-full bg-[#25D366] hover:bg-[#128C7E] text-white" 
+                    disabled={generating || notificationStatus === 'sending'}
+                  >
+                    {notificationStatus === 'sending' ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Sending Notifications...
+                      </>
+                    ) : notificationStatus === 'sent' ? (
+                      <>
+                        <CheckCircle className="w-4 h-4 mr-2" />
+                        Notifications Sent!
+                      </>
+                    ) : notificationStatus === 'failed' ? (
+                      <>
+                        <AlertCircle className="w-4 h-4 mr-2" />
+                        Failed - Try Again
+                      </>
+                    ) : (
+                      <>
+                        <Bell className="w-4 h-4 mr-2" />
+                        Notify Faculty via WhatsApp
+                      </>
+                    )}
+                  </Button>
+                </ClickSpark>
+                {notificationStatus === 'sent' && (
+                  <p className="text-xs text-center text-green-500">
+                    ✓ Faculty members have been notified about their timetable
+                  </p>
+                )}
               </div>
             )}
           </div>

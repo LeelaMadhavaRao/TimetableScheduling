@@ -1,6 +1,20 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getSupabaseServerClient, getCurrentAdminId } from "@/lib/server"
 import { generateRequestApprovedEmail } from "@/lib/email-templates"
+import nodemailer from "nodemailer"
+
+// Create email transporter
+function createEmailTransporter() {
+  return nodemailer.createTransport({
+    host: process.env.EMAIL_HOST || 'smtp.gmail.com',
+    port: parseInt(process.env.EMAIL_PORT || '587'),
+    secure: false,
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASSWORD,
+    },
+  })
+}
 
 // Approve registration request
 export async function POST(request: NextRequest) {
@@ -69,10 +83,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(data, { status: 400 })
     }
 
-    // Send approval email with credentials
+    // Send approval email with credentials directly using nodemailer
     if (data && data.username && data.email && data.name) {
       try {
         console.log('📧 Attempting to send approval email to:', data.email)
+        
+        // Validate email configuration
+        if (!process.env.EMAIL_USER || !process.env.EMAIL_PASSWORD) {
+          console.error('❌ Email configuration not set')
+          console.error('EMAIL_USER:', process.env.EMAIL_USER ? 'SET' : 'NOT SET')
+          console.error('EMAIL_PASSWORD:', process.env.EMAIL_PASSWORD ? 'SET' : 'NOT SET')
+          throw new Error('Email configuration not set')
+        }
         
         const loginUrl = `${process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'http://localhost:3000'}/login/timetable-admin`
         const emailData = generateRequestApprovedEmail({
@@ -82,48 +104,32 @@ export async function POST(request: NextRequest) {
           loginUrl
         })
 
-        // Use absolute URL for fetch in API routes
-        const baseUrl = process.env.NODE_ENV === 'production' 
-          ? (process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'https://timetable-scheduling.vercel.app')
-          : 'http://localhost:3000'
+        console.log('📧 Creating email transporter...')
+        const transporter = createEmailTransporter()
         
-        const emailApiUrl = `${baseUrl}/api/send-email`
-        
-        console.log('📧 Email API URL:', emailApiUrl)
-        console.log('📧 Environment:', process.env.NODE_ENV)
-        
-        const emailResponse = await fetch(emailApiUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            to: data.email,
-            subject: emailData.subject,
-            html: emailData.html,
-            text: emailData.text
-          })
+        console.log('📧 Sending approval email...')
+        const info = await transporter.sendMail({
+          from: `"${process.env.EMAIL_FROM_NAME || 'Timetable System'}" <${process.env.EMAIL_USER}>`,
+          to: data.email,
+          subject: emailData.subject,
+          text: emailData.text,
+          html: emailData.html,
         })
 
-        console.log('📧 Email API response status:', emailResponse.status)
+        console.log('✅ Approval email sent successfully to:', data.email)
+        console.log('📬 Message ID:', info.messageId)
+        console.log('📬 Response:', info.response)
         
-        if (!emailResponse.ok) {
-          const errorText = await emailResponse.text()
-          console.error('❌ Email API returned error status:', emailResponse.status)
-          console.error('❌ Error response:', errorText)
-          throw new Error(`Email API returned status ${emailResponse.status}`)
-        }
-        
-        const emailResult = await emailResponse.json()
-        
-        if (emailResult.success) {
-          console.log('✅ Approval email sent successfully to:', data.email)
-          console.log('📬 Message ID:', emailResult.messageId)
-        } else {
-          console.error('❌ Email API returned error:', emailResult.error || emailResult.message)
-        }
       } catch (emailError: any) {
         console.error('❌ Error sending approval email:', emailError.message)
-        console.error('❌ Full error:', emailError)
-        // Don't fail the request if email fails
+        console.error('❌ Error details:', {
+          message: emailError.message,
+          code: emailError.code,
+          command: emailError.command,
+          response: emailError.response,
+          responseCode: emailError.responseCode
+        })
+        // Don't fail the request if email fails - approval was still successful
       }
     } else {
       console.warn('⚠️ Missing required data for sending approval email:', {

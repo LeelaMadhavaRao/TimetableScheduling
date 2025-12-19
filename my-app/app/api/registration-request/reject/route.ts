@@ -1,6 +1,20 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getSupabaseServerClient } from "@/lib/server"
 import { generateRequestRejectedEmail } from "@/lib/email-templates"
+import nodemailer from "nodemailer"
+
+// Create email transporter
+function createEmailTransporter() {
+  return nodemailer.createTransport({
+    host: process.env.EMAIL_HOST || 'smtp.gmail.com',
+    port: parseInt(process.env.EMAIL_PORT || '587'),
+    secure: false,
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASSWORD,
+    },
+  })
+}
 
 // Reject registration request
 export async function POST(request: NextRequest) {
@@ -51,11 +65,21 @@ export async function POST(request: NextRequest) {
     }
 
     // Get request details before rejecting (to get email)
-    const { data: requestData } = await supabase
+    const { data: requestData, error: requestError } = await supabase
       .from('registration_requests')
-      .select('name, email')
+      .select('name, email, status')
       .eq('id', requestId)
       .single()
+
+    if (requestError) {
+      console.error('❌ Error fetching request data:', requestError)
+    }
+
+    if (!requestData) {
+      console.error('❌ Request data not found for ID:', requestId)
+    } else {
+      console.log('📋 Request data found:', { name: requestData.name, email: requestData.email, status: requestData.status })
+    }
 
     // Call RPC function to reject request
     const { data, error } = await supabase.rpc(
@@ -66,6 +90,8 @@ export async function POST(request: NextRequest) {
         p_rejection_reason: rejectionReason
       }
     )
+
+    console.log('🔧 RPC reject_registration_request result:', { data, error })
 
     if (error) {
       console.error("Reject request error:", error)
@@ -80,66 +106,59 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(data, { status: 400 })
     }
 
-    // Send rejection email
+    // Send rejection email directly using nodemailer
     if (requestData && requestData.email) {
       try {
         console.log('📧 Attempting to send rejection email to:', requestData.email)
+        
+        // Validate email configuration
+        if (!process.env.EMAIL_USER || !process.env.EMAIL_PASSWORD) {
+          console.error('❌ Email configuration not set')
+          console.error('EMAIL_USER:', process.env.EMAIL_USER ? 'SET' : 'NOT SET')
+          console.error('EMAIL_PASSWORD:', process.env.EMAIL_PASSWORD ? 'SET' : 'NOT SET')
+          throw new Error('Email configuration not set')
+        }
         
         const emailData = generateRequestRejectedEmail({
           name: requestData.name,
           reason: rejectionReason
         })
 
-        // Use absolute URL for fetch in API routes
-        const baseUrl = process.env.NODE_ENV === 'production' 
-          ? (process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'https://timetable-scheduling.vercel.app')
-          : 'http://localhost:3000'
+        console.log('📧 Creating email transporter...')
+        const transporter = createEmailTransporter()
         
-        const emailApiUrl = `${baseUrl}/api/send-email`
-        
-        console.log('📧 Email API URL:', emailApiUrl)
-        console.log('📧 Environment:', process.env.NODE_ENV)
-        
-        const emailResponse = await fetch(emailApiUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            to: requestData.email,
-            subject: emailData.subject,
-            html: emailData.html,
-            text: emailData.text
-          })
+        console.log('📧 Sending rejection email...')
+        const info = await transporter.sendMail({
+          from: `"${process.env.EMAIL_FROM_NAME || 'Timetable System'}" <${process.env.EMAIL_USER}>`,
+          to: requestData.email,
+          subject: emailData.subject,
+          text: emailData.text,
+          html: emailData.html,
         })
 
-        console.log('📧 Email API response status:', emailResponse.status)
+        console.log('✅ Rejection email sent successfully to:', requestData.email)
+        console.log('📬 Message ID:', info.messageId)
+        console.log('📬 Response:', info.response)
         
-        if (!emailResponse.ok) {
-          const errorText = await emailResponse.text()
-          console.error('❌ Email API returned error status:', emailResponse.status)
-          console.error('❌ Error response:', errorText)
-          throw new Error(`Email API returned status ${emailResponse.status}`)
-        }
-        
-        const emailResult = await emailResponse.json()
-        
-        if (emailResult.success) {
-          console.log('✅ Rejection email sent successfully to:', requestData.email)
-          console.log('📬 Message ID:', emailResult.messageId)
-        } else {
-          console.error('❌ Email API returned error:', emailResult.error || emailResult.message)
-        }
       } catch (emailError: any) {
         console.error('❌ Error sending rejection email:', emailError.message)
-        console.error('❌ Full error:', emailError)
-        // Don't fail the request if email fails
+        console.error('❌ Error details:', {
+          message: emailError.message,
+          code: emailError.code,
+          command: emailError.command,
+          response: emailError.response,
+          responseCode: emailError.responseCode
+        })
+        // Don't fail the request if email fails - rejection was still successful
       }
     } else {
       console.warn('⚠️ No email address found for request:', requestId)
+      console.warn('⚠️ Request data:', requestData)
     }
 
     return NextResponse.json({
       success: true,
-      message: "Registration request rejected successfully. Email sent to user.",
+      message: "Registration request rejected successfully. Notification email sent to user.",
       data: data
     })
 

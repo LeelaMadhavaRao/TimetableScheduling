@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
 
     // Hash password
     const { data: hashedPassword, error: hashError } = await supabase
-      .rpc('hash_password', { password })
+      .rpc('hash_password', { input_password: password })
     
     if (hashError || !hashedPassword) {
       console.error("Password hash error:", hashError)
@@ -97,8 +97,20 @@ export async function POST(request: NextRequest) {
           loginUrl
         })
 
-        // Call email API
-        await fetch(`${process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'http://localhost:3000'}/api/send-email`, {
+        console.log('📧 Attempting to send email to:', email)
+        
+        // Use absolute URL for fetch in API routes
+        // In development, use localhost; in production, use the actual domain
+        const baseUrl = process.env.NODE_ENV === 'production' 
+          ? (process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'https://timetable-scheduling.vercel.app')
+          : 'http://localhost:3000'
+        
+        const emailApiUrl = `${baseUrl}/api/send-email`
+        
+        console.log('📧 Email API URL:', emailApiUrl)
+        console.log('📧 Environment:', process.env.NODE_ENV)
+        
+        const emailResponse = await fetch(emailApiUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -109,9 +121,26 @@ export async function POST(request: NextRequest) {
           })
         })
 
-        console.log('✅ Admin creation email sent to:', email)
-      } catch (emailError) {
-        console.error('❌ Error sending admin creation email:', emailError)
+        console.log('📧 Email API response status:', emailResponse.status)
+        
+        if (!emailResponse.ok) {
+          const errorText = await emailResponse.text()
+          console.error('❌ Email API returned error status:', emailResponse.status)
+          console.error('❌ Error response:', errorText)
+          throw new Error(`Email API returned status ${emailResponse.status}`)
+        }
+        
+        const emailResult = await emailResponse.json()
+        
+        if (emailResult.success) {
+          console.log('✅ Admin creation email sent successfully to:', email)
+          console.log('📬 Message ID:', emailResult.messageId)
+        } else {
+          console.error('❌ Email API returned error:', emailResult.error || emailResult.message)
+        }
+      } catch (emailError: any) {
+        console.error('❌ Error sending admin creation email:', emailError.message)
+        console.error('❌ Full error:', emailError)
         // Don't fail the request if email fails
       }
     }

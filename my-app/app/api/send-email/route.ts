@@ -19,8 +19,11 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const { to, subject, html, text } = body
 
+    console.log('📧 Send email request received for:', to)
+
     // Validate required fields
     if (!to || !subject || (!html && !text)) {
+      console.error('❌ Missing required fields')
       return NextResponse.json(
         { success: false, error: 'Missing required fields: to, subject, and (html or text)' },
         { status: 400 }
@@ -29,14 +32,24 @@ export async function POST(req: NextRequest) {
 
     // Validate email configuration
     if (!process.env.EMAIL_USER || !process.env.EMAIL_PASSWORD) {
+      console.error('❌ Email configuration not set')
+      console.error('EMAIL_USER:', process.env.EMAIL_USER ? 'SET' : 'NOT SET')
+      console.error('EMAIL_PASSWORD:', process.env.EMAIL_PASSWORD ? 'SET' : 'NOT SET')
       return NextResponse.json(
         { success: false, error: 'Email configuration not set' },
         { status: 500 }
       )
     }
 
+    console.log('📧 Creating email transporter...')
+    console.log('Host:', process.env.EMAIL_HOST || 'smtp.gmail.com')
+    console.log('Port:', parseInt(process.env.EMAIL_PORT || '587'))
+    console.log('User:', process.env.EMAIL_USER)
+    
     const transporter = createTransporter()
 
+    console.log('📧 Sending email...')
+    
     // Send email
     const info = await transporter.sendMail({
       from: `"${process.env.EMAIL_FROM_NAME || 'Timetable System'}" <${process.env.EMAIL_USER}>`,
@@ -46,7 +59,9 @@ export async function POST(req: NextRequest) {
       html,
     })
 
-    console.log('Email sent successfully:', info.messageId)
+    console.log('✅ Email sent successfully!')
+    console.log('📬 Message ID:', info.messageId)
+    console.log('📬 Response:', info.response)
 
     return NextResponse.json({
       success: true,
@@ -55,7 +70,14 @@ export async function POST(req: NextRequest) {
     })
 
   } catch (error: any) {
-    console.error('Error sending email:', error)
+    console.error('❌ Error sending email:', error)
+    console.error('Error details:', {
+      message: error.message,
+      code: error.code,
+      command: error.command,
+      response: error.response,
+      responseCode: error.responseCode
+    })
     return NextResponse.json(
       { success: false, error: error.message || 'Failed to send email' },
       { status: 500 }

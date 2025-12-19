@@ -280,37 +280,27 @@ export async function updateTimetableAdministrator(
     password?: string;
   }
 ): Promise<{ success: boolean; message: string }> {
-  const supabase = getSupabaseBrowserClient();
-  
   try {
-    const updateData: Record<string, unknown> = {
-      updated_at: new Date().toISOString()
+    // Call server-side API to update admin and send email notification
+    const response = await fetch('/api/timetable-administrator/update', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, ...data })
+    });
+
+    const result = await response.json();
+    
+    if (!response.ok) {
+      return { 
+        success: false, 
+        message: result.message || 'Failed to update administrator' 
+      };
+    }
+
+    return {
+      success: true,
+      message: result.message || 'Updated successfully'
     };
-    
-    if (data.name) updateData.name = data.name;
-    if (data.email !== undefined) updateData.email = data.email;
-    if (data.phone !== undefined) updateData.phone = data.phone;
-    if (data.institution_name !== undefined) updateData.institution_name = data.institution_name;
-    if (data.is_active !== undefined) updateData.is_active = data.is_active;
-    
-    if (data.password) {
-      const { data: hashedPassword } = await supabase
-        .rpc('hash_password', { password: data.password });
-      if (hashedPassword) {
-        updateData.password_hash = hashedPassword;
-      }
-    }
-    
-    const { error } = await supabase
-      .from('timetable_administrators')
-      .update(updateData)
-      .eq('id', id);
-    
-    if (error) {
-      return { success: false, message: error.message };
-    }
-    
-    return { success: true, message: 'Updated successfully' };
   } catch (err) {
     console.error('Update timetable admin error:', err);
     return { success: false, message: 'An error occurred' };

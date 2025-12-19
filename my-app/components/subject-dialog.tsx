@@ -111,7 +111,7 @@ export function SubjectDialog({ subject, departments, faculty, trigger }: Subjec
           <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto">
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
-                <Label htmlFor="code">Subject Code *</Label>
+                <Label htmlFor="code" className="text-white">Subject Code *</Label>
                 <Input
                   id="code"
                   placeholder="e.g., JAVA-IT"
@@ -119,12 +119,12 @@ export function SubjectDialog({ subject, departments, faculty, trigger }: Subjec
                   onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
                   required
                 />
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-slate-400">
                   💡 Include department code as suffix (e.g., JAVA-IT, CS101-CSE)
                 </p>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="type">Type *</Label>
+                <Label htmlFor="type" className="text-white">Type *</Label>
                 <Select
                   value={formData.subject_type}
                   onValueChange={(value: "theory" | "lab") => {
@@ -147,7 +147,7 @@ export function SubjectDialog({ subject, departments, faculty, trigger }: Subjec
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="name">Subject Name *</Label>
+              <Label htmlFor="name" className="text-white">Subject Name *</Label>
               <Input
                 id="name"
                 placeholder="e.g., Data Structures"
@@ -158,7 +158,7 @@ export function SubjectDialog({ subject, departments, faculty, trigger }: Subjec
             </div>
             {formData.subject_type === "theory" ? (
               <div className="space-y-2">
-                <Label htmlFor="periods">Periods per Week *</Label>
+                <Label htmlFor="periods" className="text-white">Periods per Week *</Label>
                 <Input
                   id="periods"
                   type="number"
@@ -168,18 +168,18 @@ export function SubjectDialog({ subject, departments, faculty, trigger }: Subjec
                   onChange={(e) => setFormData({ ...formData, periods_per_week: Number.parseInt(e.target.value) || 0 })}
                   required
                 />
-                <p className="text-xs text-muted-foreground">Number of theory periods per week</p>
+                <p className="text-xs text-slate-400">Number of theory periods per week</p>
               </div>
             ) : (
-              <div className="rounded-lg bg-muted/50 p-3 space-y-1">
-                <p className="text-sm font-medium">Lab Schedule</p>
-                <p className="text-xs text-muted-foreground">
+              <div className="rounded-lg bg-slate-700/50 p-3 space-y-1 border border-slate-600">
+                <p className="text-sm font-medium text-white">Lab Schedule</p>
+                <p className="text-xs text-slate-300">
                   Lab subjects are automatically scheduled for 4 continuous periods (1 session) per week
                 </p>
               </div>
             )}
             <div className="space-y-2">
-              <Label htmlFor="department">Department</Label>
+              <Label htmlFor="department" className="text-white">Department</Label>
               <Select
                 value={formData.department_id}
                 onValueChange={(value) => setFormData({ ...formData, department_id: value })}
@@ -197,7 +197,7 @@ export function SubjectDialog({ subject, departments, faculty, trigger }: Subjec
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Assigned Faculty (e.g., JAVA - KSR)</Label>
+              <Label className="text-white">Assigned Faculty (e.g., JAVA - KSR)</Label>
               <Input
                 type="text"
                 placeholder="Search faculty by name or code..."
@@ -205,7 +205,7 @@ export function SubjectDialog({ subject, departments, faculty, trigger }: Subjec
                 onChange={(e) => setFacultySearch(e.target.value)}
                 className="mb-2"
               />
-              <div className="border rounded-md p-3 space-y-2 max-h-48 overflow-y-auto">
+              <div className="border border-slate-600 rounded-md p-3 space-y-2 max-h-48 overflow-y-auto bg-slate-700/30">
                 {faculty
                   .filter((f) => {
                     const query = facultySearch.toLowerCase()
@@ -227,7 +227,7 @@ export function SubjectDialog({ subject, departments, faculty, trigger }: Subjec
                           }
                         }}
                       />
-                      <label htmlFor={f.id} className="text-sm cursor-pointer">
+                      <label htmlFor={f.id} className="text-sm cursor-pointer text-white">
                         {f.name} ({f.code})
                       </label>
                     </div>
@@ -236,7 +236,7 @@ export function SubjectDialog({ subject, departments, faculty, trigger }: Subjec
                   const query = facultySearch.toLowerCase()
                   return f.name.toLowerCase().includes(query) || f.code.toLowerCase().includes(query)
                 }).length === 0 && (
-                  <p className="text-sm text-muted-foreground text-center py-2">
+                  <p className="text-sm text-slate-400 text-center py-2">
                     No faculty found matching "{facultySearch}"
                   </p>
                 )}

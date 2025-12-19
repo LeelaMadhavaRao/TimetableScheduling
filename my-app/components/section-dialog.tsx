@@ -90,7 +90,7 @@ export function SectionDialog({ section, departments, subjects, trigger }: Secti
           </DialogHeader>
           <div className="space-y-4 py-4 max-h-[70vh] overflow-y-auto">
             <div className="space-y-2">
-              <Label htmlFor="name">Section Name *</Label>
+              <Label htmlFor="name" className="text-white">Section Name *</Label>
               <Input
                 id="name"
                 placeholder="e.g., CSE-2A or IT-3B"
@@ -98,13 +98,13 @@ export function SectionDialog({ section, departments, subjects, trigger }: Secti
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 required
               />
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-slate-400">
                 💡 Include department code as prefix (e.g., CSE-2A, IT-3B, PHY-1A)
               </p>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
-                <Label htmlFor="year">Year Level *</Label>
+                <Label htmlFor="year" className="text-white">Year Level *</Label>
                 <Select
                   value={formData.year_level.toString()}
                   onValueChange={(value) =>
@@ -123,7 +123,7 @@ export function SectionDialog({ section, departments, subjects, trigger }: Secti
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="students">Student Count *</Label>
+                <Label htmlFor="students" className="text-white">Student Count *</Label>
                 <Input
                   id="students"
                   type="number"
@@ -136,7 +136,7 @@ export function SectionDialog({ section, departments, subjects, trigger }: Secti
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="department">Department</Label>
+              <Label htmlFor="department" className="text-white">Department</Label>
               <Select
                 value={formData.department_id}
                 onValueChange={(value) => setFormData({ ...formData, department_id: value })}

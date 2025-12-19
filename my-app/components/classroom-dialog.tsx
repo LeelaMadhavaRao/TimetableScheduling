@@ -85,7 +85,7 @@ export function ClassroomDialog({ classroom, trigger }: ClassroomDialogProps) {
           </DialogHeader>
           <div className="space-y-4 py-4 max-h-[70vh] overflow-y-auto">
             <div className="space-y-2">
-              <Label htmlFor="name">Classroom Name *</Label>
+              <Label htmlFor="name" className="text-white">Classroom Name *</Label>
               <Input
                 id="name"
                 placeholder="e.g., CSE-LAB1 or IT-101"
@@ -93,13 +93,13 @@ export function ClassroomDialog({ classroom, trigger }: ClassroomDialogProps) {
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 required
               />
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-slate-400">
                 💡 Include department code as prefix (e.g., CSE-LAB1, IT-101, ENG-LAB2)
               </p>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
-                <Label htmlFor="capacity">Capacity *</Label>
+                <Label htmlFor="capacity" className="text-white">Capacity *</Label>
                 <Input
                   id="capacity"
                   type="number"
@@ -111,7 +111,7 @@ export function ClassroomDialog({ classroom, trigger }: ClassroomDialogProps) {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="type">Type *</Label>
+                <Label htmlFor="type" className="text-white">Type *</Label>
                 <Select
                   value={formData.room_type}
                   onValueChange={(value: "theory" | "lab") => setFormData({ ...formData, room_type: value })}
@@ -128,7 +128,7 @@ export function ClassroomDialog({ classroom, trigger }: ClassroomDialogProps) {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
-                <Label htmlFor="building">Building</Label>
+                <Label htmlFor="building" className="text-white">Building</Label>
                 <Input
                   id="building"
                   placeholder="e.g., Main Block"
@@ -137,7 +137,7 @@ export function ClassroomDialog({ classroom, trigger }: ClassroomDialogProps) {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="floor">Floor</Label>
+                <Label htmlFor="floor" className="text-white">Floor</Label>
                 <Input
                   id="floor"
                   type="number"

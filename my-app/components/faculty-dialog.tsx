@@ -85,7 +85,7 @@ export function FacultyDialog({ faculty, departments, trigger }: FacultyDialogPr
           </DialogHeader>
           <div className="space-y-4 py-4 max-h-[70vh] overflow-y-auto">
             <div className="space-y-2">
-              <Label htmlFor="code">Faculty Code *</Label>
+              <Label htmlFor="code" className="text-white">Faculty Code *</Label>
               <Input
                 id="code"
                 placeholder="e.g., KSR-CSE"
@@ -93,12 +93,12 @@ export function FacultyDialog({ faculty, departments, trigger }: FacultyDialogPr
                 onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
                 required
               />
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-slate-400">
                 💡 Include department code as suffix (e.g., KSR-CSE, JOHN-IT)
               </p>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="name">Full Name *</Label>
+              <Label htmlFor="name" className="text-white">Full Name *</Label>
               <Input
                 id="name"
                 placeholder="e.g., Dr. Kumar Sharma"
@@ -108,7 +108,7 @@ export function FacultyDialog({ faculty, departments, trigger }: FacultyDialogPr
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email" className="text-white">Email</Label>
               <Input
                 id="email"
                 type="email"
@@ -118,7 +118,7 @@ export function FacultyDialog({ faculty, departments, trigger }: FacultyDialogPr
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="department">Department</Label>
+              <Label htmlFor="department" className="text-white">Department</Label>
               <Select
                 value={formData.department_id}
                 onValueChange={(value) => setFormData({ ...formData, department_id: value })}
@@ -136,7 +136,7 @@ export function FacultyDialog({ faculty, departments, trigger }: FacultyDialogPr
               </Select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="phone">Phone</Label>
+              <Label htmlFor="phone" className="text-white">Phone</Label>
               <Input
                 id="phone"
                 placeholder="e.g., +91 9876543210"

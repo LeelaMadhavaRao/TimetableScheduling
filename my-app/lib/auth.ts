@@ -223,42 +223,27 @@ export async function createTimetableAdministrator(
     institution_name?: string;
   }
 ): Promise<{ success: boolean; message: string; data?: TimetableAdministrator }> {
-  const supabase = getSupabaseBrowserClient();
-  
   try {
-    // Hash password
-    const { data: hashedPassword } = await supabase
-      .rpc('hash_password', { password: data.password });
+    // Call server-side API to create admin and send email
+    const response = await fetch('/api/timetable-administrator/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+
+    const result = await response.json();
     
-    if (!hashedPassword) {
-      return { success: false, message: 'Failed to hash password' };
+    if (!response.ok) {
+      return { 
+        success: false, 
+        message: result.message || 'Failed to create administrator' 
+      };
     }
-    
-    const { data: newAdmin, error } = await supabase
-      .from('timetable_administrators')
-      .insert({
-        username: data.username,
-        password_hash: hashedPassword,
-        name: data.name,
-        email: data.email || null,
-        phone: data.phone || null,
-        institution_name: data.institution_name || null,
-        created_by: adminId
-      })
-      .select('id, username, name, email, phone, institution_name, is_active, created_by, created_at')
-      .single();
-    
-    if (error) {
-      if (error.code === '23505') {
-        return { success: false, message: 'Username already exists' };
-      }
-      return { success: false, message: error.message };
-    }
-    
+
     return {
       success: true,
-      message: 'Timetable Administrator created successfully',
-      data: newAdmin as TimetableAdministrator
+      message: result.message,
+      data: result.data as TimetableAdministrator
     };
   } catch (err) {
     console.error('Create timetable admin error:', err);

@@ -133,7 +133,7 @@ export async function PUT(request: NextRequest) {
     
     if (notificationEmail && updatedFields.length > 0) {
       try {
-        const loginUrl = `${process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'http://localhost:3000'}/login`
+        const loginUrl = `${process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'http://localhost:3000'}/login/timetable-admin`
         const emailData = generateAdminUpdatedEmail({
           adminName: name || currentAdmin.name,
           username: currentAdmin.username,

@@ -89,7 +89,7 @@ export async function POST(request: NextRequest) {
     // Send welcome email with credentials
     if (email) {
       try {
-        const loginUrl = `${process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'http://localhost:3000'}/login`
+        const loginUrl = `${process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'http://localhost:3000'}/login/timetable-admin`
         const emailData = generateAdminCreatedEmail({
           adminName: name,
           username,

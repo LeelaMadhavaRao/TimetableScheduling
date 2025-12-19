@@ -83,13 +83,24 @@ export async function POST(request: NextRequest) {
     // Send rejection email
     if (requestData && requestData.email) {
       try {
+        console.log('📧 Attempting to send rejection email to:', requestData.email)
+        
         const emailData = generateRequestRejectedEmail({
           name: requestData.name,
           reason: rejectionReason
         })
 
-        // Call email API
-        await fetch(`${process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'http://localhost:3000'}/api/send-email`, {
+        // Use absolute URL for fetch in API routes
+        const baseUrl = process.env.NODE_ENV === 'production' 
+          ? (process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'https://timetable-scheduling.vercel.app')
+          : 'http://localhost:3000'
+        
+        const emailApiUrl = `${baseUrl}/api/send-email`
+        
+        console.log('📧 Email API URL:', emailApiUrl)
+        console.log('📧 Environment:', process.env.NODE_ENV)
+        
+        const emailResponse = await fetch(emailApiUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -100,11 +111,30 @@ export async function POST(request: NextRequest) {
           })
         })
 
-        console.log('✅ Rejection email sent to:', requestData.email)
-      } catch (emailError) {
-        console.error('❌ Error sending rejection email:', emailError)
+        console.log('📧 Email API response status:', emailResponse.status)
+        
+        if (!emailResponse.ok) {
+          const errorText = await emailResponse.text()
+          console.error('❌ Email API returned error status:', emailResponse.status)
+          console.error('❌ Error response:', errorText)
+          throw new Error(`Email API returned status ${emailResponse.status}`)
+        }
+        
+        const emailResult = await emailResponse.json()
+        
+        if (emailResult.success) {
+          console.log('✅ Rejection email sent successfully to:', requestData.email)
+          console.log('📬 Message ID:', emailResult.messageId)
+        } else {
+          console.error('❌ Email API returned error:', emailResult.error || emailResult.message)
+        }
+      } catch (emailError: any) {
+        console.error('❌ Error sending rejection email:', emailError.message)
+        console.error('❌ Full error:', emailError)
         // Don't fail the request if email fails
       }
+    } else {
+      console.warn('⚠️ No email address found for request:', requestId)
     }
 
     return NextResponse.json({

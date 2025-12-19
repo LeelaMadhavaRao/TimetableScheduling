@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getSupabaseServerClient } from "@/lib/server"
+import { generateRequestRejectedEmail } from "@/lib/email-templates"
 
 // Reject registration request
 export async function POST(request: NextRequest) {
@@ -49,6 +50,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Get request details before rejecting (to get email)
+    const { data: requestData } = await supabase
+      .from('registration_requests')
+      .select('name, email')
+      .eq('id', requestId)
+      .single()
+
     // Call RPC function to reject request
     const { data, error } = await supabase.rpc(
       "reject_registration_request",
@@ -72,9 +80,36 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(data, { status: 400 })
     }
 
+    // Send rejection email
+    if (requestData && requestData.email) {
+      try {
+        const emailData = generateRequestRejectedEmail({
+          name: requestData.name,
+          reason: rejectionReason
+        })
+
+        // Call email API
+        await fetch(`${process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'http://localhost:3000'}/api/send-email`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            to: requestData.email,
+            subject: emailData.subject,
+            html: emailData.html,
+            text: emailData.text
+          })
+        })
+
+        console.log('✅ Rejection email sent to:', requestData.email)
+      } catch (emailError) {
+        console.error('❌ Error sending rejection email:', emailError)
+        // Don't fail the request if email fails
+      }
+    }
+
     return NextResponse.json({
       success: true,
-      message: "Registration request rejected successfully",
+      message: "Registration request rejected successfully. Email sent to user.",
       data: data
     })
 

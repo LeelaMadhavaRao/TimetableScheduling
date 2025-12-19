@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getSupabaseServerClient, getCurrentAdminId } from "@/lib/server"
+import { generateRequestApprovedEmail } from "@/lib/email-templates"
 
 // Approve registration request
 export async function POST(request: NextRequest) {
@@ -68,9 +69,39 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(data, { status: 400 })
     }
 
+    // Send approval email with credentials
+    if (data && data.username && data.email && data.name) {
+      try {
+        const loginUrl = `${process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'http://localhost:3000'}/login`
+        const emailData = generateRequestApprovedEmail({
+          name: data.name,
+          username: data.username,
+          password: data.temp_password || data.password,
+          loginUrl
+        })
+
+        // Call email API
+        await fetch(`${process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'http://localhost:3000'}/api/send-email`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            to: data.email,
+            subject: emailData.subject,
+            html: emailData.html,
+            text: emailData.text
+          })
+        })
+
+        console.log('✅ Approval email sent to:', data.email)
+      } catch (emailError) {
+        console.error('❌ Error sending approval email:', emailError)
+        // Don't fail the request if email fails
+      }
+    }
+
     return NextResponse.json({
       success: true,
-      message: "Registration request approved successfully",
+      message: "Registration request approved successfully. Email sent to user.",
       data: data
     })
 

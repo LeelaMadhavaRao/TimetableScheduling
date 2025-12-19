@@ -8,6 +8,7 @@ import ClickSpark from "@/components/ClickSpark"
 import { useAuth } from "@/contexts/AuthContext"
 import { useRouter } from "next/navigation"
 import { useEffect } from "react"
+import { RegistrationRequestDialog } from "@/components/registration-request-dialog"
 
 export default function HomePage() {
   const { isAuthenticated, role, user, isLoading } = useAuth()
@@ -90,6 +91,14 @@ export default function HomePage() {
               </Link>
             </div>
           )}
+
+          {/* Registration Request Button - Always visible for new users */}
+          <div className="mt-8 text-center">
+            <p className="text-slate-300 mb-4">
+              Want to manage timetables for your institution?
+            </p>
+            <RegistrationRequestDialog />
+          </div>
         </div>
 
         {/* Key Features Section */}

@@ -51,77 +51,17 @@ function generateSessionToken(): string {
 
 // Admin Login
 export async function loginAdmin(username: string, password: string): Promise<AuthResult> {
-  const supabase = getSupabaseBrowserClient();
-  
   try {
-    // Verify admin credentials
-    const { data: admin, error } = await supabase
-      .rpc('verify_admin_login', { 
-        p_username: username, 
-        p_password: password 
-      });
-    
-    if (error || !admin || admin.length === 0) {
-      // Fallback: direct query with password verification
-      const { data: adminData, error: adminError } = await supabase
-        .from('admin_users')
-        .select('id, username, name, email, is_active, password_hash')
-        .eq('username', username)
-        .eq('is_active', true)
-        .single();
-      
-      if (adminError || !adminData) {
-        return { success: false, message: 'Invalid username or password' };
-      }
-      
-      // Verify password using RPC
-      const { data: isValid } = await supabase
-        .rpc('verify_password', { 
-          stored_hash: adminData.password_hash, 
-          input_password: password 
-        });
-      
-      if (!isValid) {
-        return { success: false, message: 'Invalid username or password' };
-      }
-      
-      // Create session
-      const sessionToken = generateSessionToken();
-      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(); // 24 hours
-      
-      const { data: session, error: sessionError } = await supabase
-        .from('user_sessions')
-        .insert({
-          user_id: adminData.id,
-          user_type: 'admin',
-          session_token: sessionToken,
-          expires_at: expiresAt
-        })
-        .select()
-        .single();
-      
-      if (sessionError) {
-        return { success: false, message: 'Failed to create session' };
-      }
-      
-      // Update last login
-      await supabase
-        .from('admin_users')
-        .update({ last_login: new Date().toISOString() })
-        .eq('id', adminData.id);
-      
-      const { password_hash, ...safeAdmin } = adminData;
-      
-      return {
-        success: true,
-        message: 'Login successful',
-        user: safeAdmin as AdminUser,
-        session,
-        role: 'admin'
-      };
-    }
-    
-    return { success: false, message: 'Invalid username or password' };
+    const response = await fetch('/api/auth/login-admin', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ username, password }),
+    });
+
+    const result = await response.json();
+    return result;
   } catch (err) {
     console.error('Admin login error:', err);
     return { success: false, message: 'An error occurred during login' };
@@ -130,65 +70,17 @@ export async function loginAdmin(username: string, password: string): Promise<Au
 
 // Timetable Administrator Login
 export async function loginTimetableAdmin(username: string, password: string): Promise<AuthResult> {
-  const supabase = getSupabaseBrowserClient();
-  
   try {
-    const { data: adminData, error: adminError } = await supabase
-      .from('timetable_administrators')
-      .select('id, username, name, email, phone, institution_name, is_active, password_hash')
-      .eq('username', username)
-      .eq('is_active', true)
-      .single();
-    
-    if (adminError || !adminData) {
-      return { success: false, message: 'Invalid username or password' };
-    }
-    
-    // Verify password
-    const { data: isValid } = await supabase
-      .rpc('verify_password', { 
-        stored_hash: adminData.password_hash, 
-        input_password: password 
-      });
-    
-    if (!isValid) {
-      return { success: false, message: 'Invalid username or password' };
-    }
-    
-    // Create session
-    const sessionToken = generateSessionToken();
-    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-    
-    const { data: session, error: sessionError } = await supabase
-      .from('user_sessions')
-      .insert({
-        user_id: adminData.id,
-        user_type: 'timetable_admin',
-        session_token: sessionToken,
-        expires_at: expiresAt
-      })
-      .select()
-      .single();
-    
-    if (sessionError) {
-      return { success: false, message: 'Failed to create session' };
-    }
-    
-    // Update last login
-    await supabase
-      .from('timetable_administrators')
-      .update({ last_login: new Date().toISOString() })
-      .eq('id', adminData.id);
-    
-    const { password_hash, ...safeAdmin } = adminData;
-    
-    return {
-      success: true,
-      message: 'Login successful',
-      user: safeAdmin as TimetableAdministrator,
-      session,
-      role: 'timetable_admin'
-    };
+    const response = await fetch('/api/auth/login-timetable-admin', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ username, password }),
+    });
+
+    const result = await response.json();
+    return result;
   } catch (err) {
     console.error('Timetable admin login error:', err);
     return { success: false, message: 'An error occurred during login' };

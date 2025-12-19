@@ -10,7 +10,6 @@ import type { Classroom } from "@/lib/database"
 import { ClassroomDialog } from "./classroom-dialog"
 import { getSupabaseBrowserClient } from "@/lib/client"
 import { useRouter } from "next/navigation"
-import ClickSpark from "@/components/ClickSpark"
 
 interface ClassroomListProps {
   classrooms: Classroom[]
@@ -113,17 +112,15 @@ export function ClassroomList({ classrooms: initialClassrooms }: ClassroomListPr
                     <div className="flex justify-end gap-2">
                       <ClassroomDialog
                         classroom={classroom}
-                        trigger={<ClickSpark sparkColor="#10b981" sparkSize={8} sparkRadius={12} sparkCount={6} duration={350}>
+                        trigger={
                           <Button variant="outline" size="sm">
                             <Edit className="w-4 h-4 text-black" />
                           </Button>
-                        </ClickSpark>}
+                        }
                       />
-                      <ClickSpark sparkColor="#ef4444" sparkSize={8} sparkRadius={12} sparkCount={6} duration={350}>
-                        <Button variant="outline" size="sm" onClick={() => handleDelete(classroom.id)}>
-                          <Trash2 className="w-4 h-4 text-red-400" />
-                        </Button>
-                      </ClickSpark>
+                      <Button variant="outline" size="sm" onClick={() => handleDelete(classroom.id)}>
+                        <Trash2 className="w-4 h-4 text-red-400" />
+                      </Button>
                     </div>
                   </TableCell>
                 </TableRow>

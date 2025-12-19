@@ -11,7 +11,6 @@ import { SectionDialog } from "./section-dialog"
 import { SectionSubjectsDialog } from "./section-subjects-dialog"
 import { getSupabaseBrowserClient } from "@/lib/client"
 import { useRouter } from "next/navigation"
-import ClickSpark from "@/components/ClickSpark"
 
 interface SectionWithDetails extends Section {
   departments?: Department | null
@@ -124,33 +123,29 @@ export function SectionList({ sections: initialSections, departments, subjects }
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
-                      <ClickSpark sparkColor="#8b5cf6" sparkSize={8} sparkRadius={12} sparkCount={6} duration={350}>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            setSelectedSection(section)
-                            setShowSubjects(true)
-                          }}
-                        >
-                          <BookOpen className="w-4 h-4 text-black" />
-                        </Button>
-                      </ClickSpark>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setSelectedSection(section)
+                          setShowSubjects(true)
+                        }}
+                      >
+                        <BookOpen className="w-4 h-4 text-black" />
+                      </Button>
                       <SectionDialog
                         section={section}
                         departments={departments}
                         subjects={subjects}
-                        trigger={<ClickSpark sparkColor="#10b981" sparkSize={8} sparkRadius={12} sparkCount={6} duration={350}>
+                        trigger={
                           <Button variant="outline" size="sm">
                             <Edit className="w-4 h-4 text-black" />
                           </Button>
-                        </ClickSpark>}
+                        }
                       />
-                      <ClickSpark sparkColor="#ef4444" sparkSize={8} sparkRadius={12} sparkCount={6} duration={350}>
-                        <Button variant="outline" size="sm" onClick={() => handleDelete(section.id)}>
-                          <Trash2 className="w-4 h-4 text-red-400" />
-                        </Button>
-                      </ClickSpark>
+                      <Button variant="outline" size="sm" onClick={() => handleDelete(section.id)}>
+                        <Trash2 className="w-4 h-4 text-red-400" />
+                      </Button>
                     </div>
                   </TableCell>
                 </TableRow>

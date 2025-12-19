@@ -11,7 +11,6 @@ import { FacultyDialog } from "./faculty-dialog"
 import { AvailabilityDialog } from "./availability-dialog"
 import { getSupabaseBrowserClient } from "@/lib/client"
 import { useRouter } from "next/navigation"
-import ClickSpark from "@/components/ClickSpark"
 
 interface FacultyWithDept extends Faculty {
   departments?: Department | null

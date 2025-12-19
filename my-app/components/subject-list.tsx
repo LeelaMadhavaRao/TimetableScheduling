@@ -10,7 +10,6 @@ import type { Subject, Department, Faculty } from "@/lib/database"
 import { SubjectDialog } from "./subject-dialog"
 import { getSupabaseBrowserClient } from "@/lib/client"
 import { useRouter } from "next/navigation"
-import ClickSpark from "@/components/ClickSpark"
 
 interface SubjectWithDetails extends Subject {
   departments?: Department | null
@@ -136,17 +135,15 @@ export function SubjectList({ subjects: initialSubjects, departments, faculty }:
                         subject={subject}
                         departments={departments}
                         faculty={faculty}
-                        trigger={<ClickSpark sparkColor="#10b981" sparkSize={8} sparkRadius={12} sparkCount={6} duration={350}>
+                        trigger={
                           <Button variant="outline" size="sm">
                             <Edit className="w-4 h-4 text-black" />
                           </Button>
-                        </ClickSpark>}
+                        }
                       />
-                      <ClickSpark sparkColor="#ef4444" sparkSize={8} sparkRadius={12} sparkCount={6} duration={350}>
-                        <Button variant="outline" size="sm" onClick={() => handleDelete(subject.id)}>
-                          <Trash2 className="w-4 h-4 text-red-400" />
-                        </Button>
-                      </ClickSpark>
+                      <Button variant="outline" size="sm" onClick={() => handleDelete(subject.id)}>
+                        <Trash2 className="w-4 h-4 text-red-400" />
+                      </Button>
                     </div>
                   </TableCell>
                 </TableRow>

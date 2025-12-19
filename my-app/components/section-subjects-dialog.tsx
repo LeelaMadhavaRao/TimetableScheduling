@@ -98,11 +98,11 @@ export function SectionSubjectsDialog({ section, subjects, open, onOpenChange }:
         </DialogHeader>
 
         <div className="space-y-4 max-h-[70vh] overflow-y-auto">
-          <div className="border rounded-lg p-4">
-            <h4 className="font-semibold mb-3">Add Subject</h4>
+          <div className="border border-slate-600 rounded-lg p-4 bg-slate-700/30">
+            <h4 className="font-semibold mb-3 text-white">Add Subject</h4>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
-                <Label>Subject</Label>
+                <Label className="text-white">Subject</Label>
                 <Select
                   value={selectedSubject}
                   onValueChange={(value) => {
@@ -123,7 +123,7 @@ export function SectionSubjectsDialog({ section, subjects, open, onOpenChange }:
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>Faculty</Label>
+                <Label className="text-white">Faculty</Label>
                 <Select value={selectedFaculty} onValueChange={setSelectedFaculty} disabled={!selectedSubject}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select faculty" />
@@ -150,22 +150,22 @@ export function SectionSubjectsDialog({ section, subjects, open, onOpenChange }:
           </div>
 
           <div className="space-y-2">
-            <h4 className="font-semibold">Assigned Subjects</h4>
+            <h4 className="font-semibold text-white">Assigned Subjects</h4>
             {loading ? (
-              <p className="text-sm text-muted-foreground">Loading...</p>
+              <p className="text-sm text-slate-400">Loading...</p>
             ) : sectionSubjects.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No subjects assigned yet</p>
+              <p className="text-sm text-slate-400">No subjects assigned yet</p>
             ) : (
               <div className="space-y-2">
                 {sectionSubjects.map((ss) => (
-                  <div key={ss.id} className="flex items-center justify-between p-3 border rounded">
+                  <div key={ss.id} className="flex items-center justify-between p-3 border border-slate-600 rounded bg-slate-700/50">
                     <div className="flex items-center gap-3">
                       <div>
-                        <div className="font-medium">
+                        <div className="font-medium text-white">
                           {ss.subjects?.name} - {ss.faculty?.code}
                         </div>
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <Badge variant="outline" className="text-xs">
+                        <div className="flex items-center gap-2 text-sm text-slate-300">
+                          <Badge variant="outline" className="text-xs text-white">
                             {ss.subjects?.code}
                           </Badge>
                           <Badge
@@ -174,7 +174,7 @@ export function SectionSubjectsDialog({ section, subjects, open, onOpenChange }:
                           >
                             {ss.subjects?.subject_type}
                           </Badge>
-                          <span>{ss.subjects?.periods_per_week} periods/week</span>
+                          <span className="text-slate-300">{ss.subjects?.periods_per_week} periods/week</span>
                         </div>
                       </div>
                     </div>

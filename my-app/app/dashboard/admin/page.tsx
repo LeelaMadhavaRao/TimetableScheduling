@@ -41,9 +41,12 @@ import {
   Eye,
   EyeOff,
   CheckCircle,
-  XCircle
+  XCircle,
+  UserPlus,
+  Bell
 } from "lucide-react";
 import ClickSpark from "@/components/ClickSpark";
+import Link from "next/link";
 
 export default function AdminDashboardPage() {
   const { user, logout, isLoading: authLoading } = useAuth();
@@ -228,16 +231,27 @@ export default function AdminDashboardPage() {
               <p className="text-sm text-slate-400">Welcome, {adminUser?.name || 'Admin'}</p>
             </div>
           </div>
-          <ClickSpark sparkColor="#ef4444">
-            <Button 
-              variant="outline" 
-              onClick={handleLogout}
-              className="border-slate-700 text-slate-300 hover:text-white hover:bg-slate-800"
-            >
-              <LogOut className="h-4 w-4 mr-2" />
-              Logout
-            </Button>
-          </ClickSpark>
+          <div className="flex items-center gap-3">
+            <Link href="/dashboard/admin/registration-requests">
+              <Button 
+                variant="outline" 
+                className="border-slate-700 text-slate-300 hover:text-white hover:bg-slate-800"
+              >
+                <UserPlus className="h-4 w-4 mr-2" />
+                Registration Requests
+              </Button>
+            </Link>
+            <ClickSpark sparkColor="#ef4444">
+              <Button 
+                variant="outline" 
+                onClick={handleLogout}
+                className="border-slate-700 text-slate-300 hover:text-white hover:bg-slate-800"
+              >
+                <LogOut className="h-4 w-4 mr-2" />
+                Logout
+              </Button>
+            </ClickSpark>
+          </div>
         </div>
       </header>
 

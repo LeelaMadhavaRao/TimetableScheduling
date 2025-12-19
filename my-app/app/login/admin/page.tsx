@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/contexts/AuthContext";
 import { loginAdmin } from "@/lib/auth";
-import { Shield, Eye, EyeOff, Loader2 } from "lucide-react";
+import { Shield, Eye, EyeOff, Loader2, Home, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 
 export default function AdminLoginPage() {
@@ -46,6 +46,14 @@ export default function AdminLoginPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
+        <div className="mb-4">
+          <Link href="/">
+            <Button variant="ghost" className="text-slate-400 hover:text-white hover:bg-slate-800">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to Home
+            </Button>
+          </Link>
+        </div>
         <Card className="border-purple-500/20 bg-slate-900/90 backdrop-blur-xl shadow-2xl">
           <CardHeader className="text-center pb-2">
             <div className="mx-auto mb-4 h-16 w-16 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">

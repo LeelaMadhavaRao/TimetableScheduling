@@ -2520,6 +2520,26 @@ Deno.serve(async (req) => {
       fallbackMessage: `⚠️ Due to tight room capacity, ${reducedCourses.length} theory subject(s) were reduced from 4 to 2 periods/week to fit the schedule`
     } : null
 
+    // 📱 Trigger WhatsApp notifications to faculty
+    console.log("[Edge Function] 📱 Sending WhatsApp notifications to faculty...")
+    try {
+      const notificationResponse = await supabase.functions.invoke('notify-faculty-timetable', {
+        body: {
+          jobId: job.id,
+          timetableType: 'base'
+        }
+      })
+      
+      if (notificationResponse.error) {
+        console.error("[Edge Function] ❌ Notification error:", notificationResponse.error)
+      } else {
+        console.log("[Edge Function] ✅ Notifications sent:", notificationResponse.data)
+      }
+    } catch (notifyError) {
+      console.error("[Edge Function] ❌ Failed to send notifications:", notifyError)
+      // Don't fail the job if notifications fail
+    }
+
     return new Response(
       JSON.stringify({
         success: true,

@@ -57,14 +57,14 @@ const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'
 
 // Period timings
 const PERIOD_TIMINGS: Record<number, string> = {
-  1: '09:00 - 09:55',
-  2: '09:55 - 10:50',
-  3: '11:10 - 12:05',
-  4: '12:05 - 01:00',
-  5: '02:00 - 02:55',
-  6: '02:55 - 03:50',
-  7: '04:00 - 04:55',
-  8: '04:55 - 05:50',
+  1: '09:00 AM - 09:45 AM',
+  2: '09:45 AM - 10:30 AM',
+  3: '10:30 AM - 11:15 AM',
+  4: '11:15 AM - 12:00 PM',
+  5: '01:30 PM - 02:15 PM',
+  6: '02:15 PM - 03:00 PM',
+  7: '03:00 PM - 03:45 PM',
+  8: '03:45 PM - 04:30 PM',
 }
 
 // Format phone number to international format for WATI
@@ -162,14 +162,14 @@ async function generateAndUploadFacultyPDF(
     // Build table data
     const tableData: any[] = []
     const PERIOD_TIMES: Record<number, string> = {
-      1: '09:00-09:55',
-      2: '09:55-10:50',
-      3: '11:10-12:05',
-      4: '12:05-01:00',
-      5: '02:00-02:55',
-      6: '02:55-03:50',
-      7: '04:00-04:55',
-      8: '04:55-05:50'
+      1: '09:00-09:45',
+      2: '09:45-10:30',
+      3: '10:30-11:15',
+      4: '11:15-12:00',
+      5: '01:30-02:15',
+      6: '02:15-03:00',
+      7: '03:00-03:45',
+      8: '03:45-04:30'
     }
     
     for (let period = 1; period <= 8; period++) {

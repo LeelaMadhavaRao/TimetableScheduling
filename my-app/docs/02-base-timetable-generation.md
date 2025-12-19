@@ -2,11 +2,41 @@
 
 ## Overview
 
-The base timetable generation is the first phase of the scheduling process. It creates a **valid, conflict-free schedule** that satisfies all hard constraints. This process now uses an **external ILP solver microservice** for lab scheduling and a local constraint-based greedy algorithm for theory classes.
+The base timetable generation is the first phase of the scheduling process. It creates a **valid, conflict-free schedule** that satisfies all hard constraints. This process uses:
 
-## Architecture Changes
+1. **External ILP solver** (OR-Tools CP-SAT on Render.com) for lab scheduling
+2. **Enhanced greedy algorithm** with multiple ordering strategies for theory classes
+3. **Day-balancing constraint** to distribute faculty workload evenly
+4. **Dynamic availability tracking** to prevent conflicts in real-time
 
-**Key Update**: Labs are now scheduled using an external Python microservice (OR-Tools CP-SAT solver) for optimal constraint satisfaction, while theory classes use a local greedy algorithm with improved distribution.
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    generate-base-timetable Edge Function                     │
+│                         (2500+ lines TypeScript)                             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  ┌──────────────────────────┐    ┌──────────────────────────────────────┐  │
+│  │      PHASE 1: LABS       │    │         PHASE 2: THEORY              │  │
+│  │  ────────────────────    │    │  ──────────────────────────────────  │  │
+│  │  External ILP Solver     │    │  Phase 2A: Enhanced Greedy (15 tries)│  │
+│  │  (OR-Tools CP-SAT)       │    │  Phase 2B: ILP Fallback if <80%      │  │
+│  │  3-period consecutive    │    │  2 periods/day max per subject       │  │
+│  │  blocks                  │    │  Day-balancing constraint            │  │
+│  └──────────────────────────┘    └──────────────────────────────────────┘  │
+│                                                                              │
+│  ┌──────────────────────────────────────────────────────────────────────┐  │
+│  │                    CONSTRAINT TRACKING SYSTEM                         │  │
+│  │  ─────────────────────────────────────────────────────────────────   │  │
+│  │  • facultySchedule: Map<facultyId, Set<"day-period">>                │  │
+│  │  • roomSchedule: Map<roomId, Set<"day-period">>                      │  │
+│  │  • sectionSchedule: Map<sectionId, Set<"day-period">>                │  │
+│  │  • facultyDynamicAvailability: Real-time available slots             │  │
+│  │  • facultyTheoryDayLoad: Theory-only periods per day (for balancing) │  │
+│  └──────────────────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
 
 ## Entry Point: Edge Function
 
@@ -23,410 +53,414 @@ Headers: {
 Body: { adminId: string }  // Optional, for multi-tenant filtering
 ```
 
-### Step-by-Step Process
+## Key Data Structures
 
-#### Step 1: Initialize Job
+### Course Assignment
+
 ```typescript
-// Create a new job to track progress
-const { data: job } = await supabase
-  .from("timetable_jobs")
-  .insert({
-    status: "generating_base",
-    progress: 10,
-    message: "Fetching data...",
-    created_by: adminId
-  })
-  .select()
-  .single()
-```
-
-#### Step 2: Clean Previous Data
-```typescript
-// Delete old timetables for this administrator
-await supabase.from("timetable_optimized").delete().eq("created_by", adminId)
-await supabase.from("timetable_base").delete().eq("created_by", adminId)
-await supabase.from("timetable_jobs").delete().eq("created_by", adminId)
-```
-
-#### Step 3: Fetch Required Data
-```typescript
-// 1. Section-Subject assignments (what each section studies)
-const { data: sectionSubjects } = await supabase
-  .from("section_subjects")
-  .select("*, sections(*), subjects(*), faculty(*)")
-  .in("section_id", sectionIds)
-
-// 2. Available classrooms
-const { data: classrooms } = await supabase
-  .from("classrooms")
-  .select("*")
-  .eq("created_by", adminId)
-
-// 3. Faculty availability windows
-const { data: availability } = await supabase
-  .from("faculty_availability")
-  .select("*")
-  .in("faculty_id", facultyIds)
-```
-
-#### Step 4: Transform Data for Solver
-```typescript
-// Convert database records to solver-friendly format
-const courses: CourseAssignment[] = sectionSubjects.map((ss) => ({
-  sectionId: ss.section_id,
-  sectionName: ss.sections.name,
-  subjectId: ss.subject_id,
-  subjectName: ss.subjects.name,
-  subjectCode: ss.subjects.code,
-  subjectType: ss.subjects.subject_type,      // "theory" | "lab"
-  periodsPerWeek: ss.subjects.periods_per_week,
-  facultyId: ss.faculty_id,
-  facultyCode: ss.faculty.code,
-  studentCount: ss.sections.student_count,
-  yearLevel: ss.sections.year_level,
-}))
-
-// NEW: Separate labs and theory for different scheduling approaches
-const labCourses = courses.filter(c => c.subjectType === "lab")
-const theoryCourses = courses.filter(c => c.subjectType === "theory")
-```
-
-#### Step 5: Call External ILP Solver for Labs
-```typescript
-// PHASE 1: Schedule all labs using external OR-Tools CP-SAT solver
-const ilpResponse = await fetch(`${ILP_SOLVER_URL}/solve-labs`, {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({
-    courses: labCourses.map(c => ({
-      sectionId: c.sectionId,
-      sectionName: c.sectionName,
-      subjectId: c.subjectId,
-      subjectCode: c.subjectCode,
-      facultyId: c.facultyId,
-      facultyCode: c.facultyCode,
-      studentCount: c.studentCount,
-      yearLevel: c.yearLevel
-    })),
-    rooms: classrooms.filter(r => r.roomType === "lab"),
-    facultyAvailability: facultyAvailabilityForSolver,
-    rules: {
-      labPeriods: 4,
-      daysPerWeek: 6,
-      periodsPerDay: 8
-    }
-  })
-})
-
-const { success, assignments, status } = await ilpResponse.json()
-```
-
-#### Step 6: Schedule Theory Classes Locally
-```typescript
-// PHASE 2: Schedule theory classes using local greedy algorithm
-// Theory classes are distributed with max 2 consecutive periods
-const THEORY_RULES = {
-  MAX_THEORY_PERIODS_PER_DAY_PER_SUBJECT: 2,  // No more than 2 periods of same subject per day
-  MAX_THEORY_BLOCK_SIZE: 2,                    // Maximum consecutive periods
-  MAX_SECTION_PERIODS_PER_DAY: 6,              // Total limit per section
-}
-
-for (const course of theoryCourses) {
-  let periodsScheduled = 0
-  while (periodsScheduled < course.periodsPerWeek) {
-    const remainingPeriods = course.periodsPerWeek - periodsScheduled
-    const periodsToSchedule = Math.min(THEORY_RULES.MAX_THEORY_PERIODS_PER_DAY_PER_SUBJECT, remainingPeriods)
-    
-    const slot = findTheorySlot(course, periodsToSchedule)
-    if (slot) {
-      addSlot(course, slot.day, slot.startPeriod, slot.endPeriod, slot.classroomId)
-      periodsScheduled += periodsToSchedule
-    }
-  }
+interface CourseAssignment {
+  sectionId: string       // UUID
+  sectionName: string     // e.g., "CSE-2A"
+  subjectId: string       // UUID
+  subjectName: string     // e.g., "Data Structures"
+  subjectCode: string     // e.g., "CS201"
+  subjectType: "theory" | "lab"
+  periodsPerWeek: number  // 3-4 for labs, 4 for theory
+  facultyId: string       // UUID
+  facultyCode: string     // e.g., "CSE-F001"
+  studentCount: number    // For room capacity matching
+  yearLevel: number       // 1-4 (affects Saturday restrictions)
 }
 ```
 
-#### Step 6: Save Results
-```typescript
-// Save all generated slots to database
-const slotsToInsert = timetableSlots.map((slot) => ({
-  job_id: job.id,
-  section_id: slot.sectionId,
-  subject_id: slot.subjectId,
-  faculty_id: slot.facultyId,
-  classroom_id: slot.classroomId,
-  day_of_week: slot.day,
-  start_period: slot.startPeriod,
-  end_period: slot.endPeriod,
-  created_by: adminId
-}))
+### Timetable Slot
 
-await supabase.from("timetable_base").insert(slotsToInsert)
+```typescript
+interface TimetableSlot {
+  sectionId: string
+  subjectId: string
+  facultyId: string
+  classroomId: string
+  day: DayOfWeek        // 0-5 (Mon-Sat)
+  startPeriod: Period   // 1-8
+  endPeriod: Period     // 1-8
+}
 ```
 
-## Local ILP Generator
+## ILPTimetableGenerator Class
 
-**File**: `lib/ilp-generator.ts`
+### Constructor Initialization
 
-The local ILP generator uses a **greedy constraint satisfaction** approach (not true ILP, but constraint-based scheduling).
-
-### Data Structures
+The constructor performs critical setup:
 
 ```typescript
-class ILPTimetableGenerator {
-  private courses: CourseAssignment[]       // Courses to schedule
-  private classrooms: ClassroomOption[]     // Available rooms
-  private facultyAvailability: Map<string, FacultyAvailabilitySlot[]>
-  private timetable: TimetableSlot[] = []   // Generated schedule
+constructor(courses, classrooms, facultyAvailability) {
+  // 1. Initialize constraint tracking maps
+  this.facultySchedule = new Map()   // Tracks all faculty bookings
+  this.roomSchedule = new Map()       // Tracks all room bookings
+  this.sectionSchedule = new Map()    // Tracks all section bookings
   
-  // Constraint tracking maps (key: "day-period")
-  private facultySchedule: Map<string, Set<string>>   // Faculty bookings
-  private roomSchedule: Map<string, Set<string>>      // Room bookings
-  private sectionSchedule: Map<string, Set<string>>   // Section bookings
-  private courseProgress: Map<string, number>         // Periods scheduled per course
-}
-```
-
-### Two-Phase Scheduling
-
-#### Phase 1: Schedule Labs First
-```typescript
-generate(): TimetableSlot[] {
-  // Labs are harder to schedule (4 consecutive periods)
-  // So they get priority
-  const labCourses = this.courses.filter((c) => c.subjectType === "lab")
-  const theoryCourses = this.courses.filter((c) => c.subjectType === "theory")
-
-  console.log("[Phase 1] Scheduling", labCourses.length, "lab courses")
-  for (const course of labCourses) {
-    this.scheduleCourse(course)
-  }
-
-  console.log("[Phase 2] Scheduling", theoryCourses.length, "theory courses")
-  for (const course of theoryCourses) {
-    this.scheduleCourse(course)
-  }
-
-  return this.timetable
-}
-```
-
-### Lab Slot Finding Algorithm
-
-```typescript
-private findLabSlot(course: CourseAssignment): SlotResult | null {
-  // Labs need 4 consecutive periods in the same block
-  const labRooms = this.classrooms.filter((r) => 
-    r.roomType === "lab" && r.capacity >= course.studentCount
-  )
-
-  // Priority order: Mon-Fri morning, Saturday morning
-  const daysToTry: DayOfWeek[] = [0, 1, 2, 3, 4, 5]  // Mon-Sat
-
-  for (const day of daysToTry) {
-    if (day === 5) {
-      // Saturday: Only morning (P1-4) normally
-      const slot = this.tryLabSlot(course, labRooms, day, 1, 4)
-      if (slot) return slot
-
-      // Saturday afternoon for first year only
-      if (course.yearLevel === 1) {
-        const afternoonSlot = this.tryLabSlot(course, labRooms, day, 5, 8)
-        if (afternoonSlot) return afternoonSlot
-      }
-    } else {
-      // Weekdays: try all possible 4-period windows
-      for (let start = 1; start <= 5; start++) {
-        const end = start + 3  // 4 consecutive periods
-        if (end <= 8) {
-          const slot = this.tryLabSlot(course, labRooms, day, start, end)
-          if (slot) return slot
-        }
+  // 2. Initialize DYNAMIC availability from declared availability
+  // ALL faculty get availability initialized (including theory-only)
+  for (const facultyId of allFacultyIds) {
+    const availableSlots = new Set<string>()
+    // Add all declared available periods
+    for (const avail of facultyAvailability) {
+      for (let p = avail.startPeriod; p <= avail.endPeriod; p++) {
+        availableSlots.add(`${avail.dayOfWeek}-${p}`)
       }
     }
+    this.facultyDynamicAvailability.set(facultyId, availableSlots)
   }
-
-  return null  // No valid slot found
+  
+  // 3. Calculate faculty THEORY workload for day-balancing
+  const theoryCourses = courses.filter(c => c.subjectType === 'theory')
+  for (const course of theoryCourses) {
+    const current = this.facultyTotalWorkload.get(course.facultyId) || 0
+    this.facultyTotalWorkload.set(course.facultyId, current + course.periodsPerWeek)
+  }
+  
+  // 4. Calculate max periods per day for each faculty
+  // Formula: ceil(totalWorkload / 6 days) + 3 buffer
+  for (const [facultyId, totalWorkload] of this.facultyTotalWorkload.entries()) {
+    const maxPerDay = Math.ceil(totalWorkload / 6) + 3
+    this.facultyMaxPerDay.set(facultyId, maxPerDay)
+  }
 }
 ```
 
-### Constraint Checking
+## PHASE 1: Lab Scheduling
+
+### External ILP Solver
+
+Labs are scheduled using an external OR-Tools CP-SAT solver for optimal constraint satisfaction:
 
 ```typescript
-private tryLabSlot(course, rooms, day, start, end): SlotResult | null {
-  // Check 1: Faculty available during these periods?
-  if (!this.isFacultyAvailable(course.facultyId, day, start, end)) {
+async scheduleLabsWithExternalSolver(labCourses: CourseAssignment[]): Promise<number> {
+  const response = await fetch(`${ILP_SOLVER_URL}/solve-labs`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      courses: labCourses.map(c => ({
+        sectionId: c.sectionId,
+        sectionName: c.sectionName,
+        subjectId: c.subjectId,
+        subjectCode: c.subjectCode,
+        facultyId: c.facultyId,
+        facultyCode: c.facultyCode,
+        studentCount: c.studentCount,
+        yearLevel: c.yearLevel
+      })),
+      rooms: this.classrooms.filter(r => r.roomType === "lab"),
+      facultyAvailability: this.formatFacultyAvailabilityForSolver(),
+      rules: {
+        labPeriods: RULES.LAB_PERIODS,  // 3 consecutive periods
+        daysPerWeek: 6,
+        periodsPerDay: 8
+      }
+    })
+  })
+  
+  const { success, assignments, status, message } = await response.json()
+  
+  if (success && assignments) {
+    // Apply ILP solution to local tracking
+    for (const assign of assignments) {
+      this.applyLabAssignment(assign)
+    }
+  }
+}
+```
+
+### Greedy Fallback for Labs
+
+If the external solver fails, a local greedy algorithm is used:
+
+```typescript
+private scheduleLabCourse(course: CourseAssignment): boolean {
+  const slot = this.findLabSlot(course)
+  if (slot) {
+    return this.addSlot(course, slot.day, slot.startPeriod, slot.endPeriod, slot.classroomId)
+  }
+  return false
+}
+```
+
+## PHASE 2: Theory Scheduling
+
+### Phase 2A: Enhanced Greedy Algorithm
+
+The theory scheduling uses a sophisticated multi-attempt greedy algorithm:
+
+```typescript
+// 15 attempts with different orderings
+// Attempts 1-10: Normal mode with day-balancing
+// Attempts 11-15: Relaxed mode (no day-balancing constraint)
+const NUM_ATTEMPTS = 15
+
+for (let attempt = 1; attempt <= NUM_ATTEMPTS; attempt++) {
+  // Reset to post-lab state for each attempt
+  this.resetToLabState(labTimetable, labFacultySchedule, ...)
+  
+  // RELAXED MODE: Disable day-balancing for attempts 11+
+  this.relaxedMode = attempt > 10
+  
+  // Determine ordering strategy
+  let orderedCourses: CourseAssignment[]
+  switch (attempt) {
+    case 1:  orderedCourses = this.orderBySectionFirst(theoryCourses); break
+    case 2:  orderedCourses = this.orderByMostConstrainedFirst(theoryCourses); break
+    case 3:  orderedCourses = this.orderByFacultyInterleaved(theoryCourses); break
+    case 4:  orderedCourses = this.prioritizeTheoryCourses(theoryCourses); break
+    case 5:  orderedCourses = this.orderBySectionFirst(theoryCourses).reverse(); break
+    default: orderedCourses = this.shuffleArray(theoryCourses); break
+  }
+  
+  // Schedule with this ordering
+  for (const course of orderedCourses) {
+    const progress = this.scheduleTheoryCourse(course)
+    totalPeriodsScheduled += progress
+  }
+  
+  // Track best result
+  if (totalPeriodsScheduled > bestGreedyResult.totalPeriods) {
+    bestGreedyResult = { timetable: [...this.timetable], ... }
+  }
+  
+  // Early exit if perfect schedule achieved
+  if (totalPeriodsScheduled === totalPeriodsNeeded) {
+    break
+  }
+}
+```
+
+### Ordering Strategies
+
+#### 1. Section-First Ordering
+Schedule all courses for each section together, preventing section fragmentation:
+
+```typescript
+orderBySectionFirst(courses: CourseAssignment[]): CourseAssignment[] {
+  // Group by section, sort sections by total faculty workload
+  // Within each section, sort by faculty workload (highest first)
+}
+```
+
+#### 2. Most-Constrained-First
+Prioritize courses with fewest scheduling options:
+
+```typescript
+orderByMostConstrainedFirst(courses: CourseAssignment[]): CourseAssignment[] {
+  // Score each course by constraint difficulty
+  // Sort by highest score (most constrained) first
+}
+```
+
+#### 3. Faculty-Interleaved
+Spread sections across faculty in round-robin:
+
+```typescript
+orderByFacultyInterleaved(courses: CourseAssignment[]): CourseAssignment[] {
+  // Group by faculty, pick one from each faculty in rotation
+}
+```
+
+### Theory Slot Finding Algorithm
+
+```typescript
+private findTheorySlot(course: CourseAssignment, periodsNeeded: number) {
+  const theoryRooms = this.classrooms.filter(r => 
+    r.roomType === "theory" && r.capacity >= course.studentCount
+  )
+  
+  // 1. Calculate section and faculty day loads
+  const sectionDayLoad = this.getSectionDayLoad(course.sectionId)
+  const facultyDayLoad = this.getFacultyDayLoad(course.facultyId)
+  
+  // 2. Sort days by COMBINED load (prefer less busy days)
+  const daysToTry = [0, 1, 2, 3, 4, 5].sort((a, b) => {
+    const aLoad = (sectionDayLoad.get(a) || 0) + (facultyDayLoad.get(a) || 0)
+    const bLoad = (sectionDayLoad.get(b) || 0) + (facultyDayLoad.get(b) || 0)
+    return aLoad - bLoad
+  })
+  
+  // PASS 1: Try preferred time slots (morning first)
+  const timeSlotPriority = [
+    { start: 1, end: 2 }, { start: 1, end: 3 }, { start: 2, end: 3 },
+    { start: 2, end: 4 }, { start: 5, end: 6 }, { start: 5, end: 7 }, ...
+  ]
+  
+  for (const day of daysToTry) {
+    for (const timeSlot of timeSlotPriority) {
+      const slot = this.tryTheorySlot(course, theoryRooms, day, timeSlot.start, timeSlot.end)
+      if (slot) return slot
+    }
+  }
+  
+  // PASS 2: Try ALL sequential slots
+  for (const day of daysToTry) {
+    for (let start = 1; start <= 8 - periodsNeeded + 1; start++) {
+      // Skip lunch crossing (periods 4-5)
+      if (start <= 4 && start + periodsNeeded - 1 > 4) continue
+      
+      const slot = this.tryTheorySlot(course, theoryRooms, day, start, start + periodsNeeded - 1)
+      if (slot) return slot
+    }
+  }
+  
+  return null
+}
+```
+
+### Constraint Checks in tryTheorySlot
+
+```typescript
+private tryTheorySlot(course, rooms, day, start, end) {
+  // CHECK 1: Section not already scheduled at this time
+  if (this.isSectionAlreadyScheduled(course.sectionId, day, start, end)) {
     return null
   }
 
-  // Check 2: Faculty consecutive teaching rule
-  if (!this.checkFacultyConsecutiveRule(course.facultyId, day, start)) {
+  // CHECK 2: Faculty DYNAMIC availability (updated after each assignment)
+  if (!this.isFacultyDynamicallyAvailable(course.facultyId, day, start, end)) {
     return null
   }
 
-  // Check 3: Section not already booked?
-  if (!this.isSectionAvailable(course.sectionId, day, start, end)) {
+  // CHECK 3: Section daily limit + subject daily limit
+  // MAX_SECTION_PERIODS_PER_DAY = 6, MAX_THEORY_PERIODS_PER_DAY_PER_SUBJECT = 2
+  if (!this.canScheduleTheoryOnDay(course.sectionId, day, end - start + 1, course.subjectId)) {
+    return null
+  }
+  
+  // CHECK 4: Day-balancing for high-workload faculty
+  // CRITICAL: Uses getFacultyTheoryDayLoad() which counts ONLY theory periods
+  // This prevents lab periods from incorrectly blocking theory scheduling
+  if (!this.canFacultyTeachMoreOnDay(course.facultyId, day, end - start + 1)) {
     return null
   }
 
-  // Check 4: Find available room
+  // CHECK 5: Find available room
   for (const room of rooms) {
-    if (this.isRoomAvailable(room.id, day, start, end)) {
+    if (this.isRoomDynamicallyAvailable(room.id, day, start, end)) {
       return { day, startPeriod: start, endPeriod: end, classroomId: room.id }
     }
   }
-
+  
   return null
 }
 ```
 
-### Availability Checking Functions
+### Day-Balancing Constraint
+
+**CRITICAL FIX**: The day-balancing constraint only counts THEORY periods, not lab periods:
 
 ```typescript
-// Check if faculty is available (declared availability)
-private isFacultyAvailable(facultyId: string, day: DayOfWeek, start: Period, end: Period): boolean {
-  const availability = this.facultyAvailability.get(facultyId)
-  if (!availability || availability.length === 0) return true  // No restrictions
-
-  return availability.some((slot) => 
-    slot.dayOfWeek === day && 
-    slot.startPeriod <= start && 
-    slot.endPeriod >= end
-  )
+private canFacultyTeachMoreOnDay(facultyId: string, day: DayOfWeek, additionalPeriods: number): boolean {
+  // In relaxed mode, skip this constraint entirely
+  if (this.relaxedMode) return true
+  
+  const maxPerDay = this.facultyMaxPerDay.get(facultyId)
+  if (!maxPerDay) return true
+  
+  // CRITICAL: Count ONLY theory periods using getFacultyTheoryDayLoad()
+  // NOT lab periods. maxPerDay is calculated from theory workload only,
+  // so we must compare apples-to-apples.
+  const facultyTheoryDayLoad = this.getFacultyTheoryDayLoad(facultyId)
+  const currentLoad = facultyTheoryDayLoad.get(day) || 0
+  
+  return (currentLoad + additionalPeriods) <= maxPerDay
 }
 
-// Check section not double-booked
-private isSectionAvailable(sectionId: string, day: DayOfWeek, start: Period, end: Period): boolean {
-  const schedule = this.sectionSchedule.get(sectionId) || new Set()
-
-  for (let p = start; p <= end; p++) {
-    if (schedule.has(`${day}-${p}`)) {
-      return false  // Already has a class
+// Helper: Get THEORY-ONLY load per day for a faculty member
+private getFacultyTheoryDayLoad(facultyId: string): Map<DayOfWeek, number> {
+  const dayLoad = new Map<DayOfWeek, number>()
+  
+  for (const slot of this.timetable) {
+    if (slot.facultyId !== facultyId) continue
+    
+    // Look up the course to check if it's theory
+    const course = this.courses.find(
+      c => c.sectionId === slot.sectionId && c.subjectId === slot.subjectId
+    )
+    
+    // Only count theory courses (skip labs)
+    if (course && course.subjectType === 'theory') {
+      const periodsInSlot = slot.endPeriod - slot.startPeriod + 1
+      dayLoad.set(slot.day, (dayLoad.get(slot.day) || 0) + periodsInSlot)
     }
   }
-  return true
-}
-
-// Check room not double-booked
-private isRoomAvailable(roomId: string, day: DayOfWeek, start: Period, end: Period): boolean {
-  const schedule = this.roomSchedule.get(roomId) || new Set()
-
-  for (let p = start; p <= end; p++) {
-    if (schedule.has(`${day}-${p}`)) {
-      return false
-    }
-  }
-  return true
+  
+  return dayLoad
 }
 ```
 
-### Faculty Consecutive Rule
+### Phase 2B: ILP Fallback
 
-This rule prevents faculty fatigue by ensuring breaks between teaching blocks:
+If greedy achieves less than 80% success, ILP fallback is triggered:
 
 ```typescript
-private checkFacultyConsecutiveRule(facultyId: string, day: DayOfWeek, startPeriod: Period): boolean {
-  const schedule = this.facultySchedule.get(facultyId)
-  if (!schedule) return true
-
-  // Rule: If faculty teaches P1-2, they can't teach P3-4 (must wait until P5+)
-  if (startPeriod >= 3 && startPeriod <= 4) {
-    if (schedule.has(`${day}-1`) || schedule.has(`${day}-2`)) {
-      return false
-    }
+if (!greedyTheorySuccess) {
+  console.warn(`[Phase 2B] Greedy success rate below 80% - triggering ILP fallback...`)
+  
+  // Reset to post-lab state
+  this.resetToLabState(labTimetable, ...)
+  
+  const ilpResult = await this.scheduleTheoryWithILP(theoryCourses)
+  
+  if (ilpResult.success && ilpResult.periodsScheduled > 0) {
+    // Apply ILP solution
+  } else {
+    // Apply period reduction fallback
+    theoryCourses = this.applyTheoryPeriodReductionFallback(theoryCourses, theoryRooms)
+    // Retry ILP with reduced courses
   }
-
-  // Reverse: If teaching P3-4, can't have taught P1-2
-  if (startPeriod >= 1 && startPeriod <= 2) {
-    if (schedule.has(`${day}-3`) || schedule.has(`${day}-4`)) {
-      return false
-    }
-  }
-
-  return true
 }
 ```
 
-### Theory Course Scheduling
+## Scheduling Rules Constants
 
 ```typescript
-private findTheorySlot(course: CourseAssignment, periods: number): SlotResult | null {
-  const theoryRooms = this.classrooms.filter((r) => 
-    r.roomType === "theory" && r.capacity >= course.studentCount
-  )
-
-  const daysToTry: DayOfWeek[] = [0, 1, 2, 3, 4, 5]
-
-  for (const day of daysToTry) {
-    // Saturday restriction for non-first-year
-    const maxPeriod = day === 5 && course.yearLevel !== 1 ? 4 : 8
-
-    for (let start = 1; start <= maxPeriod - periods + 1; start++) {
-      const end = start + periods - 1
-      if (end > maxPeriod) continue
-
-      // Check daily theory limit
-      if (!this.canScheduleTheoryOnDay(course.sectionId, day, periods)) {
-        continue
-      }
-
-      const slot = this.tryTheorySlot(course, theoryRooms, day, start, end)
-      if (slot) return slot
-    }
-  }
-
-  return null
-}
-
-// Max 2 theory periods per subject per day
-private canScheduleTheoryOnDay(sectionId: string, day: DayOfWeek, additionalPeriods: number): boolean {
-  const schedule = this.sectionSchedule.get(sectionId) || new Set()
-
-  let periodsOnDay = 0
-  for (let p = 1; p <= 8; p++) {
-    if (schedule.has(`${day}-${p}`)) {
-      periodsOnDay++
-    }
-  }
-
-  return periodsOnDay + additionalPeriods <= RULES.MAX_THEORY_PERIODS_PER_DAY
+const RULES = {
+  LAB_PERIODS: 3,                           // 3 consecutive periods (2.25 hours)
+  PERIOD_DURATION_MINS: 45,
+  LUNCH_START_PERIOD: 4.5,
+  LUNCH_END_PERIOD: 5,
+  MAX_THEORY_PERIODS_PER_DAY_PER_SUBJECT: 2, // Theory max 2 periods/day
+  MAX_THEORY_BLOCK_SIZE: 2,                  // Always schedule 2 periods
+  MAX_SECTION_PERIODS_PER_DAY: 6,            // Total section limit
 }
 ```
 
-### Adding Slots and Updating Schedules
+## Dynamic Availability System
+
+The system maintains real-time availability that updates after each assignment:
 
 ```typescript
-private addSlot(
-  course: CourseAssignment,
-  day: DayOfWeek,
-  startPeriod: Period,
-  endPeriod: Period,
-  classroomId: string
-): void {
+private addSlot(course, day, startPeriod, endPeriod, classroomId): boolean {
   // Add to timetable
-  this.timetable.push({
-    sectionId: course.sectionId,
-    subjectId: course.subjectId,
-    facultyId: course.facultyId,
-    classroomId,
-    day,
-    startPeriod,
-    endPeriod,
-  })
+  this.timetable.push({ ... })
 
-  // Update all tracking maps to prevent future conflicts
+  // Update all tracking maps
   for (let p = startPeriod; p <= endPeriod; p++) {
     const key = `${day}-${p}`
     
     // Mark faculty as busy
     this.facultySchedule.get(course.facultyId)!.add(key)
     
+    // REMOVE from faculty dynamic availability
+    this.facultyDynamicAvailability.get(course.facultyId)?.delete(key)
+    
     // Mark room as busy
     this.roomSchedule.get(classroomId)!.add(key)
+    
+    // REMOVE from room dynamic availability
+    this.roomDynamicAvailability.get(classroomId)?.delete(key)
     
     // Mark section as busy
     this.sectionSchedule.get(course.sectionId)!.add(key)
   }
+  
+  return true
 }
 ```
 
@@ -437,11 +471,11 @@ private addSlot(
 {
   success: true,
   jobId: "uuid",
-  slotsGenerated: 45,
-  generationTime: 1234  // milliseconds
+  slotsGenerated: 150,
+  generationTime: 2500  // milliseconds
 }
 
-// Slots in database (timetable_base)
+// Database schema (timetable_base)
 {
   id: "uuid",
   job_id: "uuid",
@@ -451,15 +485,26 @@ private addSlot(
   classroom_id: "uuid",
   day_of_week: 0,       // Monday
   start_period: 1,
-  end_period: 4,        // 4-period lab
+  end_period: 2,        // 2-period theory block
   created_by: "admin-uuid"
 }
 ```
 
 ## Algorithm Summary
 
-1. **Prioritization**: Labs scheduled before theory (harder constraints)
-2. **Greedy Search**: Try slots in priority order until one works
-3. **Constraint Tracking**: Maps track all bookings to prevent conflicts
-4. **Backtracking**: None - pure greedy (may fail for complex problems)
-5. **Fallback**: Edge function has external ILP solver for complex cases
+1. **Phase 1 (Labs)**: External ILP solver for optimal constraint satisfaction
+   - 3 consecutive periods per lab
+   - Greedy fallback if ILP fails
+   
+2. **Phase 2A (Theory Greedy)**: 15 attempts with different orderings
+   - Attempts 1-10: Normal mode with day-balancing
+   - Attempts 11-15: Relaxed mode (no day-balancing)
+   - Multiple ordering strategies: Section-First, Most-Constrained-First, Faculty-Interleaved
+   - Best result is kept
+   
+3. **Phase 2B (Theory ILP Fallback)**: Only if greedy <80% success
+   - Period reduction fallback if ILP also fails
+
+4. **Constraint Tracking**: Real-time tracking prevents conflicts
+   - Faculty, room, section schedules updated after each assignment
+   - Day-balancing uses theory-only counts (not lab periods)

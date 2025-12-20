@@ -10,8 +10,35 @@ from ortools.sat.python import cp_model
 from typing import List, Dict, Optional
 import uvicorn
 import time
+import threading
+import requests
+import os
 
 app = FastAPI(title="ILP Timetable Solver", version="1.0.0")
+
+# Keep-alive configuration
+KEEP_ALIVE_INTERVAL = 840  # 14 minutes (before Render's 15-min sleep timeout)
+SERVICE_URL = os.environ.get("RENDER_EXTERNAL_URL", "https://timetablescheduling.onrender.com")
+
+def keep_alive():
+    """Background thread to keep the service awake by pinging itself"""
+    while True:
+        try:
+            time.sleep(KEEP_ALIVE_INTERVAL)
+            response = requests.get(f"{SERVICE_URL}/", timeout=30)
+            print(f"[Keep-Alive] Ping successful - Status: {response.status_code}")
+        except Exception as e:
+            print(f"[Keep-Alive] Ping failed: {e}")
+
+# Start keep-alive thread when app starts
+@app.on_event("startup")
+def start_keep_alive():
+    """Start the keep-alive background thread"""
+    print(f"[Keep-Alive] Starting keep-alive thread (interval: {KEEP_ALIVE_INTERVAL}s)")
+    print(f"[Keep-Alive] Service URL: {SERVICE_URL}")
+    thread = threading.Thread(target=keep_alive, daemon=True)
+    thread.start()
+    print("[Keep-Alive] Background thread started")
 
 # Enable CORS for Supabase Edge Functions
 app.add_middleware(

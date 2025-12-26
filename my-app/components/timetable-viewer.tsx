@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import type { Section, Faculty } from "@/lib/database"
+import type { Section, Faculty, Classroom } from "@/lib/database"
 import { DAYS, PERIOD_TIMINGS } from "@/lib/timetable"
 
 interface TimetableSlotWithDetails {
@@ -28,19 +28,23 @@ interface TimetableViewerProps {
   timetableSlots: TimetableSlotWithDetails[]
   sections: Section[]
   faculty: Faculty[]
+  classrooms: Classroom[]
   isOptimized: boolean
 }
 
-export function TimetableViewer({ timetableSlots, sections, faculty, isOptimized }: TimetableViewerProps) {
-  const [viewMode, setViewMode] = useState<"section" | "faculty">("section")
+export function TimetableViewer({ timetableSlots, sections, faculty, classrooms, isOptimized }: TimetableViewerProps) {
+  const [viewMode, setViewMode] = useState<"section" | "faculty" | "classroom">("section")
   const [selectedSection, setSelectedSection] = useState<string>(sections.length > 0 ? sections[0].id : "")
   const [selectedFaculty, setSelectedFaculty] = useState<string>(faculty.length > 0 ? faculty[0].id : "")
+  const [selectedClassroom, setSelectedClassroom] = useState<string>(classrooms.length > 0 ? classrooms[0].id : "")
 
   const getFilteredSlots = () => {
     if (viewMode === "section") {
       return timetableSlots.filter((slot) => slot.section_id === selectedSection)
-    } else {
+    } else if (viewMode === "faculty") {
       return timetableSlots.filter((slot) => slot.faculty_id === selectedFaculty)
+    } else {
+      return timetableSlots.filter((slot) => slot.classroom_id === selectedClassroom)
     }
   }
 
@@ -116,10 +120,16 @@ export function TimetableViewer({ timetableSlots, sections, faculty, isOptimized
                           <div className="text-xs text-slate-700 dark:text-slate-300">
                             {slot.faculty.name} ({slot.faculty.code})
                           </div>
-                        ) : (
+                        ) : viewMode === "faculty" ? (
                           <div className="text-xs text-slate-700 dark:text-slate-300">{slot.sections.name}</div>
+                        ) : (
+                          <div className="text-xs text-slate-700 dark:text-slate-300">
+                            {slot.sections.name} • {slot.faculty.code}
+                          </div>
                         )}
-                        <div className="text-xs text-slate-600 dark:text-slate-400">{slot.classrooms.name}</div>
+                        {viewMode !== "classroom" && (
+                          <div className="text-xs text-slate-600 dark:text-slate-400">{slot.classrooms.name}</div>
+                        )}
                       </div>
                     </td>
                   )
@@ -140,10 +150,11 @@ export function TimetableViewer({ timetableSlots, sections, faculty, isOptimized
             {isOptimized && <Badge className="mr-2 bg-emerald-600 dark:bg-emerald-700 text-white">Optimized</Badge>}
             Timetable View
           </CardTitle>
-          <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "section" | "faculty")}>
+          <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "section" | "faculty" | "classroom")}>
             <TabsList className="bg-white dark:bg-slate-800">
               <TabsTrigger value="section" className="data-[state=active]:bg-slate-200 dark:data-[state=active]:bg-slate-700">By Section</TabsTrigger>
               <TabsTrigger value="faculty" className="data-[state=active]:bg-slate-200 dark:data-[state=active]:bg-slate-700">By Faculty</TabsTrigger>
+              <TabsTrigger value="classroom" className="data-[state=active]:bg-slate-200 dark:data-[state=active]:bg-slate-700">By Classroom</TabsTrigger>
             </TabsList>
           </Tabs>
         </div>
@@ -151,7 +162,7 @@ export function TimetableViewer({ timetableSlots, sections, faculty, isOptimized
       <CardContent className="space-y-4 p-6">
         <div className="flex items-center gap-4">
           <label className="text-sm font-medium text-slate-900 dark:text-slate-100">
-            {viewMode === "section" ? "Select Section:" : "Select Faculty:"}
+            {viewMode === "section" ? "Select Section:" : viewMode === "faculty" ? "Select Faculty:" : "Select Classroom:"}
           </label>
           {viewMode === "section" ? (
             <Select value={selectedSection} onValueChange={setSelectedSection}>
@@ -166,7 +177,7 @@ export function TimetableViewer({ timetableSlots, sections, faculty, isOptimized
                 ))}
               </SelectContent>
             </Select>
-          ) : (
+          ) : viewMode === "faculty" ? (
             <Select value={selectedFaculty} onValueChange={setSelectedFaculty}>
               <SelectTrigger className="w-64">
                 <SelectValue />
@@ -175,6 +186,19 @@ export function TimetableViewer({ timetableSlots, sections, faculty, isOptimized
                 {faculty.map((f) => (
                   <SelectItem key={f.id} value={f.id}>
                     {f.name} ({f.code})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : (
+            <Select value={selectedClassroom} onValueChange={setSelectedClassroom}>
+              <SelectTrigger className="w-64">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {classrooms.map((classroom) => (
+                  <SelectItem key={classroom.id} value={classroom.id}>
+                    {classroom.name} ({classroom.room_type})
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -190,7 +214,10 @@ export function TimetableViewer({ timetableSlots, sections, faculty, isOptimized
           <div className="text-center py-12 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
             <p className="text-slate-600 dark:text-slate-400">No faculty available. Please add faculty first.</p>
           </div>
-        ) : filteredSlots.length === 0 ? (
+        ) : classrooms.length === 0 && viewMode === "classroom" ? (
+          <div className="text-center py-12 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
+            <p className="text-slate-600 dark:text-slate-400">No classrooms available. Please add classrooms first.</p>
+          </div>        ) : filteredSlots.length === 0 ? (
           <div className="text-center py-12 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
             <p className="text-slate-600 dark:text-slate-400">No timetable slots found for the selected {viewMode}</p>
           </div>

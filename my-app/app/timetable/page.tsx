@@ -7,7 +7,7 @@ import { Card, CardDescription, CardHeader, CardTitle, CardContent } from "@/com
 import { Button } from "@/components/ui/button"
 import { Calendar, ArrowLeft, Loader2, RefreshCw, AlertCircle } from "lucide-react"
 import Link from "next/link"
-import type { TimetableJob, Section, Faculty } from "@/lib/database"
+import type { TimetableJob, Section, Faculty, Classroom } from "@/lib/database"
 import { useAuth } from "@/contexts/AuthContext"
 
 interface TimetableSlotWithDetails {
@@ -33,6 +33,7 @@ export default function TimetablePage() {
   const [timetableSlots, setTimetableSlots] = useState<TimetableSlotWithDetails[]>([])
   const [sections, setSections] = useState<Section[]>([])
   const [faculty, setFaculty] = useState<Faculty[]>([])
+  const [classrooms, setClassrooms] = useState<Classroom[]>([])
   const [error, setError] = useState<string | null>(null)
   const [isRefreshing, setIsRefreshing] = useState(false)
 
@@ -97,16 +98,18 @@ export default function TimetablePage() {
       console.log("[TimetablePage] Fetched slots:", slotsData?.length || 0)
       setTimetableSlots(slotsData || [])
 
-      // Extract unique section and faculty IDs from the timetable slots
+      // Extract unique section, faculty, and classroom IDs from the timetable slots
       const sectionIdsInTimetable = [...new Set(slotsData?.map((slot: { section_id: string }) => slot.section_id) || [])]
       const facultyIdsInTimetable = [...new Set(slotsData?.map((slot: { faculty_id: string }) => slot.faculty_id) || [])]
+      const classroomIdsInTimetable = [...new Set(slotsData?.map((slot: { classroom_id: string }) => slot.classroom_id) || [])]
 
       console.log("[TimetablePage] Section IDs in timetable:", sectionIdsInTimetable.length)
       console.log("[TimetablePage] Faculty IDs in timetable:", facultyIdsInTimetable.length)
+      console.log("[TimetablePage] Classroom IDs in timetable:", classroomIdsInTimetable.length)
       console.log("[TimetablePage] Admin ID:", adminId)
 
-      // Fetch only sections and faculty that are in the timetable
-      const [sectionsRes, facultyRes] = await Promise.all([
+      // Fetch only sections, faculty, and classrooms that are in the timetable
+      const [sectionsRes, facultyRes, classroomsRes] = await Promise.all([
         supabase
           .from("sections")
           .select("*")
@@ -117,14 +120,21 @@ export default function TimetablePage() {
           .from("faculty")
           .select("*")
           .in("id", facultyIdsInTimetable.length > 0 ? facultyIdsInTimetable : [""])
+          .order("name"),
+        supabase
+          .from("classrooms")
+          .select("*")
+          .in("id", classroomIdsInTimetable.length > 0 ? classroomIdsInTimetable : [""])
           .order("name")
       ])
 
       console.log("[TimetablePage] Fetched sections:", sectionsRes.data?.length || 0)
       console.log("[TimetablePage] Fetched faculty:", facultyRes.data?.length || 0)
+      console.log("[TimetablePage] Fetched classrooms:", classroomsRes.data?.length || 0)
 
       setSections(sectionsRes.data || [])
       setFaculty(facultyRes.data || [])
+      setClassrooms(classroomsRes.data || [])
 
     } catch (err) {
       console.error("[TimetablePage] Exception:", err)
@@ -321,6 +331,7 @@ export default function TimetablePage() {
             timetableSlots={timetableSlots}
             sections={sections}
             faculty={faculty}
+            classrooms={classrooms}
             isOptimized={useOptimized}
           />
         )}

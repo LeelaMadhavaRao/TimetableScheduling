@@ -22,6 +22,7 @@ import type { Subject, Department, Faculty } from "@/lib/database"
 import { getSupabaseBrowserClient } from "@/lib/client"
 import { RULES } from "@/lib/timetable"
 import { useRouter } from "next/navigation"
+import { useAuth } from "@/contexts/AuthContext"
 
 interface SubjectDialogProps {
   subject?: Subject & { subject_faculty?: { faculty: Faculty }[] }
@@ -43,6 +44,8 @@ export function SubjectDialog({ subject, departments, faculty, trigger }: Subjec
   const [selectedFaculty, setSelectedFaculty] = useState<string[]>([])
   const [facultySearch, setFacultySearch] = useState("")
   const router = useRouter()
+  const { user, role } = useAuth()
+  const adminId = role === 'timetable_admin' && user ? (user as any).id : null
 
   useEffect(() => {
     if (subject && open) {
@@ -67,7 +70,8 @@ export function SubjectDialog({ subject, departments, faculty, trigger }: Subjec
         return
       }
     } else {
-      const { data, error } = await supabase.from("subjects").insert(formData).select().single()
+      const insertData = adminId ? { ...formData, created_by: adminId } : formData
+      const { data, error } = await supabase.from("subjects").insert(insertData).select().single()
       if (error) {
         alert("Error creating subject: " + error.message)
         setLoading(false)

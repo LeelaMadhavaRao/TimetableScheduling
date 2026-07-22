@@ -50,13 +50,18 @@ export default function TimetablePage() {
       const supabase = getSupabaseBrowserClient()
 
       // Fetch latest completed job
-      const { data: jobData, error: jobError } = await supabase
+      let jobQuery = supabase
         .from("timetable_jobs")
         .select("*")
         .in("status", ["base_complete", "completed"])
         .order("created_at", { ascending: false })
         .limit(1)
-        .maybeSingle()
+
+      if (adminId) {
+        jobQuery = jobQuery.eq("created_by", adminId)
+      }
+
+      const { data: jobData, error: jobError } = await jobQuery.maybeSingle()
 
       if (jobError) {
         console.error("[TimetablePage] Error fetching job:", jobError)

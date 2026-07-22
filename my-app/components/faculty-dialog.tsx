@@ -19,6 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Plus } from "lucide-react"
 import type { Faculty, Department } from "@/lib/database"
 import { getSupabaseBrowserClient } from "@/lib/client"
+import { useAuth } from "@/contexts/AuthContext"
 
 interface FacultyDialogProps {
   faculty?: Faculty
@@ -38,6 +39,8 @@ export function FacultyDialog({ faculty, departments, trigger }: FacultyDialogPr
   })
   const [phoneError, setPhoneError] = useState("")
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const { user, role } = useAuth()
+  const adminId = role === 'timetable_admin' && user ? (user as any).id : null
 
   const validatePhone = (phone: string) => {
     const digitCount = phone.replace(/\D/g, "").length
@@ -69,7 +72,8 @@ export function FacultyDialog({ faculty, departments, trigger }: FacultyDialogPr
         return
       }
     } else {
-      const { error } = await supabase.from("faculty").insert(formData)
+      const insertData = adminId ? { ...formData, created_by: adminId } : formData
+      const { error } = await supabase.from("faculty").insert(insertData)
 
       if (error) {
         setErrorMsg("Error creating faculty: " + error.message)

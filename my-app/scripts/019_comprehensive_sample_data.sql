@@ -15,11 +15,27 @@ DELETE FROM timetable_jobs;
 DELETE FROM section_subjects;
 DELETE FROM subject_faculty;
 DELETE FROM faculty_availability;
-DELETE FROM faculty WHERE created_by IS NOT NULL;
-DELETE FROM subjects WHERE created_by IS NOT NULL;
-DELETE FROM sections WHERE created_by IS NOT NULL;
-DELETE FROM classrooms WHERE created_by IS NOT NULL;
-DELETE FROM departments WHERE created_by IS NOT NULL;
+DELETE FROM faculty;
+DELETE FROM subjects;
+DELETE FROM sections;
+DELETE FROM classrooms;
+DELETE FROM departments;
+
+-- Delete old sample admin if exists
+DELETE FROM timetable_administrators WHERE username = 'sample_admin';
+
+-- =============================================
+-- SAMPLE TIMETABLE ADMINISTRATOR
+-- =============================================
+INSERT INTO timetable_administrators (id, username, password_hash, name, email, is_active)
+VALUES (
+  '11111111-1111-1111-1111-111111111111',
+  'sample_admin',
+  hash_password('password123'),
+  'Sample Admin',
+  'admin@timetable.edu',
+  true
+);
 
 -- =============================================
 -- DEPARTMENTS (3)
@@ -333,32 +349,34 @@ BEGIN
     -- Assign 5 theory subjects
     theory_count := 0;
     FOR theory_subjs IN
-      SELECT s.id AS subj_id, sf.faculty_id
+      SELECT DISTINCT ON (s.id) s.id AS subj_id, sf.faculty_id
       FROM subjects s
       JOIN subject_faculty sf ON sf.subject_id = s.id
       WHERE s.subject_type = 'theory'
         AND s.department_id = sec.department_id
-      ORDER BY s.code
+      ORDER BY s.id, sf.created_at
     LOOP
       IF theory_count >= 5 THEN EXIT; END IF;
       INSERT INTO section_subjects (id, section_id, subject_id, faculty_id)
-      VALUES (gen_random_uuid(), sec.id, theory_subjs.subj_id, theory_subjs.faculty_id);
+      VALUES (gen_random_uuid(), sec.id, theory_subjs.subj_id, theory_subjs.faculty_id)
+      ON CONFLICT (section_id, subject_id) DO NOTHING;
       theory_count := theory_count + 1;
     END LOOP;
 
     -- Assign 3 lab subjects
     lab_count := 0;
     FOR lab_subjs IN
-      SELECT s.id AS subj_id, sf.faculty_id
+      SELECT DISTINCT ON (s.id) s.id AS subj_id, sf.faculty_id
       FROM subjects s
       JOIN subject_faculty sf ON sf.subject_id = s.id
       WHERE s.subject_type = 'lab'
         AND s.department_id = sec.department_id
-      ORDER BY s.code
+      ORDER BY s.id, sf.created_at
     LOOP
       IF lab_count >= 3 THEN EXIT; END IF;
       INSERT INTO section_subjects (id, section_id, subject_id, faculty_id)
-      VALUES (gen_random_uuid(), sec.id, lab_subjs.subj_id, lab_subjs.faculty_id);
+      VALUES (gen_random_uuid(), sec.id, lab_subjs.subj_id, lab_subjs.faculty_id)
+      ON CONFLICT (section_id, subject_id) DO NOTHING;
       lab_count := lab_count + 1;
     END LOOP;
   END LOOP;
@@ -400,5 +418,15 @@ JOIN subjects sub ON sub.id = ss.subject_id
 JOIN departments d ON d.id = s.department_id
 GROUP BY s.id, s.name, s.year_level, d.code
 ORDER BY d.code, s.year_level, s.name;
+
+-- =============================================
+-- SET OWNERSHIP
+-- =============================================
+UPDATE departments SET created_by = '11111111-1111-1111-1111-111111111111' WHERE created_by IS NULL;
+UPDATE classrooms SET created_by = '11111111-1111-1111-1111-111111111111' WHERE created_by IS NULL;
+UPDATE subjects SET created_by = '11111111-1111-1111-1111-111111111111' WHERE created_by IS NULL;
+UPDATE faculty SET created_by = '11111111-1111-1111-1111-111111111111' WHERE created_by IS NULL;
+UPDATE sections SET created_by = '11111111-1111-1111-1111-111111111111' WHERE created_by IS NULL;
+UPDATE timetable_jobs SET created_by = '11111111-1111-1111-1111-111111111111' WHERE created_by IS NULL;
 
 COMMIT;

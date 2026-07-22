@@ -79,7 +79,12 @@ export function GenerateTimetable() {
       .channel("timetable_jobs_realtime")
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "timetable_jobs" },
+        { 
+          event: "*", 
+          schema: "public", 
+          table: "timetable_jobs",
+          filter: adminId ? `created_by=eq.${adminId}` : undefined
+        },
         (payload: { new: TimetableJob | null; old: TimetableJob | null; eventType: string }) => {
           console.log("[GenerateTimetable] Real-time job update:", payload.new?.status, payload)
           if (payload.new) {
@@ -138,13 +143,18 @@ export function GenerateTimetable() {
       
       console.log("[GenerateTimetable] fetchLatestJob called")
       
-      // Get the most recent job (no admin filter for now since edge function doesn't set created_by)
-      const { data, error } = await supabase
+      // Get the most recent job for this admin
+      let query = supabase
         .from("timetable_jobs")
         .select("*")
         .order("created_at", { ascending: false })
         .limit(1)
-        .maybeSingle()
+
+      if (adminId) {
+        query = query.eq("created_by", adminId)
+      }
+
+      const { data, error } = await query.maybeSingle()
 
       if (error) {
         console.error("[GenerateTimetable] ❌ Error fetching job:", error)

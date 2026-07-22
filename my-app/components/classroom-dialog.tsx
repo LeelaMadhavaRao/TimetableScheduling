@@ -19,6 +19,7 @@ import { Plus } from "lucide-react"
 import type { Classroom } from "@/lib/database"
 import { getSupabaseBrowserClient } from "@/lib/client"
 import { useRouter } from "next/navigation"
+import { useAuth } from "@/contexts/AuthContext"
 
 interface ClassroomDialogProps {
   classroom?: Classroom
@@ -38,6 +39,8 @@ export function ClassroomDialog({ classroom, trigger }: ClassroomDialogProps) {
   const [capacityError, setCapacityError] = useState("")
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const router = useRouter()
+  const { user, role } = useAuth()
+  const adminId = role === 'timetable_admin' && user ? (user as any).id : null
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -60,7 +63,8 @@ export function ClassroomDialog({ classroom, trigger }: ClassroomDialogProps) {
         return
       }
     } else {
-      const { error } = await supabase.from("classrooms").insert(formData)
+      const insertData = adminId ? { ...formData, created_by: adminId } : formData
+      const { error } = await supabase.from("classrooms").insert(insertData)
 
       if (error) {
         setErrorMsg("Error creating classroom: " + error.message)

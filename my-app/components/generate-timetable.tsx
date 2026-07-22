@@ -237,6 +237,26 @@ export function GenerateTimetable() {
 
       if (error) {
         console.error("[GenerateTimetable] Function error:", error)
+        
+        // Failsafe: If the edge function timed out or crashed, mark any stuck jobs as failed
+        if (adminId) {
+          try {
+            await supabase
+              .from('timetable_jobs')
+              .update({ 
+                status: 'failed', 
+                message: `Generation timed out or failed unexpectedly: ${error.message || 'Unknown error'}` 
+              })
+              .eq('created_by', adminId)
+              .in('status', ['pending', 'generating_base', 'optimizing'])
+              
+            // Fetch latest job to reflect the failed status
+            setTimeout(() => fetchLatestJob(), 500)
+          } catch (e) {
+            console.error("Failed to update stuck jobs:", e)
+          }
+        }
+
         setErrorDetails([{
           section: "System",
           subject: "Error",

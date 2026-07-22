@@ -539,18 +539,47 @@ export function GenerateTimetable() {
                 <span>Live updating...</span>
               </div>
               {/* Emergency stop button if loader gets stuck */}
-              <Button
-                onClick={() => {
-                  console.log("[GenerateTimetable] Manual stop clicked")
-                  setGenerating(false)
-                  fetchLatestJob()
-                }}
-                variant="outline"
-                size="sm"
-                className="mt-4 w-full text-xs"
-              >
-                Refresh Status
-              </Button>
+              <div className="flex w-full gap-2 mt-4">
+                <Button
+                  onClick={() => {
+                    console.log("[GenerateTimetable] Manual stop clicked")
+                    setGenerating(false)
+                    fetchLatestJob()
+                  }}
+                  variant="outline"
+                  size="sm"
+                  className="flex-1 text-xs"
+                >
+                  Refresh Status
+                </Button>
+                <Button
+                  onClick={async () => {
+                    console.log("[GenerateTimetable] Cancel generation clicked")
+                    if (currentJob?.id) {
+                      const supabase = getSupabaseBrowserClient()
+                      await supabase
+                        .from('timetable_jobs')
+                        .update({ status: 'failed', message: 'Cancelled by user' })
+                        .eq('id', currentJob.id)
+                    } else if (adminId) {
+                      // Fallback if currentJob isn't fully loaded but we are generating
+                      const supabase = getSupabaseBrowserClient()
+                      await supabase
+                        .from('timetable_jobs')
+                        .update({ status: 'failed', message: 'Cancelled by user' })
+                        .eq('created_by', adminId)
+                        .in('status', ['pending', 'generating_base', 'optimizing'])
+                    }
+                    setGenerating(false)
+                    fetchLatestJob()
+                  }}
+                  variant="destructive"
+                  size="sm"
+                  className="flex-1 text-xs"
+                >
+                  Cancel
+                </Button>
+              </div>
             </div>
           </Card>
         </div>

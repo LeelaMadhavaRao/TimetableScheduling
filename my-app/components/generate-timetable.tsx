@@ -230,7 +230,24 @@ export function GenerateTimetable() {
         }
       }
       
-      // Step 2: Call Supabase Edge Function
+      // Step 2: Pre-warm the ILP Solver on Render
+      console.log("[GenerateTimetable] Waking up ILP Solver on Render...")
+      setGenerating(true)
+      setCurrentJob({
+        id: "pre-warm",
+        status: "pending",
+        progress: 5,
+        message: "Waking up optimization server (this may take up to 60s)...",
+      } as TimetableJob)
+      
+      try {
+        await fetch("/api/health", { method: "GET" })
+        console.log("[GenerateTimetable] ILP Solver is awake!")
+      } catch (e) {
+        console.warn("[GenerateTimetable] Health ping failed, proceeding anyway", e)
+      }
+
+      // Step 3: Call Supabase Edge Function
       console.log("[GenerateTimetable] Calling Edge Function...", adminId ? `with admin ID: ${adminId}` : 'without admin ID')
       const { data, error } = await supabase.functions.invoke("generate-base-timetable", {
         method: "POST",

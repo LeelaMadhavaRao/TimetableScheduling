@@ -766,7 +766,8 @@ class ILPTimetableGenerator {
     // ==========================================
     // PHASE 2B: ILP FALLBACK for theory (only if greedy failed)
     // ==========================================
-    if (!greedyTheorySuccess) {
+    // DISABLED: Theory ILP solver takes too long for large datasets and causes 504 timeouts.
+    if (false /* disabled to prevent 60s edge function timeout */ && !greedyTheorySuccess) {
       console.warn(`[Phase 2B] ⚠️ Greedy success rate below 80% - triggering ILP fallback for theory scheduling...`)
       
       // Reset to post-lab state

@@ -17,12 +17,12 @@ interface TimetableSlot {
 
 // GA Configuration
 const GA_CONFIG = {
-  POPULATION_SIZE: 50,
-  GENERATIONS: 100,
+  POPULATION_SIZE: 10,
+  GENERATIONS: 10,
   MUTATION_RATE: 0.1,
   CROSSOVER_RATE: 0.8,
   ELITE_PERCENTAGE: 0.1,
-  TOURNAMENT_SIZE: 5,
+  TOURNAMENT_SIZE: 3,
 }
 
 // Fitness weights

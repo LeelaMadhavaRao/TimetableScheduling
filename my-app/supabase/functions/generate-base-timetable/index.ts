@@ -63,7 +63,7 @@ const RULES = {
   LUNCH_END_PERIOD: 5,
   MAX_THEORY_PERIODS_PER_DAY_PER_SUBJECT: 2, // CRITICAL: Theory subject max 2 periods/day (prevents 3-period blocks on same day)
   MAX_THEORY_BLOCK_SIZE: 2, // Max periods to schedule in one block (changed from 3 to 2)
-  MAX_SECTION_PERIODS_PER_DAY: 6, // Total periods per section per day (allows 4-5 subjects)
+  MAX_SECTION_PERIODS_PER_DAY: 8, // Total periods per section per day (Allows up to 48/week to support 37 required periods)
   THEORY_BLOCK_OPTIONS: [1.5, 2.25, 3], // hours per week
 }
 
@@ -1277,44 +1277,36 @@ class ILPTimetableGenerator {
       `[Theory]   Faculty: ${course.facultyCode} | Students: ${course.studentCount} | Periods: ${periodsNeeded}`,
     )
 
-    // Try to schedule in blocks (2 periods ONLY per day, never 3)
-    // Theory constraint: MAX 2 periods per day per subject
-    // So for 3-period subjects, we schedule 2+2 (impossible) or 2 (and leave 1 unscheduled)
-    // Better: schedule 2 periods at a time across multiple days
+    // Schedule theory in blocks: prefer 2-period contiguous, fall back to 1+1 split
     let attempts = 0
-    const maxAttempts = 50 // Prevent infinite loops
-    
+    const maxAttempts = 100
+
     while (periodsScheduled < periodsNeeded && attempts < maxAttempts) {
       attempts++
       const remainingPeriods = periodsNeeded - periodsScheduled
-      
-      // Determine block size: ALWAYS schedule 2 periods max per day
-      // NEVER schedule single-period theory blocks
-      // NEVER schedule 3 periods in one day (violates constraint)
-      let periodsToSchedule: number
-      if (remainingPeriods >= 2) {
-        periodsToSchedule = 2  // Always 2 periods per day max
-      } else if (remainingPeriods === 1) {
-        // Cannot schedule 1 period - theory minimum is 2 periods
-        console.warn(`[Edge Function] ⚠️ ${course.subjectCode} has 1 remaining period - cannot schedule (min 2 periods)`)
-        break
-      } else {
-        break
+
+      let periodsToSchedule = remainingPeriods >= 2 ? 2 : 1;
+      let slot = this.findTheorySlot(course, periodsToSchedule);
+
+      // If 2-period block fails, try scheduling just 1 period instead
+      if (!slot && periodsToSchedule === 2) {
+        console.log(`[Theory]   🔄 2-period block failed, trying 1-period slot for ${course.subjectCode}`);
+        periodsToSchedule = 1;
+        slot = this.findTheorySlot(course, periodsToSchedule);
       }
 
-      const slot = this.findTheorySlot(course, periodsToSchedule)
       if (slot) {
-        const success = this.addSlot(course, slot.day, slot.startPeriod, slot.endPeriod, slot.classroomId)
+        const success = this.addSlot(course, slot.day, slot.startPeriod, slot.endPeriod, slot.classroomId);
         if (success) {
-          periodsScheduled += periodsToSchedule
-          console.log(`[Theory]   ✅ Assigned ${periodsToSchedule} periods: Day ${slot.day}, Periods ${slot.startPeriod}-${slot.endPeriod}, Room ${slot.classroomId}`)
+          periodsScheduled += periodsToSchedule;
+          console.log(`[Theory]   ✅ Assigned ${periodsToSchedule} periods: Day ${slot.day}, Periods ${slot.startPeriod}-${slot.endPeriod}, Room ${slot.classroomId}`);
         } else {
-          console.error(`[Theory]   ❌ Failed to add slot despite finding one - Day ${slot.day}, Periods ${slot.startPeriod}-${slot.endPeriod}`)
-          break
+          console.error(`[Theory]   ❌ Failed to add slot despite finding one - Day ${slot.day}, Periods ${slot.startPeriod}-${slot.endPeriod}`);
+          break;
         }
       } else {
-        console.warn(`[Theory]   ⚠️ No valid slot found for ${periodsToSchedule} periods (${periodsScheduled}/${periodsNeeded} scheduled so far)`)
-        break
+        console.warn(`[Theory]   ⚠️ No valid slot for ${periodsToSchedule}p (${periodsScheduled}/${periodsNeeded} done)`);
+        break;
       }
     }
 
@@ -1835,6 +1827,30 @@ class ILPTimetableGenerator {
     }
     
     return true
+  }
+
+  private removeSlot(
+    course: CourseAssignment,
+    day: DayOfWeek,
+    startPeriod: Period,
+    endPeriod: Period,
+    classroomId: string,
+  ): void {
+    this.timetable = this.timetable.filter(slot =>
+      !(slot.sectionId === course.sectionId &&
+        slot.subjectId === course.subjectId &&
+        slot.day === day &&
+        slot.startPeriod === startPeriod &&
+        slot.endPeriod === endPeriod)
+    )
+    for (let p = startPeriod; p <= endPeriod; p++) {
+      const key = `${day}-${p}`
+      this.facultySchedule.get(course.facultyId)?.delete(key)
+      this.roomSchedule.get(classroomId)?.delete(key)
+      this.sectionSchedule.get(course.sectionId)?.delete(key)
+      this.facultyDynamicAvailability.get(course.facultyId)?.add(key)
+      this.roomDynamicAvailability.get(classroomId)?.add(key)
+    }
   }
 
   /**

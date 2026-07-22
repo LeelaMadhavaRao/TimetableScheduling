@@ -1,6 +1,7 @@
 -- =============================================
--- 019: COMPREHENSIVE SAMPLE DATA (20 Sections)
--- 20 sections × 5 theory subjects + 3 lab subjects
+-- 019: COMPREHENSIVE SAMPLE DATA (24 Sections)
+-- 24 sections × (7 theory + 3 lab) = 240 courses
+-- Theory: 4 periods/week (flexible 2+2), Lab: 3 periods/week (consecutive)
 -- =============================================
 -- WARNING: This clears existing timetable data first.
 -- Run in Supabase SQL Editor.
@@ -48,7 +49,7 @@ INSERT INTO departments (id, name, code) VALUES
 -- =============================================
 -- CLASSROOMS (12 theory + 8 lab = 20)
 -- =============================================
--- Theory rooms (capacity 60-80)
+-- Theory rooms (16 rooms, target 87.5%)
 INSERT INTO classrooms (id, name, capacity, room_type, building, floor) VALUES
   (gen_random_uuid(), 'CSE-TH-101', 70, 'theory', 'CSE Block', 1),
   (gen_random_uuid(), 'CSE-TH-102', 70, 'theory', 'CSE Block', 1),
@@ -59,11 +60,15 @@ INSERT INTO classrooms (id, name, capacity, room_type, building, floor) VALUES
   (gen_random_uuid(), 'TH-401',     80, 'theory', 'Main Block', 4),
   (gen_random_uuid(), 'TH-402',     80, 'theory', 'Main Block', 4),
   (gen_random_uuid(), 'TH-403',     60, 'theory', 'Main Block', 4),
+  (gen_random_uuid(), 'TH-404',     60, 'theory', 'Main Block', 4),
   (gen_random_uuid(), 'TH-501',     75, 'theory', 'Annex',      5),
   (gen_random_uuid(), 'TH-502',     75, 'theory', 'Annex',      5),
-  (gen_random_uuid(), 'TH-503',     60, 'theory', 'Annex',      5);
+  (gen_random_uuid(), 'TH-503',     60, 'theory', 'Annex',      5),
+  (gen_random_uuid(), 'TH-504',     75, 'theory', 'Annex',      5),
+  (gen_random_uuid(), 'TH-505',     70, 'theory', 'Annex',      5),
+  (gen_random_uuid(), 'TH-506',     70, 'theory', 'Annex',      5);
 
--- Lab rooms (capacity 40-60)
+-- Lab rooms (7 rooms, target 85.7%)
 INSERT INTO classrooms (id, name, capacity, room_type, building, floor) VALUES
   (gen_random_uuid(), 'CSE-LAB-1', 50, 'lab', 'CSE Block', 1),
   (gen_random_uuid(), 'CSE-LAB-2', 50, 'lab', 'CSE Block', 1),
@@ -71,8 +76,7 @@ INSERT INTO classrooms (id, name, capacity, room_type, building, floor) VALUES
   (gen_random_uuid(), 'IT-LAB-2',  50, 'lab', 'IT Block',  2),
   (gen_random_uuid(), 'ECE-LAB-1', 40, 'lab', 'ECE Block', 3),
   (gen_random_uuid(), 'ECE-LAB-2', 40, 'lab', 'ECE Block', 3),
-  (gen_random_uuid(), 'LAB-401',   60, 'lab', 'Main Block', 4),
-  (gen_random_uuid(), 'LAB-402',   60, 'lab', 'Main Block', 4);
+  (gen_random_uuid(), 'LAB-401',   60, 'lab', 'Main Block', 4);
 
 -- =============================================
 -- THEORY SUBJECTS (15 unique)
@@ -85,24 +89,34 @@ BEGIN
   SELECT id INTO it_dept_id  FROM departments WHERE code = 'IT';
   SELECT id INTO ece_dept_id FROM departments WHERE code = 'ECE';
 
+  -- THEORY SUBJECTS (24 unique - 8 per department, 4 periods/week each)
   INSERT INTO subjects (id, code, name, subject_type, periods_per_week, department_id) VALUES
-    (gen_random_uuid(), 'CS301',   'Data Structures',       'theory', 3, cse_dept_id),
-    (gen_random_uuid(), 'CS302',   'Algorithms',            'theory', 3, cse_dept_id),
-    (gen_random_uuid(), 'CS303',   'Database Management',   'theory', 3, cse_dept_id),
-    (gen_random_uuid(), 'CS304',   'Operating Systems',     'theory', 3, cse_dept_id),
-    (gen_random_uuid(), 'CS305',   'Computer Networks',     'theory', 3, cse_dept_id),
-    (gen_random_uuid(), 'IT301',   'Software Engineering',  'theory', 3, it_dept_id),
-    (gen_random_uuid(), 'IT302',   'Object Oriented Java',  'theory', 3, it_dept_id),
-    (gen_random_uuid(), 'IT303',   'Web Technologies',      'theory', 3, it_dept_id),
-    (gen_random_uuid(), 'IT304',   'Python Programming',    'theory', 3, it_dept_id),
-    (gen_random_uuid(), 'IT305',   'Discrete Mathematics',  'theory', 3, it_dept_id),
-    (gen_random_uuid(), 'EC301',   'Digital Electronics',   'theory', 3, ece_dept_id),
-    (gen_random_uuid(), 'EC302',   'Signals & Systems',     'theory', 3, ece_dept_id),
-    (gen_random_uuid(), 'EC303',   'Microprocessors',       'theory', 3, ece_dept_id),
-    (gen_random_uuid(), 'EC304',   'Communication Systems', 'theory', 3, ece_dept_id),
-    (gen_random_uuid(), 'EC305',   'VLSI Design',           'theory', 3, ece_dept_id);
+    (gen_random_uuid(), 'CS301', 'Data Structures',       'theory', 4, cse_dept_id),
+    (gen_random_uuid(), 'CS302', 'Algorithms',            'theory', 4, cse_dept_id),
+    (gen_random_uuid(), 'CS303', 'Database Management',   'theory', 4, cse_dept_id),
+    (gen_random_uuid(), 'CS304', 'Operating Systems',     'theory', 4, cse_dept_id),
+    (gen_random_uuid(), 'CS305', 'Computer Networks',     'theory', 4, cse_dept_id),
+    (gen_random_uuid(), 'CS306', 'Compiler Design',       'theory', 4, cse_dept_id),
+    (gen_random_uuid(), 'CS307', 'Artificial Intelligence','theory', 4, cse_dept_id),
+    (gen_random_uuid(), 'CS308', 'Machine Learning',      'theory', 4, cse_dept_id),
+    (gen_random_uuid(), 'IT301', 'Software Engineering',  'theory', 4, it_dept_id),
+    (gen_random_uuid(), 'IT302', 'Object Oriented Java',  'theory', 4, it_dept_id),
+    (gen_random_uuid(), 'IT303', 'Web Technologies',      'theory', 4, it_dept_id),
+    (gen_random_uuid(), 'IT304', 'Python Programming',    'theory', 4, it_dept_id),
+    (gen_random_uuid(), 'IT305', 'Discrete Mathematics',  'theory', 4, it_dept_id),
+    (gen_random_uuid(), 'IT306', 'Cloud Computing',       'theory', 4, it_dept_id),
+    (gen_random_uuid(), 'IT307', 'Cyber Security',        'theory', 4, it_dept_id),
+    (gen_random_uuid(), 'IT308', 'Mobile App Development','theory', 4, it_dept_id),
+    (gen_random_uuid(), 'EC301', 'Digital Electronics',   'theory', 4, ece_dept_id),
+    (gen_random_uuid(), 'EC302', 'Signals & Systems',     'theory', 4, ece_dept_id),
+    (gen_random_uuid(), 'EC303', 'Microprocessors',       'theory', 4, ece_dept_id),
+    (gen_random_uuid(), 'EC304', 'Communication Systems', 'theory', 4, ece_dept_id),
+    (gen_random_uuid(), 'EC305', 'VLSI Design',           'theory', 4, ece_dept_id),
+    (gen_random_uuid(), 'EC306', 'Embedded Systems',      'theory', 4, ece_dept_id),
+    (gen_random_uuid(), 'EC307', 'Digital Signal Processing','theory', 4, ece_dept_id),
+    (gen_random_uuid(), 'EC308', 'Antenna Wave Propagation','theory', 4, ece_dept_id);
 
-  -- LAB SUBJECTS (9 unique)
+  -- LAB SUBJECTS (12 unique - 4 per department)
   INSERT INTO subjects (id, code, name, subject_type, periods_per_week, department_id) VALUES
     (gen_random_uuid(), 'CS311L', 'Data Structures Lab',       'lab', 3, cse_dept_id),
     (gen_random_uuid(), 'CS312L', 'DBMS Lab',                  'lab', 3, cse_dept_id),
@@ -110,9 +124,12 @@ BEGIN
     (gen_random_uuid(), 'CS314L', 'Computer Networks Lab',     'lab', 3, cse_dept_id),
     (gen_random_uuid(), 'IT311L', 'Java Programming Lab',      'lab', 3, it_dept_id),
     (gen_random_uuid(), 'IT312L', 'Web Technologies Lab',      'lab', 3, it_dept_id),
+    (gen_random_uuid(), 'IT313L', 'Python Programming Lab',    'lab', 3, it_dept_id),
+    (gen_random_uuid(), 'IT314L', 'Cloud Computing Lab',       'lab', 3, it_dept_id),
     (gen_random_uuid(), 'EC311L', 'Digital Electronics Lab',   'lab', 3, ece_dept_id),
     (gen_random_uuid(), 'EC312L', 'Microprocessor Lab',        'lab', 3, ece_dept_id),
-    (gen_random_uuid(), 'EC313L', 'Communication Systems Lab', 'lab', 3, ece_dept_id);
+    (gen_random_uuid(), 'EC313L', 'Communication Systems Lab', 'lab', 3, ece_dept_id),
+    (gen_random_uuid(), 'EC314L', 'Embedded Systems Lab',      'lab', 3, ece_dept_id);
 END $$;
 
 -- =============================================
@@ -259,6 +276,55 @@ BEGIN
   SELECT id INTO subj_id FROM subjects WHERE code = 'EC313L';
   SELECT id INTO fac_id FROM faculty WHERE code = 'ECE-F003'; INSERT INTO subject_faculty (id, subject_id, faculty_id) VALUES (gen_random_uuid(), subj_id, fac_id);
   SELECT id INTO fac_id FROM faculty WHERE code = 'ECE-F005'; INSERT INTO subject_faculty (id, subject_id, faculty_id) VALUES (gen_random_uuid(), subj_id, fac_id);
+
+  -- New subjects (CS306-308, IT306-308, EC306-308, IT313L-314L, EC314L)
+  SELECT id INTO subj_id FROM subjects WHERE code = 'CS306';
+  SELECT id INTO fac_id FROM faculty WHERE code = 'CSE-F001'; INSERT INTO subject_faculty (id, subject_id, faculty_id) VALUES (gen_random_uuid(), subj_id, fac_id);
+  SELECT id INTO fac_id FROM faculty WHERE code = 'CSE-F002'; INSERT INTO subject_faculty (id, subject_id, faculty_id) VALUES (gen_random_uuid(), subj_id, fac_id);
+
+  SELECT id INTO subj_id FROM subjects WHERE code = 'CS307';
+  SELECT id INTO fac_id FROM faculty WHERE code = 'CSE-F003'; INSERT INTO subject_faculty (id, subject_id, faculty_id) VALUES (gen_random_uuid(), subj_id, fac_id);
+  SELECT id INTO fac_id FROM faculty WHERE code = 'CSE-F004'; INSERT INTO subject_faculty (id, subject_id, faculty_id) VALUES (gen_random_uuid(), subj_id, fac_id);
+
+  SELECT id INTO subj_id FROM subjects WHERE code = 'CS308';
+  SELECT id INTO fac_id FROM faculty WHERE code = 'CSE-F005'; INSERT INTO subject_faculty (id, subject_id, faculty_id) VALUES (gen_random_uuid(), subj_id, fac_id);
+  SELECT id INTO fac_id FROM faculty WHERE code = 'CSE-F006'; INSERT INTO subject_faculty (id, subject_id, faculty_id) VALUES (gen_random_uuid(), subj_id, fac_id);
+
+  SELECT id INTO subj_id FROM subjects WHERE code = 'IT306';
+  SELECT id INTO fac_id FROM faculty WHERE code = 'IT-F005'; INSERT INTO subject_faculty (id, subject_id, faculty_id) VALUES (gen_random_uuid(), subj_id, fac_id);
+  SELECT id INTO fac_id FROM faculty WHERE code = 'IT-F006'; INSERT INTO subject_faculty (id, subject_id, faculty_id) VALUES (gen_random_uuid(), subj_id, fac_id);
+
+  SELECT id INTO subj_id FROM subjects WHERE code = 'IT307';
+  SELECT id INTO fac_id FROM faculty WHERE code = 'IT-F001'; INSERT INTO subject_faculty (id, subject_id, faculty_id) VALUES (gen_random_uuid(), subj_id, fac_id);
+  SELECT id INTO fac_id FROM faculty WHERE code = 'IT-F002'; INSERT INTO subject_faculty (id, subject_id, faculty_id) VALUES (gen_random_uuid(), subj_id, fac_id);
+
+  SELECT id INTO subj_id FROM subjects WHERE code = 'IT308';
+  SELECT id INTO fac_id FROM faculty WHERE code = 'IT-F003'; INSERT INTO subject_faculty (id, subject_id, faculty_id) VALUES (gen_random_uuid(), subj_id, fac_id);
+  SELECT id INTO fac_id FROM faculty WHERE code = 'IT-F004'; INSERT INTO subject_faculty (id, subject_id, faculty_id) VALUES (gen_random_uuid(), subj_id, fac_id);
+
+  SELECT id INTO subj_id FROM subjects WHERE code = 'EC306';
+  SELECT id INTO fac_id FROM faculty WHERE code = 'ECE-F005'; INSERT INTO subject_faculty (id, subject_id, faculty_id) VALUES (gen_random_uuid(), subj_id, fac_id);
+  SELECT id INTO fac_id FROM faculty WHERE code = 'ECE-F006'; INSERT INTO subject_faculty (id, subject_id, faculty_id) VALUES (gen_random_uuid(), subj_id, fac_id);
+
+  SELECT id INTO subj_id FROM subjects WHERE code = 'EC307';
+  SELECT id INTO fac_id FROM faculty WHERE code = 'ECE-F001'; INSERT INTO subject_faculty (id, subject_id, faculty_id) VALUES (gen_random_uuid(), subj_id, fac_id);
+  SELECT id INTO fac_id FROM faculty WHERE code = 'ECE-F002'; INSERT INTO subject_faculty (id, subject_id, faculty_id) VALUES (gen_random_uuid(), subj_id, fac_id);
+
+  SELECT id INTO subj_id FROM subjects WHERE code = 'EC308';
+  SELECT id INTO fac_id FROM faculty WHERE code = 'ECE-F003'; INSERT INTO subject_faculty (id, subject_id, faculty_id) VALUES (gen_random_uuid(), subj_id, fac_id);
+  SELECT id INTO fac_id FROM faculty WHERE code = 'ECE-F004'; INSERT INTO subject_faculty (id, subject_id, faculty_id) VALUES (gen_random_uuid(), subj_id, fac_id);
+
+  SELECT id INTO subj_id FROM subjects WHERE code = 'IT313L';
+  SELECT id INTO fac_id FROM faculty WHERE code = 'IT-F005'; INSERT INTO subject_faculty (id, subject_id, faculty_id) VALUES (gen_random_uuid(), subj_id, fac_id);
+  SELECT id INTO fac_id FROM faculty WHERE code = 'IT-F006'; INSERT INTO subject_faculty (id, subject_id, faculty_id) VALUES (gen_random_uuid(), subj_id, fac_id);
+
+  SELECT id INTO subj_id FROM subjects WHERE code = 'IT314L';
+  SELECT id INTO fac_id FROM faculty WHERE code = 'IT-F005'; INSERT INTO subject_faculty (id, subject_id, faculty_id) VALUES (gen_random_uuid(), subj_id, fac_id);
+  SELECT id INTO fac_id FROM faculty WHERE code = 'IT-F006'; INSERT INTO subject_faculty (id, subject_id, faculty_id) VALUES (gen_random_uuid(), subj_id, fac_id);
+
+  SELECT id INTO subj_id FROM subjects WHERE code = 'EC314L';
+  SELECT id INTO fac_id FROM faculty WHERE code = 'ECE-F005'; INSERT INTO subject_faculty (id, subject_id, faculty_id) VALUES (gen_random_uuid(), subj_id, fac_id);
+  SELECT id INTO fac_id FROM faculty WHERE code = 'ECE-F006'; INSERT INTO subject_faculty (id, subject_id, faculty_id) VALUES (gen_random_uuid(), subj_id, fac_id);
 END $$;
 
 -- =============================================
@@ -321,18 +387,21 @@ BEGIN
   INSERT INTO sections (id, name, year_level, student_count, department_id) VALUES (gen_random_uuid(), sec_prefix || '-' || sec_year || 'A', sec_year, 48, it_dept_id);
   INSERT INTO sections (id, name, year_level, student_count, department_id) VALUES (gen_random_uuid(), sec_prefix || '-' || sec_year || 'B', sec_year, 45, it_dept_id);
 
-  -- ECE Sections (4)
+  -- ECE Sections (8): 1A,1B,2A,2B,3A,3B,4A,4B
   sec_prefix := 'ECE';
-  INSERT INTO sections (id, name, year_level, student_count, department_id) VALUES (gen_random_uuid(), sec_prefix || '-' || '1' || 'A', 1, 55, ece_dept_id);
-  INSERT INTO sections (id, name, year_level, student_count, department_id) VALUES (gen_random_uuid(), sec_prefix || '-' || '2' || 'A', 2, 55, ece_dept_id);
-  INSERT INTO sections (id, name, year_level, student_count, department_id) VALUES (gen_random_uuid(), sec_prefix || '-' || '3' || 'A', 3, 50, ece_dept_id);
-  INSERT INTO sections (id, name, year_level, student_count, department_id) VALUES (gen_random_uuid(), sec_prefix || '-' || '4' || 'A', 4, 48, ece_dept_id);
+  INSERT INTO sections (id, name, year_level, student_count, department_id) VALUES (gen_random_uuid(), sec_prefix || '-' || '1A', 1, 55, ece_dept_id);
+  INSERT INTO sections (id, name, year_level, student_count, department_id) VALUES (gen_random_uuid(), sec_prefix || '-' || '1B', 1, 52, ece_dept_id);
+  INSERT INTO sections (id, name, year_level, student_count, department_id) VALUES (gen_random_uuid(), sec_prefix || '-' || '2A', 2, 55, ece_dept_id);
+  INSERT INTO sections (id, name, year_level, student_count, department_id) VALUES (gen_random_uuid(), sec_prefix || '-' || '2B', 2, 53, ece_dept_id);
+  INSERT INTO sections (id, name, year_level, student_count, department_id) VALUES (gen_random_uuid(), sec_prefix || '-' || '3A', 3, 50, ece_dept_id);
+  INSERT INTO sections (id, name, year_level, student_count, department_id) VALUES (gen_random_uuid(), sec_prefix || '-' || '3B', 3, 48, ece_dept_id);
+  INSERT INTO sections (id, name, year_level, student_count, department_id) VALUES (gen_random_uuid(), sec_prefix || '-' || '4A', 4, 48, ece_dept_id);
+  INSERT INTO sections (id, name, year_level, student_count, department_id) VALUES (gen_random_uuid(), sec_prefix || '-' || '4B', 4, 45, ece_dept_id);
 END $$;
 
 -- =============================================
 -- SECTION-SUBJECT MAPPINGS
--- Each section: 5 theory subjects + 3 lab subjects
--- Theory is unique per section, labs are shared
+-- Each section: 7 theory (4p/wk) + 3 lab (3p/wk) = 37 periods (77.1% section)
 -- =============================================
 DO $$
 DECLARE
@@ -346,7 +415,7 @@ DECLARE
   chosen_fac_id UUID;
 BEGIN
   FOR sec IN SELECT id, name, department_id, year_level FROM sections ORDER BY name LOOP
-    -- Assign 5 theory subjects
+    -- Assign 8 theory subjects
     theory_count := 0;
     FOR theory_subjs IN
       SELECT DISTINCT ON (s.id) s.id AS subj_id, sf.faculty_id
@@ -356,7 +425,7 @@ BEGIN
         AND s.department_id = sec.department_id
       ORDER BY s.id, sf.created_at
     LOOP
-      IF theory_count >= 5 THEN EXIT; END IF;
+      IF theory_count >= 7 THEN EXIT; END IF;
       INSERT INTO section_subjects (id, section_id, subject_id, faculty_id)
       VALUES (gen_random_uuid(), sec.id, theory_subjs.subj_id, theory_subjs.faculty_id)
       ON CONFLICT (section_id, subject_id) DO NOTHING;

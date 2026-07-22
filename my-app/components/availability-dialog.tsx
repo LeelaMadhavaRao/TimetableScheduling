@@ -25,6 +25,8 @@ export function AvailabilityDialog({ faculty, open, onOpenChange }: Availability
     start_period: "1" as string,
     end_period: "4" as string,
   })
+  const [periodError, setPeriodError] = useState("")
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
   useEffect(() => {
     if (open) {
@@ -49,6 +51,15 @@ export function AvailabilityDialog({ faculty, open, onOpenChange }: Availability
   }
 
   const handleAdd = async () => {
+    const startPer = Number.parseInt(formData.start_period)
+    const endPer = Number.parseInt(formData.end_period)
+
+    if (endPer < startPer) {
+      setPeriodError("End period must be greater than or equal to start period")
+      return
+    }
+    setPeriodError("")
+
     const supabase = getSupabaseBrowserClient()
     const { error } = await supabase.from("faculty_availability").insert({
       faculty_id: faculty.id,
@@ -58,10 +69,11 @@ export function AvailabilityDialog({ faculty, open, onOpenChange }: Availability
     })
 
     if (error) {
-      alert("Error adding availability: " + error.message)
+      setErrorMsg("Error adding availability: " + error.message)
       return
     }
 
+    setErrorMsg(null)
     fetchAvailabilities()
   }
 
@@ -70,15 +82,16 @@ export function AvailabilityDialog({ faculty, open, onOpenChange }: Availability
     const { error } = await supabase.from("faculty_availability").delete().eq("id", id)
 
     if (error) {
-      alert("Error deleting availability: " + error.message)
+      setErrorMsg("Error deleting availability: " + error.message)
       return
     }
 
+    setErrorMsg(null)
     setAvailabilities(availabilities.filter((a) => a.id !== id))
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(openState) => { if (!openState) setErrorMsg(null); onOpenChange(openState) }}>
       <DialogContent className="sm:max-w-[600px]">
         <DialogHeader>
           <DialogTitle>
@@ -113,7 +126,14 @@ export function AvailabilityDialog({ faculty, open, onOpenChange }: Availability
                 <Label>Start Period</Label>
                 <Select
                   value={formData.start_period}
-                  onValueChange={(value) => setFormData({ ...formData, start_period: value })}
+                  onValueChange={(value) => {
+                    setFormData({ ...formData, start_period: value })
+                    if (Number.parseInt(formData.end_period) < Number.parseInt(value)) {
+                      setPeriodError("End period must be greater than or equal to start period")
+                    } else {
+                      setPeriodError("")
+                    }
+                  }}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -131,7 +151,14 @@ export function AvailabilityDialog({ faculty, open, onOpenChange }: Availability
                 <Label>End Period</Label>
                 <Select
                   value={formData.end_period}
-                  onValueChange={(value) => setFormData({ ...formData, end_period: value })}
+                  onValueChange={(value) => {
+                    setFormData({ ...formData, end_period: value })
+                    if (Number.parseInt(value) < Number.parseInt(formData.start_period)) {
+                      setPeriodError("End period must be greater than or equal to start period")
+                    } else {
+                      setPeriodError("")
+                    }
+                  }}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -150,6 +177,8 @@ export function AvailabilityDialog({ faculty, open, onOpenChange }: Availability
               <Plus className="w-4 h-4 mr-2" />
               Add Slot
             </Button>
+            {periodError && <p className="text-xs text-red-400 mt-1">{periodError}</p>}
+            {errorMsg && <p className="text-sm text-red-400 mt-2">{errorMsg}</p>}
           </div>
 
           <div className="space-y-2">

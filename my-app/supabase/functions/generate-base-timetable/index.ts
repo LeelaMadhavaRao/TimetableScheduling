@@ -57,7 +57,7 @@ interface TimetableSlot {
 
 // Constants
 const RULES = {
-  LAB_PERIODS: 3, // 3 consecutive periods = 2.25 hours (once per week)
+  LAB_PERIODS: 3, // 3 consecutive periods per lab session (once per week)
   PERIOD_DURATION_MINS: 45,
   LUNCH_START_PERIOD: 4.5,
   LUNCH_END_PERIOD: 5,
@@ -2125,42 +2125,6 @@ Deno.serve(async (req) => {
 
     console.log("[Edge Function] Starting base timetable generation", adminId ? `for admin: ${adminId}` : "(no admin filter)")
 
-    // If adminId is provided, delete old timetable data first
-    if (adminId) {
-      console.log("[Edge Function] Cleaning up old timetable data for admin:", adminId)
-      
-      // Get old job IDs for this admin
-      const { data: oldJobs } = await supabase
-        .from("timetable_jobs")
-        .select("id")
-        .eq("created_by", adminId)
-      
-      if (oldJobs && oldJobs.length > 0) {
-        const oldJobIds = oldJobs.map(j => j.id)
-        console.log("[Edge Function] Found", oldJobIds.length, "old jobs to clean up")
-        
-        // Delete optimized timetable data
-        await supabase
-          .from("timetable_optimized")
-          .delete()
-          .in("job_id", oldJobIds)
-        
-        // Delete base timetable data
-        await supabase
-          .from("timetable_base")
-          .delete()
-          .in("job_id", oldJobIds)
-        
-        // Delete old jobs
-        await supabase
-          .from("timetable_jobs")
-          .delete()
-          .eq("created_by", adminId)
-        
-        console.log("[Edge Function] Old timetable data cleaned up")
-      }
-    }
-
     // Create a new job with created_by if adminId is provided
     const jobInsertData: any = {
       status: "generating_base",
@@ -2514,31 +2478,32 @@ Deno.serve(async (req) => {
 
     console.log("[Edge Function] Job completed successfully")
     
+    // Clean up old timetable data from previous generations (after successful save)
+    if (adminId) {
+      try {
+        const { data: oldJobs } = await supabase
+          .from("timetable_jobs")
+          .select("id")
+          .eq("created_by", adminId)
+          .neq("id", job.id)
+        
+        if (oldJobs && oldJobs.length > 0) {
+          const oldJobIds = oldJobs.map(j => j.id)
+          await supabase.from("timetable_optimized").delete().in("job_id", oldJobIds)
+          await supabase.from("timetable_base").delete().in("job_id", oldJobIds)
+          await supabase.from("timetable_jobs").delete().in("id", oldJobIds)
+          console.log("[Edge Function] Cleaned up", oldJobIds.length, "old timetable(s)")
+        }
+      } catch (cleanupErr) {
+        console.warn("[Edge Function] Cleanup error (non-critical):", cleanupErr)
+      }
+    }
+    
     // Include reduced courses info in success response
     const reducedCoursesInfo = reducedCourses.length > 0 ? {
       reducedCourses,
       fallbackMessage: `⚠️ Due to tight room capacity, ${reducedCourses.length} theory subject(s) were reduced from 4 to 2 periods/week to fit the schedule`
     } : null
-
-    // 📱 Trigger WhatsApp notifications to faculty
-    console.log("[Edge Function] 📱 Sending WhatsApp notifications to faculty...")
-    try {
-      const notificationResponse = await supabase.functions.invoke('notify-faculty-timetable', {
-        body: {
-          jobId: job.id,
-          timetableType: 'base'
-        }
-      })
-      
-      if (notificationResponse.error) {
-        console.error("[Edge Function] ❌ Notification error:", notificationResponse.error)
-      } else {
-        console.log("[Edge Function] ✅ Notifications sent:", notificationResponse.data)
-      }
-    } catch (notifyError) {
-      console.error("[Edge Function] ❌ Failed to send notifications:", notifyError)
-      // Don't fail the job if notifications fail
-    }
 
     return new Response(
       JSON.stringify({

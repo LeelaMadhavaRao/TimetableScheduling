@@ -43,7 +43,6 @@ import {
   CheckCircle,
   XCircle,
   UserPlus,
-  Bell
 } from "lucide-react";
 import ClickSpark from "@/components/ClickSpark";
 import Link from "next/link";

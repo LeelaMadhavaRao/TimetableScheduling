@@ -84,7 +84,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Send approval email with credentials directly using nodemailer
-    if (data && data.username && data.email && data.name) {
+    if (data && data.username && data.email && (data.full_name || data.name)) {
       try {
         console.log('📧 Attempting to send approval email to:', data.email)
         
@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
         
         const loginUrl = `${process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'http://localhost:3000'}/login/timetable-admin`
         const emailData = generateRequestApprovedEmail({
-          name: data.name,
+          name: data.full_name || data.name,
           username: data.username,
           password: data.temp_password || data.password,
           loginUrl
@@ -135,7 +135,7 @@ export async function POST(request: NextRequest) {
       console.warn('⚠️ Missing required data for sending approval email:', {
         hasUsername: !!data?.username,
         hasEmail: !!data?.email,
-        hasName: !!data?.name
+        hasName: !!(data?.full_name || data?.name)
       })
     }
 

@@ -17,12 +17,12 @@ export const LUNCH_BREAK = { start: "12:00", end: "1:30" }
 
 // Scheduling rules
 export const RULES = {
-  LAB_PERIODS: 3, // 3 consecutive periods = 2.25 hours (once per week)
+  LAB_PERIODS: 3, // 3 consecutive periods per lab session (once per week)
   PERIOD_DURATION_MINS: 45,
   SATURDAY_MORNING_ONLY: true,
   SATURDAY_AFTERNOON_FOR_FIRST_YEAR_LABS: true, // Only if labs overflow
-  MAX_THEORY_PERIODS_PER_DAY: 2, // 1.5 hours max per day for theory
-  FACULTY_GAP_RULE: 3, // If teaching P1-2, next slot from P5-8
+  MAX_THEORY_PERIODS_PER_DAY: 3, // 3 periods max per day for theory
+  FACULTY_GAP_RULE: 3, // For labs: if teaching P1-4, next slot from P5-8
 } as const
 
 // GA Configuration

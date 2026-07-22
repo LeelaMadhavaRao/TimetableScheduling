@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
-import { Play, Zap, CheckCircle, AlertCircle, Loader2, Eye, Download, Bell } from "lucide-react"
+import { Play, Zap, CheckCircle, AlertCircle, Loader2, Eye, Download } from "lucide-react"
 import { getSupabaseBrowserClient } from "@/lib/client"
 import type { TimetableJob } from "@/lib/database"
 import { generateTimetablePDF } from "@/lib/pdf-generator"
@@ -60,53 +60,16 @@ export function GenerateTimetable() {
   const [diagnostics, setDiagnostics] = useState<Diagnostics | null>(null)
   const [showErrorDialog, setShowErrorDialog] = useState(false)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
-  const [notificationStatus, setNotificationStatus] = useState<'idle' | 'sending' | 'sent' | 'failed'>('idle')
-  
-  // Track which jobs we've already sent notifications for
-  const notifiedJobsRef = useRef<Set<string>>(new Set())
-  
+  const [toastMessage, setToastMessage] = useState<string | null>(null)
   // Get admin ID if user is a timetable administrator
   const adminId = role === 'timetable_admin' && user ? (user as { id: string }).id : null
 
-  // Function to send notifications to faculty
-  const sendFacultyNotifications = async (jobId: string, timetableType: 'base' | 'optimized') => {
-    // Check if we've already notified for this job
-    if (notifiedJobsRef.current.has(`${jobId}-${timetableType}`)) {
-      console.log("[GenerateTimetable] Already sent notifications for this job")
-      return
+  useEffect(() => {
+    if (toastMessage) {
+      const timer = setTimeout(() => setToastMessage(null), 3000)
+      return () => clearTimeout(timer)
     }
-    
-    try {
-      setNotificationStatus('sending')
-      console.log("[GenerateTimetable] Sending WhatsApp notifications to faculty...")
-      
-      const supabase = getSupabaseBrowserClient()
-      const { data, error } = await supabase.functions.invoke('notify-faculty-timetable', {
-        method: 'POST',
-        body: {
-          jobId,
-          timetableType,
-          adminId
-        }
-      })
-      
-      if (error) {
-        console.error("[GenerateTimetable] Notification error:", error)
-        setNotificationStatus('failed')
-        return
-      }
-      
-      console.log("[GenerateTimetable] Notification result:", data)
-      notifiedJobsRef.current.add(`${jobId}-${timetableType}`)
-      setNotificationStatus('sent')
-      
-      // Reset status after 5 seconds
-      setTimeout(() => setNotificationStatus('idle'), 5000)
-    } catch (err) {
-      console.error("[GenerateTimetable] Failed to send notifications:", err)
-      setNotificationStatus('failed')
-    }
-  }
+  }, [toastMessage])
 
   useEffect(() => {
     // Subscribe to job updates
@@ -136,15 +99,6 @@ export function GenerateTimetable() {
             if (isComplete) {
               console.log("[GenerateTimetable] ✅ Real-time: Job complete, stopping loader")
               setGenerating(false)
-              
-              // Auto-send notifications when timetable generation completes
-              if (newStatus === "base_complete" && oldStatus !== "base_complete") {
-                console.log("[GenerateTimetable] 📱 Triggering base timetable notifications...")
-                sendFacultyNotifications(payload.new.id, 'base')
-              } else if (newStatus === "completed" && oldStatus !== "completed") {
-                console.log("[GenerateTimetable] 📱 Triggering optimized timetable notifications...")
-                sendFacultyNotifications(payload.new.id, 'optimized')
-              }
             } else if (isGenerating) {
               console.log("[GenerateTimetable] 🔄 Real-time: Job generating, showing loader")
               setGenerating(true)
@@ -363,7 +317,7 @@ export function GenerateTimetable() {
 
   const handleOptimize = async () => {
     if (!currentJob || currentJob.status !== "base_complete") {
-      alert("Please generate base timetable first")
+      setToastMessage("Please generate base timetable first")
       return
     }
 
@@ -381,7 +335,7 @@ export function GenerateTimetable() {
 
       if (error) {
         console.error("[GenerateTimetable] Optimization error:", error)
-        alert("Error: " + error.message)
+        setToastMessage("Error: " + error.message)
         setGenerating(false)
         return
       }
@@ -397,7 +351,7 @@ export function GenerateTimetable() {
       }
     } catch (error) {
       console.error("[GenerateTimetable] Exception:", error)
-      alert("Error optimizing timetable")
+      setToastMessage("Error optimizing timetable")
       setGenerating(false)
     }
   }
@@ -426,13 +380,13 @@ export function GenerateTimetable() {
 
       if (error) {
         console.error("Error fetching timetable:", error)
-        alert("Error fetching timetable data")
+        setToastMessage("Error fetching timetable data")
         setGenerating(false)
         return
       }
 
       if (!timetableSlots || timetableSlots.length === 0) {
-        alert("No timetable data found")
+        setToastMessage("No timetable data found")
         setGenerating(false)
         return
       }
@@ -443,7 +397,7 @@ export function GenerateTimetable() {
       setGenerating(false)
     } catch (error) {
       console.error("Error generating PDF:", error)
-      alert("Error generating PDF")
+      setToastMessage("Error generating PDF")
       setGenerating(false)
     }
   }
@@ -505,6 +459,12 @@ export function GenerateTimetable() {
 
   return (
     <div className="space-y-6">
+      {/* Toast notification */}
+      {toastMessage && (
+        <div className="fixed top-4 right-4 z-50 bg-slate-800 text-white px-4 py-3 rounded-lg shadow-lg border border-slate-600 animate-in fade-in">
+          {toastMessage}
+        </div>
+      )}
       {/* Full-screen loading overlay during generation */}
       {generating && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center">
@@ -762,50 +722,7 @@ export function GenerateTimetable() {
                   </Button>
                 </ClickSpark>
                 
-                {/* WhatsApp Notification Button */}
-                <ClickSpark
-                  sparkColor="#25D366"
-                  sparkSize={10}
-                  sparkRadius={18}
-                  sparkCount={8}
-                  duration={450}
-                >
-                  <Button 
-                    onClick={() => sendFacultyNotifications(
-                      currentJob.id, 
-                      currentJob.status === "completed" ? 'optimized' : 'base'
-                    )} 
-                    className="w-full bg-[#25D366] hover:bg-[#128C7E] text-white" 
-                    disabled={generating || notificationStatus === 'sending'}
-                  >
-                    {notificationStatus === 'sending' ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Sending Notifications...
-                      </>
-                    ) : notificationStatus === 'sent' ? (
-                      <>
-                        <CheckCircle className="w-4 h-4 mr-2" />
-                        Notifications Sent!
-                      </>
-                    ) : notificationStatus === 'failed' ? (
-                      <>
-                        <AlertCircle className="w-4 h-4 mr-2" />
-                        Failed - Try Again
-                      </>
-                    ) : (
-                      <>
-                        <Bell className="w-4 h-4 mr-2" />
-                        Notify Faculty via WhatsApp
-                      </>
-                    )}
-                  </Button>
-                </ClickSpark>
-                {notificationStatus === 'sent' && (
-                  <p className="text-xs text-center text-green-500">
-                    ✓ Faculty members have been notified about their timetable
-                  </p>
-                )}
+
               </div>
             )}
           </div>

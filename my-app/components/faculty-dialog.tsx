@@ -36,9 +36,26 @@ export function FacultyDialog({ faculty, departments, trigger }: FacultyDialogPr
     department_id: faculty?.department_id || "",
     phone: faculty?.phone || "",
   })
+  const [phoneError, setPhoneError] = useState("")
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
+
+  const validatePhone = (phone: string) => {
+    const digitCount = phone.replace(/\D/g, "").length
+    if (phone && digitCount < 10) {
+      setPhoneError("Phone number must contain at least 10 digits")
+      return false
+    }
+    setPhoneError("")
+    return true
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    if (!validatePhone(formData.phone)) {
+      return
+    }
+
     setLoading(true)
 
     const supabase = getSupabaseBrowserClient()
@@ -47,7 +64,7 @@ export function FacultyDialog({ faculty, departments, trigger }: FacultyDialogPr
       const { error } = await supabase.from("faculty").update(formData).eq("id", faculty.id)
 
       if (error) {
-        alert("Error updating faculty: " + error.message)
+        setErrorMsg("Error updating faculty: " + error.message)
         setLoading(false)
         return
       }
@@ -55,18 +72,19 @@ export function FacultyDialog({ faculty, departments, trigger }: FacultyDialogPr
       const { error } = await supabase.from("faculty").insert(formData)
 
       if (error) {
-        alert("Error creating faculty: " + error.message)
+        setErrorMsg("Error creating faculty: " + error.message)
         setLoading(false)
         return
       }
     }
 
+    setErrorMsg(null)
     setOpen(false)
     setLoading(false)
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={(openState) => { if (!openState) setErrorMsg(null); setOpen(openState) }}>
       <DialogTrigger asChild>
         {trigger || (
           <Button>
@@ -141,9 +159,16 @@ export function FacultyDialog({ faculty, departments, trigger }: FacultyDialogPr
                 id="phone"
                 placeholder="e.g., +91 9876543210"
                 value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                onChange={(e) => {
+                  const filtered = e.target.value.replace(/[^\d+\-\s]/g, "")
+                  setFormData({ ...formData, phone: filtered })
+                  validatePhone(filtered)
+                }}
+                className={phoneError ? "border-red-500" : ""}
               />
+              {phoneError && <p className="text-xs text-red-400">{phoneError}</p>}
             </div>
+            {errorMsg && <p className="text-sm text-red-400 mt-2">{errorMsg}</p>}
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>

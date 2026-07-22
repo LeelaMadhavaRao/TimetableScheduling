@@ -59,7 +59,7 @@ export default async function SectionsPage() {
             </div>
           </div>
         </div>
-        <SectionDialog departments={departments || []} subjects={subjects || []} />
+        <SectionDialog departments={departments || []} />
       </div>
 
       <Card className="bg-slate-800/50 border-slate-700 backdrop-blur-xl shadow-lg hover:shadow-xl transition-all duration-300 hover:border-blue-500/50">

@@ -20,6 +20,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Plus } from "lucide-react"
 import type { Subject, Department, Faculty } from "@/lib/database"
 import { getSupabaseBrowserClient } from "@/lib/client"
+import { RULES } from "@/lib/timetable"
 import { useRouter } from "next/navigation"
 
 interface SubjectDialogProps {
@@ -132,7 +133,7 @@ export function SubjectDialog({ subject, departments, faculty, trigger }: Subjec
                     setFormData({ 
                       ...formData, 
                       subject_type: value,
-                      periods_per_week: value === "lab" ? 4 : formData.periods_per_week 
+                      periods_per_week: value === "lab" ? RULES.LAB_PERIODS : formData.periods_per_week 
                     })
                   }}
                 >
@@ -174,7 +175,7 @@ export function SubjectDialog({ subject, departments, faculty, trigger }: Subjec
               <div className="rounded-lg bg-slate-700/50 p-3 space-y-1 border border-slate-600">
                 <p className="text-sm font-medium text-white">Lab Schedule</p>
                 <p className="text-xs text-slate-300">
-                  Lab subjects are automatically scheduled for 4 continuous periods (1 session) per week
+                  Lab subjects are automatically scheduled for {RULES.LAB_PERIODS} continuous periods (1 session) per week
                 </p>
               </div>
             )}

@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
     // Get request details before rejecting (to get email)
     const { data: requestData, error: requestError } = await supabase
       .from('registration_requests')
-      .select('name, email, status')
+      .select('full_name, email, status')
       .eq('id', requestId)
       .single()
 
@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
     if (!requestData) {
       console.error('❌ Request data not found for ID:', requestId)
     } else {
-      console.log('📋 Request data found:', { name: requestData.name, email: requestData.email, status: requestData.status })
+      console.log('📋 Request data found:', { name: requestData.full_name, email: requestData.email, status: requestData.status })
     }
 
     // Call RPC function to reject request
@@ -120,7 +120,7 @@ export async function POST(request: NextRequest) {
         }
         
         const emailData = generateRequestRejectedEmail({
-          name: requestData.name,
+          name: requestData.full_name,
           reason: rejectionReason
         })
 

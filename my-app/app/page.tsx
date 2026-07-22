@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Calendar, Users, BookOpen, Building, Play, Settings, Sparkles, ArrowRight, Zap, Shield, GraduationCap, LogIn, Clock, CheckCircle2, Target, BarChart3, Database, Cpu } from "lucide-react"
+import { Calendar, Settings, Sparkles, Zap, Shield, GraduationCap, Clock, CheckCircle2, BarChart3, Database, Cpu } from "lucide-react"
 import ClickSpark from "@/components/ClickSpark"
 import { useAuth } from "@/contexts/AuthContext"
 import { useRouter } from "next/navigation"

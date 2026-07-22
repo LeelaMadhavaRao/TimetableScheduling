@@ -42,13 +42,6 @@ export interface AuthResult {
   role?: UserRole;
 }
 
-// Generate session token
-function generateSessionToken(): string {
-  const array = new Uint8Array(32);
-  crypto.getRandomValues(array);
-  return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
-}
-
 // Admin Login
 export async function loginAdmin(username: string, password: string): Promise<AuthResult> {
   try {
@@ -87,49 +80,19 @@ export async function loginTimetableAdmin(username: string, password: string): P
   }
 }
 
-// Faculty Login (username = code, password = phone)
+// Faculty Login (code = identifier, phone = credential)
 export async function loginFaculty(code: string, phone: string): Promise<AuthResult> {
-  const supabase = getSupabaseBrowserClient();
-  
   try {
-    const { data: faculty, error } = await supabase
-      .from('faculty')
-      .select('id, code, name, phone, email, is_active')
-      .eq('code', code.toUpperCase())
-      .eq('phone', phone)
-      .eq('is_active', true)
-      .single();
-    
-    if (error || !faculty) {
-      return { success: false, message: 'Invalid faculty code or phone number' };
-    }
-    
-    // Create session
-    const sessionToken = generateSessionToken();
-    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-    
-    const { data: session, error: sessionError } = await supabase
-      .from('user_sessions')
-      .insert({
-        user_id: faculty.id,
-        user_type: 'faculty',
-        session_token: sessionToken,
-        expires_at: expiresAt
-      })
-      .select()
-      .single();
-    
-    if (sessionError) {
-      return { success: false, message: 'Failed to create session' };
-    }
-    
-    return {
-      success: true,
-      message: 'Login successful',
-      user: { id: faculty.id, code: faculty.code, name: faculty.name },
-      session,
-      role: 'faculty'
-    };
+    const response = await fetch('/api/auth/login-faculty', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ code, phone }),
+    });
+
+    const result = await response.json();
+    return result;
   } catch (err) {
     console.error('Faculty login error:', err);
     return { success: false, message: 'An error occurred during login' };

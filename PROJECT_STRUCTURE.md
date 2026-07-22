@@ -80,7 +80,7 @@ TimetableScheduling/
     │   └── 📄 utils.ts                  General utilities
     │
     ├── 📁 supabase/                     ⭐ EDGE FUNCTIONS
-    │   ├── 📄 config.json               Supabase CLI config
+    │   ├── 📄 config.toml               Supabase CLI config
     │   ├── 📁 functions/
     │   │   └── 📁 generate-base-timetable/
     │   │       ├── 📄 index.ts          ← MAIN ORCHESTRATOR (calls ILP solver)

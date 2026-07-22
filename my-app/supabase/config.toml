@@ -1,4 +1,9 @@
 # Supabase Edge Functions Configuration
+#
+# NOTE: verify_jwt = false is intentional for the generate-base-timetable and
+# optimize-timetable functions. These endpoints need to be callable anonymously
+# from the timetable generation UI. Rate limiting via Supabase's built-in
+# features or a custom middleware is strongly recommended.
 
 [functions.generate-base-timetable]
 verify_jwt = false

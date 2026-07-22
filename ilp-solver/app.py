@@ -148,25 +148,28 @@ def solve_lab_timetable(data: ProblemData):
         courses = data.courses
         rooms = data.rooms
         rules = data.rules
-        lab_periods = rules.labPeriods  # Dynamic lab duration (3 or 4 periods)
+        lab_periods = rules.labPeriods  # Dynamic lab duration
         
-        # Block definitions based on lab_periods:
-        # For 3-period labs: Morning can start at 1 or 2, Afternoon can start at 5 or 6
-        # For 4-period labs: Morning starts at 1, Afternoon starts at 5
-        blocks = ["M", "A"]  # Morning and Afternoon blocks
+        # Block definitions: 4 possible 3-period lab slots per day
+        # Morning blocks: start at period 1 (P1-3) or period 2 (P2-4)
+        # Afternoon blocks: start at period 5 (P5-7) or period 6 (P6-8)
+        blocks = [
+            {"name": "M1", "start": 1, "half": "M"},  # Morning slot 1: periods 1-3
+            {"name": "M2", "start": 2, "half": "M"},  # Morning slot 2: periods 2-4
+            {"name": "A1", "start": 5, "half": "A"},  # Afternoon slot 1: periods 5-7
+            {"name": "A2", "start": 6, "half": "A"},  # Afternoon slot 2: periods 6-8
+        ]
         
-        # Generate actual periods for each block based on lab duration
-        # Morning block: starts at period 1, covers lab_periods periods
-        # Afternoon block: starts at period 5, covers lab_periods periods
-        block_periods = {
-            "M": list(range(1, 1 + lab_periods)),      # e.g., [1,2,3] for 3-period labs
-            "A": list(range(5, 5 + lab_periods)),      # e.g., [5,6,7] for 3-period labs
-        }
+        # Generate periods for each block based on start and duration
+        block_periods = {}
+        for block in blocks:
+            block_periods[block["name"]] = list(range(block["start"], block["start"] + lab_periods))
         
         print(f"[Solver] 📋 Block configuration (lab_periods={lab_periods}):")
-        print(f"[Solver]   Morning block: periods {block_periods['M']}")
-        print(f"[Solver]   Afternoon block: periods {block_periods['A']}")
+        for block in blocks:
+            print(f"[Solver]   {block['name']}: periods {block_periods[block['name']]}")
         
+        block_names = [b["name"] for b in blocks]
         days = list(range(rules.daysPerWeek))  # 0-5 (Mon-Sat)
         
         # Build faculty availability map
@@ -202,14 +205,15 @@ def solve_lab_timetable(data: ProblemData):
         for c_idx, course in enumerate(courses):
             for day in days:
                 for block in blocks:
+                    block_name = block["name"]
                     # Saturday afternoon only for year 1
-                    if day == 5 and block == "A" and course.yearLevel != 1:
+                    if day == 5 and block["half"] == "A" and course.yearLevel != 1:
                         continue
                     
                     # Check faculty availability for all periods in block
                     faculty_avail = faculty_avail_map.get(course.facultyId, "all")
                     if faculty_avail != "all":
-                        periods_in_block = block_periods[block]
+                        periods_in_block = block_periods[block_name]
                         if not all((day, p) in faculty_avail for p in periods_in_block):
                             continue  # Faculty not available for this block
                     
@@ -221,9 +225,9 @@ def solve_lab_timetable(data: ProblemData):
                             continue
                         
                         # Create decision variable
-                        var_name = f"L_{c_idx}_{day}_{block}_{r_idx}"
-                        L[(c_idx, day, block, r_idx)] = model.NewBoolVar(var_name)
-                        valid_assignments.append((c_idx, day, block, r_idx))
+                        var_name = f"L_{c_idx}_{day}_{block_name}_{r_idx}"
+                        L[(c_idx, day, block_name, r_idx)] = model.NewBoolVar(var_name)
+                        valid_assignments.append((c_idx, day, block_name, r_idx))
         
         print(f"[Solver] Created {len(valid_assignments)} decision variables")
         

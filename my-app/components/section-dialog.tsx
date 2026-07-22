@@ -16,22 +16,17 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Plus } from "lucide-react"
-import type { Section, Department, Subject, Faculty } from "@/lib/database"
+import type { Section, Department } from "@/lib/database"
 import { getSupabaseBrowserClient } from "@/lib/client"
 import { useRouter } from "next/navigation"
-
-interface SubjectWithFaculty extends Subject {
-  subject_faculty?: { faculty: Faculty }[]
-}
 
 interface SectionDialogProps {
   section?: Section
   departments: Department[]
-  subjects: SubjectWithFaculty[]
   trigger?: React.ReactNode
 }
 
-export function SectionDialog({ section, departments, subjects, trigger }: SectionDialogProps) {
+export function SectionDialog({ section, departments, trigger }: SectionDialogProps) {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [formData, setFormData] = useState({
@@ -40,6 +35,8 @@ export function SectionDialog({ section, departments, subjects, trigger }: Secti
     student_count: section?.student_count || 60,
     department_id: section?.department_id || "",
   })
+  const [studentCountError, setStudentCountError] = useState("")
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const router = useRouter()
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -48,11 +45,17 @@ export function SectionDialog({ section, departments, subjects, trigger }: Secti
 
     const supabase = getSupabaseBrowserClient()
 
+    if (formData.student_count < 1) {
+      setStudentCountError("Student count must be at least 1")
+      setLoading(false)
+      return
+    }
+
     if (section) {
       const { error } = await supabase.from("sections").update(formData).eq("id", section.id)
 
       if (error) {
-        alert("Error updating section: " + error.message)
+        setErrorMsg("Error updating section: " + error.message)
         setLoading(false)
         return
       }
@@ -60,18 +63,19 @@ export function SectionDialog({ section, departments, subjects, trigger }: Secti
       const { error } = await supabase.from("sections").insert(formData)
 
       if (error) {
-        alert("Error creating section: " + error.message)
+        setErrorMsg("Error creating section: " + error.message)
         setLoading(false)
         return
       }
     }
 
+    setErrorMsg(null)
     setOpen(false)
     setLoading(false)
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={(openState) => { if (!openState) setErrorMsg(null); setOpen(openState) }}>
       <DialogTrigger asChild>
         {trigger || (
           <Button>
@@ -130,9 +134,19 @@ export function SectionDialog({ section, departments, subjects, trigger }: Secti
                   min="1"
                   placeholder="e.g., 60"
                   value={formData.student_count}
-                  onChange={(e) => setFormData({ ...formData, student_count: Number.parseInt(e.target.value) || 0 })}
+                  onChange={(e) => {
+                    const val = Number.parseInt(e.target.value) || 0
+                    setFormData({ ...formData, student_count: val })
+                    if (val < 1) {
+                      setStudentCountError("Student count must be at least 1")
+                    } else {
+                      setStudentCountError("")
+                    }
+                  }}
+                  className={studentCountError ? "border-red-500" : ""}
                   required
                 />
+                {studentCountError && <p className="text-xs text-red-400">{studentCountError}</p>}
               </div>
             </div>
             <div className="space-y-2">
@@ -153,6 +167,7 @@ export function SectionDialog({ section, departments, subjects, trigger }: Secti
                 </SelectContent>
               </Select>
             </div>
+            {errorMsg && <p className="text-sm text-red-400 mt-2">{errorMsg}</p>}
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>

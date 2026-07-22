@@ -35,6 +35,8 @@ export function ClassroomDialog({ classroom, trigger }: ClassroomDialogProps) {
     building: classroom?.building || "",
     floor: classroom?.floor || 1,
   })
+  const [capacityError, setCapacityError] = useState("")
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const router = useRouter()
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -43,11 +45,17 @@ export function ClassroomDialog({ classroom, trigger }: ClassroomDialogProps) {
 
     const supabase = getSupabaseBrowserClient()
 
+    if (formData.capacity < 1) {
+      setCapacityError("Capacity must be at least 1")
+      setLoading(false)
+      return
+    }
+
     if (classroom) {
       const { error } = await supabase.from("classrooms").update(formData).eq("id", classroom.id)
 
       if (error) {
-        alert("Error updating classroom: " + error.message)
+        setErrorMsg("Error updating classroom: " + error.message)
         setLoading(false)
         return
       }
@@ -55,18 +63,19 @@ export function ClassroomDialog({ classroom, trigger }: ClassroomDialogProps) {
       const { error } = await supabase.from("classrooms").insert(formData)
 
       if (error) {
-        alert("Error creating classroom: " + error.message)
+        setErrorMsg("Error creating classroom: " + error.message)
         setLoading(false)
         return
       }
     }
 
+    setErrorMsg(null)
     setOpen(false)
     setLoading(false)
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={(openState) => { if (!openState) setErrorMsg(null); setOpen(openState) }}>
       <DialogTrigger asChild>
         {trigger || (
           <Button>
@@ -106,9 +115,19 @@ export function ClassroomDialog({ classroom, trigger }: ClassroomDialogProps) {
                   min="1"
                   placeholder="e.g., 60"
                   value={formData.capacity}
-                  onChange={(e) => setFormData({ ...formData, capacity: Number.parseInt(e.target.value) || 0 })}
+                  onChange={(e) => {
+                    const val = Number.parseInt(e.target.value) || 0
+                    setFormData({ ...formData, capacity: val })
+                    if (val < 1) {
+                      setCapacityError("Capacity must be at least 1")
+                    } else {
+                      setCapacityError("")
+                    }
+                  }}
+                  className={capacityError ? "border-red-500" : ""}
                   required
                 />
+                {capacityError && <p className="text-xs text-red-400">{capacityError}</p>}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="type" className="text-white">Type *</Label>
@@ -148,6 +167,7 @@ export function ClassroomDialog({ classroom, trigger }: ClassroomDialogProps) {
                 />
               </div>
             </div>
+            {errorMsg && <p className="text-sm text-red-400 mt-2">{errorMsg}</p>}
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>

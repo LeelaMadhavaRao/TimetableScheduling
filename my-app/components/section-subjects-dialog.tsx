@@ -26,6 +26,7 @@ export function SectionSubjectsDialog({ section, subjects, open, onOpenChange }:
   const [loading, setLoading] = useState(true)
   const [selectedSubject, setSelectedSubject] = useState("")
   const [selectedFaculty, setSelectedFaculty] = useState("")
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
   useEffect(() => {
     if (open) {
@@ -54,7 +55,7 @@ export function SectionSubjectsDialog({ section, subjects, open, onOpenChange }:
 
   const handleAdd = async () => {
     if (!selectedSubject || !selectedFaculty) {
-      alert("Please select both subject and faculty")
+      setErrorMsg("Please select both subject and faculty")
       return
     }
 
@@ -66,10 +67,11 @@ export function SectionSubjectsDialog({ section, subjects, open, onOpenChange }:
     })
 
     if (error) {
-      alert("Error adding subject: " + error.message)
+      setErrorMsg("Error adding subject: " + error.message)
       return
     }
 
+    setErrorMsg(null)
     setSelectedSubject("")
     setSelectedFaculty("")
     fetchSectionSubjects()
@@ -80,15 +82,16 @@ export function SectionSubjectsDialog({ section, subjects, open, onOpenChange }:
     const { error } = await supabase.from("section_subjects").delete().eq("id", id)
 
     if (error) {
-      alert("Error removing subject: " + error.message)
+      setErrorMsg("Error removing subject: " + error.message)
       return
     }
 
+    setErrorMsg(null)
     setSectionSubjects(sectionSubjects.filter((s) => s.id !== id))
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(openState) => { if (!openState) setErrorMsg(null); onOpenChange(openState) }}>
       <DialogContent className="sm:max-w-[650px]">
         <DialogHeader>
           <DialogTitle>
@@ -147,6 +150,7 @@ export function SectionSubjectsDialog({ section, subjects, open, onOpenChange }:
               <Plus className="w-4 h-4 mr-2" />
               Add Subject
             </Button>
+            {errorMsg && <p className="text-sm text-red-400 mt-2">{errorMsg}</p>}
           </div>
 
           <div className="space-y-2">

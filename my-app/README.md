@@ -101,7 +101,7 @@ The application uses **Supabase Edge Functions** for all backend operations:
 - **`generate-base-timetable`** - ILP-based base timetable generation
 - **`optimize-timetable`** - GA-based timetable optimization
 
-See [SUPABASE_EDGE_FUNCTIONS_SETUP.md](./SUPABASE_EDGE_FUNCTIONS_SETUP.md) for detailed setup instructions.
+See the `supabase/functions/` directory for deployed edge functions.
 
 ### Deployment
 

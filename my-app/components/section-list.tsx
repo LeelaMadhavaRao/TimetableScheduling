@@ -14,7 +14,7 @@ import { useRouter } from "next/navigation"
 
 interface SectionWithDetails extends Section {
   departments?: Department | null
-  section_subjects?: any[]
+  section_subjects?: { id: string; section_id: string; subject_id: string; faculty_id: string }[]
 }
 
 interface SubjectWithFaculty extends Subject {
@@ -32,6 +32,7 @@ export function SectionList({ sections: initialSections, departments, subjects }
   const [selectedSection, setSelectedSection] = useState<SectionWithDetails | null>(null)
   const [showSubjects, setShowSubjects] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const router = useRouter()
 
   useEffect(() => {
@@ -61,10 +62,11 @@ export function SectionList({ sections: initialSections, departments, subjects }
     const { error } = await supabase.from("sections").delete().eq("id", id)
 
     if (error) {
-      alert("Error deleting section: " + error.message)
+      setErrorMsg("Error deleting section: " + error.message)
       return
     }
 
+    setErrorMsg(null)
     setSections(sections.filter((s) => s.id !== id))
   }
 
@@ -91,6 +93,8 @@ export function SectionList({ sections: initialSections, departments, subjects }
           className="pl-10"
         />
       </div>
+
+      {errorMsg && <p className="text-sm text-red-400">{errorMsg}</p>}
 
       {filteredSections.length === 0 ? (
         <div className="text-center py-12 text-slate-300">
@@ -136,7 +140,6 @@ export function SectionList({ sections: initialSections, departments, subjects }
                       <SectionDialog
                         section={section}
                         departments={departments}
-                        subjects={subjects}
                         trigger={
                           <Button variant="outline" size="sm">
                             <Edit className="w-4 h-4 text-black" />

@@ -17,10 +17,10 @@ interface TimetableSlotWithDetails {
   day_of_week: number
   start_period: number
   end_period: number
-  sections: { name: string; year_level: number }
-  subjects: { name: string; code: string; subject_type: string }
-  faculty: { name: string; code: string }
-  classrooms: { name: string }
+  sections: { name: string; year_level: number } | null
+  subjects: { name: string; code: string; subject_type: string } | null
+  faculty: { name: string; code: string } | null
+  classrooms: { name: string } | null
   fitness_score?: number
 }
 
@@ -93,17 +93,17 @@ export function TimetableViewer({ timetableSlots, sections, faculty, classrooms,
                   }
 
                   const colspan = slot.end_period - slot.start_period + 1
-                  const isLab = slot.subjects.subject_type === "lab"
+                  const isLab = slot.subjects?.subject_type === "lab"
 
                   return (
                     <td key={periodIndex} colSpan={colspan} className={`border border-slate-300 dark:border-slate-600 p-3 ${
                       isLab ? "bg-blue-50 dark:bg-blue-950/30" : "bg-green-50 dark:bg-green-950/30"
                     }`}>
                       <div className="space-y-1.5">
-                        <div className="font-semibold text-sm text-slate-900 dark:text-slate-100">{slot.subjects.name}</div>
+                        <div className="font-semibold text-sm text-slate-900 dark:text-slate-100">{slot.subjects?.name ?? 'Unknown'}</div>
                         <div className="flex items-center gap-1 flex-wrap">
                           <Badge variant="outline" className="text-xs bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-600">
-                            {slot.subjects.code}
+                            {slot.subjects?.code ?? ''}
                           </Badge>
                           <Badge
                             variant={isLab ? "default" : "secondary"}
@@ -113,22 +113,22 @@ export function TimetableViewer({ timetableSlots, sections, faculty, classrooms,
                                 : "bg-green-600 dark:bg-green-700 text-white"
                             }`}
                           >
-                            {slot.subjects.subject_type}
+                            {slot.subjects?.subject_type ?? 'theory'}
                           </Badge>
                         </div>
                         {viewMode === "section" ? (
                           <div className="text-xs text-slate-700 dark:text-slate-300">
-                            {slot.faculty.name} ({slot.faculty.code})
+                            {slot.faculty?.name ?? 'Unknown'} ({slot.faculty?.code ?? ''})
                           </div>
                         ) : viewMode === "faculty" ? (
-                          <div className="text-xs text-slate-700 dark:text-slate-300">{slot.sections.name}</div>
+                          <div className="text-xs text-slate-700 dark:text-slate-300">{slot.sections?.name ?? 'Unknown'}</div>
                         ) : (
                           <div className="text-xs text-slate-700 dark:text-slate-300">
-                            {slot.sections.name} • {slot.faculty.code}
+                            {slot.sections?.name ?? 'Unknown'} • {slot.faculty?.code ?? ''}
                           </div>
                         )}
                         {viewMode !== "classroom" && (
-                          <div className="text-xs text-slate-600 dark:text-slate-400">{slot.classrooms.name}</div>
+                          <div className="text-xs text-slate-600 dark:text-slate-400">{slot.classrooms?.name ?? 'Unknown'}</div>
                         )}
                       </div>
                     </td>

@@ -18,6 +18,7 @@ interface ClassroomListProps {
 export function ClassroomList({ classrooms: initialClassrooms }: ClassroomListProps) {
   const [classrooms, setClassrooms] = useState(initialClassrooms)
   const [searchQuery, setSearchQuery] = useState("")
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const router = useRouter()
 
   useEffect(() => {
@@ -47,10 +48,11 @@ export function ClassroomList({ classrooms: initialClassrooms }: ClassroomListPr
     const { error } = await supabase.from("classrooms").delete().eq("id", id)
 
     if (error) {
-      alert("Error deleting classroom: " + error.message)
+      setErrorMsg("Error deleting classroom: " + error.message)
       return
     }
 
+    setErrorMsg(null)
     setClassrooms(classrooms.filter((c) => c.id !== id))
   }
 
@@ -78,6 +80,8 @@ export function ClassroomList({ classrooms: initialClassrooms }: ClassroomListPr
           className="pl-10"
         />
       </div>
+
+      {errorMsg && <p className="text-sm text-red-400">{errorMsg}</p>}
 
       {filteredClassrooms.length === 0 ? (
         <div className="text-center py-12 text-slate-300">

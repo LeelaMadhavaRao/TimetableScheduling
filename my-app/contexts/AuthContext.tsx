@@ -79,9 +79,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(SESSION_KEY, sessionToken);
     localStorage.setItem(ROLE_KEY, userRole);
     
-    // Also set cookies for server-side access
-    document.cookie = `${SESSION_KEY}=${sessionToken}; path=/; max-age=${24 * 60 * 60}`; // 24 hours
-    document.cookie = `${ROLE_KEY}=${userRole}; path=/; max-age=${24 * 60 * 60}`;
+    // Also set cookies for server-side access (with Secure and SameSite flags)
+    document.cookie = `${SESSION_KEY}=${sessionToken}; path=/; max-age=${24 * 60 * 60}; SameSite=Lax; Secure`;
+    document.cookie = `${ROLE_KEY}=${userRole}; path=/; max-age=${24 * 60 * 60}; SameSite=Lax; Secure`;
     
     await refreshSession();
   };

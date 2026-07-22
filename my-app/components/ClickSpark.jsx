@@ -131,6 +131,11 @@ const ClickSpark = ({
     }));
 
     sparksRef.current.push(...newSparks);
+
+    const MAX_SPARKS = 50;
+    if (sparksRef.current.length > MAX_SPARKS) {
+      sparksRef.current.splice(0, sparksRef.current.length - MAX_SPARKS);
+    }
   };
 
   return (

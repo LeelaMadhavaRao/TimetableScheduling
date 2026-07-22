@@ -26,6 +26,7 @@ export function FacultyList({ faculty: initialFaculty, departments }: FacultyLis
   const [selectedFaculty, setSelectedFaculty] = useState<FacultyWithDept | null>(null)
   const [showAvailability, setShowAvailability] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const router = useRouter()
 
   useEffect(() => {
@@ -37,7 +38,7 @@ export function FacultyList({ faculty: initialFaculty, departments }: FacultyLis
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "faculty" },
-        (payload: any) => {
+        (payload: { new: Record<string, unknown>; old: Record<string, unknown>; eventType: string }) => {
           console.log("[Faculty] Database change detected:", payload)
           router.refresh()
         }
@@ -56,10 +57,11 @@ export function FacultyList({ faculty: initialFaculty, departments }: FacultyLis
     const { error } = await supabase.from("faculty").delete().eq("id", id)
 
     if (error) {
-      alert("Error deleting faculty: " + error.message)
+      setErrorMsg("Error deleting faculty: " + error.message)
       return
     }
 
+    setErrorMsg(null)
     setFaculty(faculty.filter((f) => f.id !== id))
   }
 
@@ -87,6 +89,8 @@ export function FacultyList({ faculty: initialFaculty, departments }: FacultyLis
           className="pl-10"
         />
       </div>
+
+      {errorMsg && <p className="text-sm text-red-400">{errorMsg}</p>}
 
       {filteredFaculty.length === 0 ? (
         <div className="text-center py-12 text-slate-300">

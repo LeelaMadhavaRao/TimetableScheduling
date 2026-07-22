@@ -58,6 +58,7 @@ export function GenerateTimetable() {
   const [isLoading, setIsLoading] = useState(true)
   const [errorDetails, setErrorDetails] = useState<ErrorDetail[]>([])
   const [diagnostics, setDiagnostics] = useState<Diagnostics | null>(null)
+  const [executionLogs, setExecutionLogs] = useState<string[]>([])
   const [showErrorDialog, setShowErrorDialog] = useState(false)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const [toastMessage, setToastMessage] = useState<string | null>(null)
@@ -207,6 +208,7 @@ export function GenerateTimetable() {
     setGenerating(true)
     setShowErrorDialog(false)  // Clear previous errors
     setDiagnostics(null)  // Clear previous diagnostics
+    setExecutionLogs([]) // Clear previous logs
     setCurrentJob(null)  // Clear old job data to show fresh state
 
     try {
@@ -272,6 +274,10 @@ export function GenerateTimetable() {
 
       console.log("[GenerateTimetable] Edge Function response:", data)
       
+      if (data?.executionLogs) {
+        setExecutionLogs(data.executionLogs)
+      }
+      
       // Handle conflicts detected
       if (!data?.success && data?.error === "CONFLICTS_DETECTED" && data?.conflicts) {
         setErrorDetails(data.conflicts.map((c: string) => ({
@@ -298,6 +304,26 @@ export function GenerateTimetable() {
         setShowErrorDialog(true)
         setGenerating(false)
         // Fetch updated job to show failed status in UI
+        setTimeout(() => fetchLatestJob(), 500)
+        return
+      }
+      
+      // Handle any other business logic errors returned with 200 OK
+      if (!data?.success) {
+        console.error("[GenerateTimetable] Edge Function returned business error:", data?.error || data)
+        setErrorDetails([{
+          section: "System",
+          subject: "Validation",
+          type: "system",
+          expected: "Success",
+          scheduled: 0,
+          reason: data?.error || "Unknown generation error"
+        }])
+        if (data?.diagnostics) {
+          setDiagnostics(data.diagnostics)
+        }
+        setShowErrorDialog(true)
+        setGenerating(false)
         setTimeout(() => fetchLatestJob(), 500)
         return
       }
@@ -900,6 +926,33 @@ export function GenerateTimetable() {
                 ))}
               </div>
             </div>
+
+            {/* Execution Logs */}
+            {executionLogs.length > 0 && (
+              <div className="rounded-lg border bg-slate-900 p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-medium text-sm text-slate-200">Execution Logs:</h4>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="text-xs h-6 text-slate-400 hover:text-white"
+                    onClick={() => {
+                      navigator.clipboard.writeText(executionLogs.join('\n'))
+                      setToastMessage("Logs copied to clipboard!")
+                    }}
+                  >
+                    Copy Logs
+                  </Button>
+                </div>
+                <div className="space-y-1 max-h-48 overflow-y-auto font-mono text-[10px] text-slate-400 bg-black/50 p-3 rounded">
+                  {executionLogs.map((log, idx) => (
+                    <div key={idx} className={log.includes('[ERROR]') ? 'text-red-400' : ''}>
+                      {log}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="rounded-lg border bg-blue-50 dark:bg-blue-950/20 p-4">
               <h4 className="font-medium text-sm mb-2 text-blue-900 dark:text-blue-100">

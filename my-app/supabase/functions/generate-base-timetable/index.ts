@@ -2095,6 +2095,21 @@ function generateDiagnostics(
 
 // Main Edge Function Handler
 Deno.serve(async (req) => {
+  // Capture logs for UI display
+  const executionLogs: string[] = []
+  const originalLog = console.log
+  const originalError = console.error
+  
+  console.log = (...args) => {
+    executionLogs.push(`[INFO] ${args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ')}`)
+    originalLog(...args)
+  }
+  
+  console.error = (...args) => {
+    executionLogs.push(`[ERROR] ${args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ')}`)
+    originalError(...args)
+  }
+
   try {
     // CORS headers
     if (req.method === "OPTIONS") {
@@ -2252,7 +2267,7 @@ Deno.serve(async (req) => {
         .eq("id", job.id)
       
       return new Response(
-        JSON.stringify({ success: false, error: "Missing required data", jobId: job.id }),
+        JSON.stringify({ success: false, error: "Missing required data", jobId: job.id, executionLogs }),
         {
           status: 200, // Return 200 so frontend can parse error details
           headers: {
@@ -2433,17 +2448,19 @@ Deno.serve(async (req) => {
     const reducedCourses = generator.getReducedCourses()
     const validation = await validateScheduleCompleteness(supabase, courses, timetableSlots, job.id, classroomOptions, facultyAvailability, ilpError, reducedCourses)
     
-    if (!validation.complete) {
-      console.error("[Edge Function] ❌ INCOMPLETE SCHEDULE:", validation.missing)
-      console.error("[Edge Function] 📊 Diagnostics:", JSON.stringify(validation.diagnostics, null, 2))
+    if (validation.missing.length > 0) {
+      console.error("[Edge Function] ❌ Validation failed - incomplete schedule!")
+      console.error("Missing subjects:", validation.missing)
+      
+      // Update job status to failed with reason
       await supabase
         .from("timetable_jobs")
-        .update({
-          status: "failed",
-          message: `Incomplete schedule: ${validation.missing.length} subject(s) not fully scheduled. ${validation.diagnostics.suggestions[0] || ''}`,
+        .update({ 
+          status: "failed", 
+          message: `Incomplete schedule: ${validation.missing.length} subjects missing` 
         })
         .eq("id", job.id)
-      
+        
       return new Response(
         JSON.stringify({
           success: false,
@@ -2452,6 +2469,7 @@ Deno.serve(async (req) => {
           diagnostics: validation.diagnostics,
           jobId: job.id,
           message: `Generated timetable is incomplete. ${validation.missing.length} subject(s) not fully scheduled.`,
+          executionLogs
         }),
         {
           status: 200, // Return 200 so frontend can parse error details
@@ -2512,6 +2530,7 @@ Deno.serve(async (req) => {
         slotsGenerated: timetableSlots.length,
         generationTime,
         ...(reducedCoursesInfo && { reducedCoursesInfo }),
+        executionLogs
       }),
       {
         headers: {
@@ -2523,7 +2542,7 @@ Deno.serve(async (req) => {
   } catch (error) {
     console.error("[Edge Function] Error:", error)
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Internal server error" }),
+      JSON.stringify({ error: error instanceof Error ? error.message : "Internal server error", executionLogs }),
       {
         status: 500,
         headers: {
@@ -2532,5 +2551,9 @@ Deno.serve(async (req) => {
         },
       },
     )
+  } finally {
+    // Restore original console
+    console.log = originalLog
+    console.error = originalError
   }
 })

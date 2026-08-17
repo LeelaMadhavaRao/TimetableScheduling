@@ -1,20 +1,20 @@
-# An Enhanced ILP-GA Hybrid Framework for University Timetabling: Structural Crossover, Diversified Seeding, Incremental Rescheduling, and Multi-Objective Pareto Optimization
+# An Enhanced ILP-GA Framework for University Timetabling
 
 ---
 
 ## Abstract
 
-The hybridization of Integer Linear Programming (ILP) and Genetic Algorithms (GA) has gained considerable traction in automated university timetabling, yet several structural weaknesses persist across existing implementations that limit both computational efficiency and practical utility. Drawing from an in-depth analysis of a deployed ILP-GA scheduling system serving a multi-section departmental environment, this paper identifies four foundational gaps in the current state of the art and presents a unified framework that systematically resolves each one.
+Combining Integer Linear Programming (ILP) with Genetic Algorithms (GA) has become an increasingly popular strategy for tackling automated university timetabling. Despite this growing adoption, several deep-rooted structural weaknesses continue to limit both computational performance and real-world usability. Through a careful examination of a live ILP-GA scheduling system operating within a multi-section engineering department, this paper uncovers four key shortcomings in the prevailing approaches and presents a unified framework designed to address each one in a principled manner.
 
-The first issue concerns crossover fidelity. When a standard GA performs single-point or uniform crossover on chromosomes derived from an ILP solution, the resulting offspring frequently violate hard constraints that the ILP stage had carefully satisfied. Conventional approaches rely on post-crossover repair routines that validate and reject invalid slot assignments through repeated trial-and-error, a process the analysis of our baseline system revealed consumes between thirty and forty percent of total GA processing time. To eliminate this overhead, we propose a Structural Coordinate-Preserving Crossover operator (SCPX) that reorganizes the chromosome representation into independent day-section coordinate blocks. By restricting crossover exchange to these self-contained blocks, the operator mathematically guarantees that every offspring retains full hard-constraint feasibility without requiring any repair mechanism.
+The first concern relates to crossover fidelity. Standard crossover operators—whether single-point or uniform—applied to chromosomes built from ILP solutions tend to produce offspring that break the very hard constraints the ILP solver worked so carefully to enforce. Most existing systems handle this through post-crossover repair routines that rely on trial-and-error reassignment, a process our profiling revealed to consume roughly thirty to forty percent of total GA computation time. We tackle this by introducing a Structural Coordinate-Preserving Crossover (SCPX) operator that restructures the chromosome into self-contained day-section coordinate blocks. Because crossover exchanges happen strictly at the block level, the resulting offspring are mathematically guaranteed to remain fully feasible—no repair step needed.
 
-The second gap emerges during population initialization. When a single deterministic ILP solution serves as the seed for the entire GA population, the resulting chromosomes exhibit near-zero genetic diversity, causing the algorithm to converge prematurely to a local optimum within the first few generations. Our framework addresses this through a Relaxed-ILP Diversification Strategy. Rather than producing one optimal base timetable, we reformulate the ILP with relaxed objective constraints to generate a set of Top-N distinct valid solutions, enforcing a minimum Hamming distance threshold between each pair. These mathematically well-spread individuals form a diverse initial population that preserves ILP-level constraint satisfaction while providing the GA with meaningful exploratory breadth.
+The second shortcoming surfaces during population initialization. When a single deterministic ILP solution seeds the entire GA population, the chromosomes end up nearly identical, starving the algorithm of genetic diversity and causing it to stall in a local optimum after just a handful of generations. To break free of this trap, we develop a Relaxed-ILP Diversification Strategy that reformulates the ILP with loosened objective bounds, generating a collection of Top-N distinct feasible solutions while enforcing a minimum Hamming distance between each pair. The result is a well-spread initial population that retains ILP-grade constraint satisfaction while giving the GA genuine room to explore.
 
-The third limitation pertains to operational rigidity. Existing ILP-GA pipelines model timetabling as a static, one-time computation. When real-world disruptions occur—a faculty member resigns mid-semester, a classroom becomes unavailable due to maintenance, or departmental requirements shift—administrators must regenerate the entire schedule, a process that is both computationally expensive and institutionally disruptive since it discards an already-functioning timetable. We introduce an Incremental ILP Rescheduling formulation that locks approximately ninety percent of the active schedule variables in place and re-solves only the affected segments using CP-SAT with warm-start solution hints. The GA then performs localized optimization on the modified neighborhood, achieving what we term "surgical rescheduling"—targeted adjustments without wholesale disruption.
+The third limitation is operational rigidity. Traditional ILP-GA pipelines treat timetabling as a one-shot, static computation. When something changes mid-semester—a faculty resignation, a classroom pulled offline for maintenance, a departmental curriculum revision—administrators are forced to regenerate the entire schedule from scratch, wasting both computation and institutional goodwill. Our Incremental ILP Rescheduling formulation freezes roughly ninety percent of the existing schedule variables and re-solves only the disrupted segments via CP-SAT with warm-start hints. The GA then fine-tunes the modified neighborhood, producing what amounts to surgical rescheduling—targeted fixes that leave the rest of the timetable intact.
 
-The fourth and final gap concerns the treatment of competing objectives. The overwhelming majority of hybrid timetabling papers collapse multiple soft constraints into a single weighted-sum fitness function. In our baseline system, for instance, faculty gap minimization, student gap minimization, workload balance, morning preference, and lab compactness are merged into the formula F = 0.3×FG + 0.25×SG + 0.2×WB + 0.15×MP + 0.1×LC, where the weight coefficients are chosen arbitrarily. This approach conceals critical trade-offs from decision-makers and produces a single compromise solution that may satisfy no stakeholder group particularly well. We replace this reductionist evaluation with the Non-dominated Sorting Genetic Algorithm II (NSGA-II), which performs Pareto-dominance ranking and crowding-distance-based diversity preservation across all five objectives simultaneously. The output is not a single timetable but a set of non-dominated solutions spanning the Pareto front, enabling administrators to make informed choices based on institutional priorities.
+The fourth gap is in how competing objectives are handled. The vast majority of hybrid timetabling systems collapse multiple soft constraints into a single weighted-sum fitness score. In our baseline system, for instance, five distinct quality measures—faculty gap minimization, student gap minimization, workload balance, morning preference, and lab compactness—are mashed together using the formula F = 0.3×FG + 0.25×SG + 0.2×WB + 0.15×MP + 0.1×LC, with the weight coefficients chosen more or less arbitrarily. This obscures critical trade-offs and produces a single compromise schedule that may leave every stakeholder group only partially satisfied. We replace this reductive evaluation with NSGA-II, which performs Pareto-dominance ranking and crowding-distance-based diversity preservation across all five objectives at once. Instead of delivering a single timetable, the system outputs a menu of non-dominated solutions spanning the Pareto front, empowering administrators to choose based on their institution's actual priorities.
 
-The proposed framework is evaluated on a real dataset comprising fifteen academic sections, seventy-five courses spanning both laboratory and theory instruction, fourteen physical classrooms, and twenty-eight faculty members operating on an eight-period by six-day weekly schedule. Experimental results demonstrate that SCPX eliminates repair overhead entirely while preserving one hundred percent constraint integrity across all generations, reducing per-generation computation time by 37.4%. The diversified seeding strategy raises initial population entropy by 28.6% and delays convergence by an average of twenty-two generations compared to single-seed initialization. The incremental rescheduling module successfully handles single-faculty changes, single-classroom unavailability, and departmental-level requirement adjustments with an average latency of 1.8 seconds, representing a 94.2% reduction compared to full regeneration. The NSGA-II integration reveals previously hidden trade-offs—for example, a strong morning-preference schedule degrades workload balance by up to 24%, and minimizing faculty gaps can increase student gaps by 18%—yielding a Pareto front of 14–18 non-dominated solutions per run. The complete framework improves the hypervolume indicator by 12.7% over the baseline weighted-sum GA and by 8.3% over a standard NSGA-II implementation without ILP-guided seeding, establishing measurable gains across all four enhancement dimensions.
+We evaluate the proposed framework on a real dataset consisting of fifteen academic sections, seventy-five courses (spanning both laboratory and theory instruction), fourteen physical classrooms, and twenty-eight faculty members, all operating on an eight-period-by-six-day weekly grid. The experimental findings are encouraging: SCPX eliminates repair overhead entirely and preserves one hundred percent constraint integrity across every generation, cutting per-generation computation time by 37.4%. Diversified seeding boosts initial population entropy by 28.6% and postpones convergence by an average of twenty-two generations relative to single-seed initialization. The incremental rescheduling module handles single-faculty changes, single-classroom outages, and department-level requirement shifts with an average response time of 1.8 seconds—a 94.2% reduction compared to full regeneration. The NSGA-II integration exposes trade-offs that weighted-sum approaches simply cannot reveal: for example, aggressively pursuing morning-preference scheduling degrades workload balance by up to 24%, and minimizing faculty gaps can push student gaps up by 18%. The resulting Pareto front typically contains 14–18 non-dominated solutions per run. Taken together, the complete framework improves the hypervolume indicator by 12.7% over the baseline weighted-sum GA and by 8.3% over a standard NSGA-II implementation that lacks ILP-guided seeding, establishing measurable gains across all four enhancement dimensions.
 
 **Keywords**: university course timetabling, integer linear programming, genetic algorithm, structural crossover, population diversification, incremental rescheduling, NSGA-II, Pareto optimization, CP-SAT, constraint programming
 
@@ -22,45 +22,45 @@ The proposed framework is evaluated on a real dataset comprising fifteen academi
 
 ## 1. Introduction
 
-The construction of academic timetables ranks among the most persistent and computationally challenging administrative tasks faced by educational institutions worldwide. At its core, the problem involves assigning a set of courses, each associated with a specific section of students, a faculty instructor, and a subject type, to a finite set of time periods and physical classrooms, while simultaneously satisfying a complex web of hard constraints (which must never be violated) and soft constraints (which represent quality preferences). The search space is combinatorially vast. Even for a modest department with fifteen sections and seventy-five courses distributed across a six-day, eight-period week, the number of possible slot assignments exceeds 10^200, making exhaustive enumeration impossible.
+Building a university timetable is one of those administrative challenges that looks deceptively simple on the surface but turns out to be extraordinarily difficult in practice. At its heart, the task involves assigning courses—each tied to a particular student section, an instructor, and a subject type—to a finite grid of time slots and physical rooms, all while respecting a tangled web of hard constraints (absolute requirements that cannot be violated) and soft constraints (quality preferences that improve usability). The combinatorial scale is staggering: even a modestly sized department with fifteen sections and seventy-five courses spread across a six-day, eight-period week generates a search space exceeding 10^200 possible configurations, making brute-force enumeration utterly infeasible.
 
-Over the past three decades, researchers have approached this challenge through two broad families of techniques: exact mathematical methods and metaheuristic search strategies. Integer Linear Programming, implemented through solvers like Gurobi, CPLEX, and Google's OR-Tools CP-SAT, offers the compelling advantage of completeness—when an ILP solver reports a solution, that solution is guaranteed to satisfy every expressed constraint. However, ILP struggles with scale and with objectives that are inherently non-linear or involve human preferences. Genetic Algorithms, by contrast, excel at navigating large, rugged search landscapes and can accommodate virtually any fitness function, but they provide no feasibility guarantees and can wander through infeasible regions for many generations before finding valid solutions.
+Over roughly the last three decades, researchers have attacked this problem from two distinct directions. On one side are exact mathematical methods—Integer Linear Programming implemented through industrial-grade solvers like Gurobi, CPLEX, and Google's OR-Tools CP-SAT—which offer the powerful guarantee that any solution they return fully satisfies every expressed constraint. On the other side stand metaheuristic search strategies, most prominently Genetic Algorithms, which navigate large, rugged fitness landscapes with remarkable agility and can accommodate virtually any evaluation criterion, but offer no built-in assurance of feasibility.
 
-The natural synthesis—using ILP to establish a constraint-satisfying base timetable and then deploying a GA to refine it against soft objectives—has been explored in the literature since the early 2000s. Yet implementations of this hybrid approach, including the production system that motivated this research, reveal persistent weaknesses that have not been adequately addressed. This paper provides a systematic diagnosis of four such weaknesses and presents corresponding solutions that, taken together, constitute a materially improved ILP-GA hybrid framework for university timetabling.
+The natural marriage of these two families—using ILP to construct a constraint-satisfying base timetable and then unleashing a GA to polish it against soft objectives—has been explored since the early 2000s. Yet real implementations of this hybrid approach, including the production system that sparked this research, reveal stubborn weaknesses that the literature has not adequately confronted. This paper diagnoses four such weaknesses systematically and presents matching solutions that, taken as a whole, constitute a meaningfully improved ILP-GA hybrid framework for university timetabling.
 
 ### 1.1 Motivation and Problem Context
 
-The work described here emerged from a detailed analysis of a deployed timetabling system serving the Computer Science and Engineering department of an engineering college. The system, built on a Next.js frontend with Supabase backend services and an external Python-based OR-Tools CP-SAT solver hosted on Render, follows the conventional two-phase ILP-GA architecture:
+This work grew out of a hands-on analysis of a live timetabling system serving the Computer Science and Engineering department of an engineering college. The system is built on a Next.js frontend backed by Supabase services, with an external Python-based OR-Tools CP-SAT solver hosted on Render. It follows the familiar two-phase ILP-GA architecture:
 
-**Phase 1 (ILP Satisfaction)**: An external CP-SAT microservice solves the laboratory scheduling subproblem, which is the most tightly constrained component because labs demand three consecutive periods in specialized rooms. The solver models decision variables as L[c_idx][day][block][room_idx] ∈ {0,1} and enforces hard constraints including room non-overlap, section non-overlap, faculty non-overlap, faculty availability windows, room capacity thresholds, and Saturday afternoon restrictions for non-first-year students. Theory courses are then scheduled through an enhanced greedy algorithm employing fifteen distinct ordering strategies with dynamic availability tracking.
+**Phase 1 (ILP Satisfaction)**: An external CP-SAT microservice handles the laboratory scheduling subproblem, which is the most tightly constrained piece of the puzzle—labs require three consecutive periods in specialized rooms. The solver models its decision variables as L[c_idx][day][block][room_idx] ∈ {0,1} and enforces hard constraints covering room non-overlap, section non-overlap, faculty non-overlap, faculty availability windows, room capacity thresholds, and Saturday afternoon restrictions for non-first-year students. Theory courses are then slotted in through an enhanced greedy algorithm that cycles through fifteen distinct ordering strategies with dynamic availability tracking.
 
-**Phase 2 (GA Optimization)**: The resulting base timetable is passed to a genetic algorithm configured with a population size of fifty, one hundred generations (ten in the edge function deployment), a mutation rate of 0.1, a crossover rate of 0.8, and tournament selection with a tournament size of three. The fitness function merges five soft objectives through a weighted linear combination: Faculty Gaps (0.30), Student Gaps (0.25), Workload Balance (0.20), Morning Preference (0.15), and Lab Compactness (0.10).
+**Phase 2 (GA Optimization)**: The base timetable from Phase 1 feeds into a genetic algorithm configured with a population of fifty individuals, one hundred generations (trimmed to ten in the edge function deployment), a mutation rate of 0.1, a crossover rate of 0.8, and tournament selection with a tournament size of three. The fitness function blends five soft objectives through a weighted linear combination: Faculty Gaps (0.30), Student Gaps (0.25), Workload Balance (0.20), Morning Preference (0.15), and Lab Compactness (0.10).
 
-While this system successfully produces conflict-free timetables for its deployment context, profiling revealed four structural inefficiencies that motivated the current research:
+While this system does successfully produce conflict-free timetables for its deployment context, careful profiling uncovered four structural inefficiencies that motivated the present research:
 
-1. The GA's crossover operator, though equipped with a validity-checking routine (`isValidSwap`), requires up to ten random attempts per mutation before accepting a viable slot reassignment. Profiling showed that between 30% and 40% of mutation attempts are rejected due to constraint violations, and even accepted crossovers may introduce suboptimal arrangements that degrade fitness in subsequent generations.
+1. The GA's crossover operator includes a validity-checking routine (`isValidSwap`), but it needs up to ten random attempts per mutation before finding an acceptable slot reassignment. Profiling showed that 30–40% of mutation attempts get rejected for constraint violations, and even the accepted crossovers can introduce awkward arrangements that drag down fitness in later generations.
 
-2. The population initialization strategy seeds every chromosome from a single ILP-generated base schedule, applying minor random perturbations (10% of slots shuffled). This produces an initial population where pairwise chromosome similarity, measured via normalized Hamming distance, averages just 0.12—meaning the algorithm begins its search from a tightly clustered region and rarely escapes it.
+2. Population initialization seeds every chromosome from a single ILP-generated base schedule, with only minor random shuffling applied to about 10% of slots. The upshot is an initial population where pairwise chromosome similarity, measured by normalized Hamming distance, averages a mere 0.12—meaning the search starts from a tightly packed cluster and rarely breaks free.
 
-3. The system operates in a completely batch-oriented manner. Any modification to the schedule—whether a faculty member becoming unavailable, a classroom closing, or a department adding a new course—necessitates complete regeneration, discarding the existing functional timetable.
+3. The system is entirely batch-oriented. Any mid-semester change—a faculty member going on leave, a classroom closing for repairs, a department adding a new course—requires regenerating the whole schedule from the ground up, discarding whatever was already working.
 
-4. The single weighted-sum fitness function masks trade-offs that are immediately apparent when objectives are examined independently. During our analysis, we observed that schedules scoring highly on the combined metric sometimes exhibited a 24% degradation in workload balance when morning preference was aggressively pursued, a compromise that administrators would almost certainly want to evaluate explicitly.
+4. The weighted-sum fitness function hides trade-offs that become glaringly obvious when you examine the individual objectives. During our analysis, we found that schedules scoring well on the aggregate metric sometimes showed a 24% deterioration in workload balance when morning preference was pushed aggressively—exactly the kind of compromise administrators would want to see and evaluate rather than have buried inside a single number.
 
 ### 1.2 Contributions
 
-This paper makes four primary contributions:
+This paper offers four primary contributions:
 
-1. **Structural Coordinate-Preserving Crossover (SCPX)**: We introduce a chromosome encoding scheme that partitions timetable slots into day-section-faculty coordinate blocks. Crossover operations are restricted to exchanging complete blocks, which mathematically guarantees that no hard constraint is violated, eliminating the need for repair algorithms.
+1. **Structural Coordinate-Preserving Crossover (SCPX)**: A chromosome encoding scheme that partitions timetable slots into day-section-faculty coordinate blocks. Crossover exchanges complete blocks, which mathematically ensures that no hard constraint is ever broken—eliminating repair algorithms entirely.
 
-2. **Relaxed-ILP Diversification Strategy**: We formalize a method for generating a diverse initial GA population by solving the ILP with deliberately relaxed objectives, producing N distinct feasible solutions separated by a configurable minimum Hamming distance.
+2. **Relaxed-ILP Diversification Strategy**: A principled method for populating the initial GA generation by solving the ILP with deliberately relaxed objectives, producing N distinct feasible solutions separated by a configurable minimum Hamming distance.
 
-3. **Incremental ILP Rescheduling**: We develop a formulation for partial dynamic rescheduling that locks unaffected schedule variables using CP-SAT solution hints, re-solves only the disturbed neighborhood, and applies localized GA optimization to the modified region.
+3. **Incremental ILP Rescheduling**: A partial dynamic rescheduling formulation that freezes unaffected schedule variables using CP-SAT solution hints, re-solves only the disrupted neighborhood, and applies localized GA optimization to the changed region.
 
-4. **NSGA-II Multi-Objective Integration**: We replace the weighted-sum fitness function with a full NSGA-II implementation that performs non-dominated sorting and crowding-distance-based diversity preservation across five objectives, delivering a Pareto-optimal front to decision-makers.
+4. **NSGA-II Multi-Objective Integration**: A full replacement of the weighted-sum fitness function with NSGA-II, performing non-dominated sorting and crowding-distance-based diversity preservation across five objectives and delivering a Pareto-optimal front to decision-makers.
 
 ### 1.3 Paper Organization
 
-The remainder of this paper is structured as follows. Section 2 reviews related work across ILP, GA, and hybrid timetabling approaches. Section 3 formalizes the timetabling problem mathematically, defining hard constraints, soft objectives, and notation. Section 4 presents the proposed methodology in detail, with subsections dedicated to each of the four contributions. Section 5 describes the experimental setup, dataset characteristics, and evaluation metrics. Section 6 presents and discusses results. Section 7 concludes and outlines directions for future research.
+The rest of this paper is organized as follows. Section 2 surveys related work spanning ILP, GA, and hybrid timetabling approaches. Section 3 provides the formal mathematical definition of the timetabling problem, including hard constraints, soft objectives, and notation. Section 4 details the proposed methodology, with individual subsections covering each of the four contributions. Section 5 describes the experimental setup, dataset characteristics, and evaluation metrics. Section 6 presents results and discusses their implications. Section 7 wraps up with conclusions and directions for future investigation.
 
 ---
 
@@ -68,37 +68,37 @@ The remainder of this paper is structured as follows. Section 2 reviews related 
 
 ### 2.1 Exact Methods for Timetabling
 
-The application of Integer Linear Programming to educational timetabling traces back to the early work of Dinkel et al. (1989), who formulated course scheduling as a 0-1 integer program minimizing the number of conflicts between student course selections. Subsequent decades saw substantial refinement of ILP models, with notable contributions from Schimmelpfeng and Helber (2007), who applied ILP to university exam scheduling with room capacity constraints, and from Al-Yakoob and Sherali (2006), who developed mixed-integer programming formulations for faculty course assignments in Kuwait University.
+Using Integer Linear Programming for educational timetabling goes back at least as far as Dinkel et al. (1989), who framed course scheduling as a 0-1 integer program aimed at minimizing conflicts among student course selections. The decades that followed brought considerable refinement. Schimmelpfeng and Helber (2007) applied ILP to university exam scheduling with room capacity constraints, while Al-Yakoob and Sherali (2006) developed mixed-integer programming formulations for faculty-course assignments at Kuwait University.
 
-Constraint Programming (CP) emerged as a complementary exact approach, particularly well-suited to problems with complex logical relationships between variables. The CP-SAT solver within Google's OR-Tools framework, used in our baseline system, combines constraint programming with SAT-solving techniques and has demonstrated strong performance on scheduling benchmarks. The CP formulation models decision variables as finite-domain integers and applies global constraints such as `AddNoOverlap` and `AddExactlyOne` that exploit problem structure for efficient propagation.
+Constraint Programming (CP) emerged as a natural companion to ILP, particularly well-suited to problems involving complex logical relationships between variables. Google's CP-SAT solver, which combines constraint programming with SAT-solving techniques and forms the backbone of our baseline system, has shown strong results on scheduling benchmarks. Its formulation represents decision variables as finite-domain integers and leverages global constraints like `AddNoOverlap` and `AddExactlyOne` to exploit problem structure during propagation.
 
-The fundamental limitation of exact methods remains computational tractability. As problem size grows—more sections, more courses, more rooms—the search space expands exponentially, and ILP solvers may fail to find any feasible solution within reasonable time bounds. This is particularly acute for theory courses, where the flexibility of variable-length blocks (one, two, or three periods) dramatically multiplies the number of decision variables. In our baseline system, the ILP theory endpoint was deliberately disabled due to timeout concerns when processing the full dataset.
+The fundamental bottleneck with exact methods, of course, is computational tractability. As the problem grows—more sections, more courses, more rooms—the search space balloons exponentially, and ILP solvers may fail to produce any feasible solution within a reasonable time window. This is especially painful for theory courses, where the flexibility of variable-length blocks (one, two, or three periods) dramatically multiplies the number of decision variables. In our baseline system, the ILP theory scheduling endpoint had been deliberately disabled because it kept timing out on the full dataset.
 
 ### 2.2 Metaheuristic Approaches
 
-Genetic Algorithms have been the most extensively studied metaheuristic for timetabling. The foundational work of Colorni et al. (1991) established the basic GA template: a chromosome encodes a complete schedule, fitness measures constraint satisfaction, and genetic operators evolve the population toward better solutions. Subsequent research introduced problem-specific enhancements. Burke et al. (1995) incorporated domain knowledge through specialized mutation operators that targeted known conflict patterns. Pongcharoen et al. (2008) applied GA to a large-scale industrial timetabling problem with multiple course types and complex prerequisite chains.
+Genetic Algorithms have been the workhorse metaheuristic for timetabling research. The seminal work of Colorni et al. (1991) laid down the basic GA template: a chromosome encodes a complete schedule, fitness captures constraint satisfaction, and genetic operators evolve the population toward progressively better solutions. Later researchers incorporated domain-specific refinements. Burke et al. (1995) wove in domain knowledge through specialized mutation operators targeting known conflict patterns. Pongcharoen et al. (2008) scaled GA to a large industrial timetabling problem with multiple course types and intricate prerequisite chains.
 
-Other metaheuristics have been explored with varying degrees of success. Simulated Annealing, applied by Abramson (1991) and later refined by Thompson and Dowsland (1998), offers theoretical convergence guarantees but requires careful cooling schedule tuning. Tabu Search, as applied by Hertz (1991) and later by Schaerf (1999), prevents cycling through recently visited solutions. Particle Swarm Optimization, a more recent entrant, has been adapted to timetabling by Chu et al. (2006) and Chen and Shih (2013), though its application to discrete scheduling problems remains less natural than evolutionary approaches.
+Other metaheuristics have been tried with mixed success. Simulated Annealing, first applied to timetabling by Abramson (1991) and later refined by Thompson and Dowsland (1998), provides theoretical convergence guarantees but demands careful cooling schedule calibration. Tabu Search, used by Hertz (1991) and subsequently by Schaerf (1999), avoids cycling through recently visited solutions. Particle Swarm Optimization, a more recent arrival, has been adapted to timetabling by Chu et al. (2006) and Chen and Shih (2013), although its mapping to discrete scheduling problems remains somewhat less natural than evolutionary approaches.
 
 ### 2.3 Hybrid ILP-GA Approaches
 
-The idea of combining exact and metaheuristic methods follows the general recognition that no single technique dominates across all problem dimensions. The ILP-GA hybrid for timetabling typically follows one of two architectural patterns:
+The motivation for combining exact and metaheuristic methods reflects a broader recognition that no single technique dominates across every dimension of the problem. ILP-GA hybrids for timetabling generally follow one of two architectural patterns:
 
-In the **sequential pattern**, the ILP handles the most heavily constrained subproblem (e.g., laboratory scheduling), and the GA takes the ILP output as a starting point for optimization against soft preferences. This is the pattern adopted by our baseline system and by the majority of published hybrids, including the work of Head and Shaban (2007) and Pillay and Banzhaf (2010).
+In the **sequential pattern**, the ILP tackles the most heavily constrained subproblem (e.g., laboratory scheduling), and the GA uses the ILP output as its starting point for optimizing against soft preferences. This is the pattern our baseline system employs, and it is also the approach taken by Head and Shaban (2007) and Pillay and Banzhaf (2010), among others.
 
-In the **embedded pattern**, the GA uses ILP as a subroutine during evolution—for instance, applying ILP to repair infeasible offspring or to solve a subproblem within a larger schedule. This pattern appears in the work of Lopes and Smith-Miles (2013) and is generally more complex to implement but can achieve tighter integration.
+In the **embedded pattern**, the GA invokes ILP as a subroutine during evolution—perhaps using ILP to repair infeasible offspring or to solve subproblems within a larger schedule. Lopes and Smith-Miles (2013) explored this more tightly coupled design, which is generally harder to implement but can achieve stronger integration.
 
-Regardless of the architectural pattern, published hybrids share common weaknesses relevant to our contributions. The crossover problem—offspring violating constraints satisfied by parents—is almost universally addressed through repair algorithms rather than structural prevention. Population diversity, when discussed at all, is managed through generic mechanisms like niching or fitness sharing rather than through mathematically principled seeding. Dynamic rescheduling receives minimal attention, with most papers assuming a static problem instance. And multi-objective treatment, when present, defaults to weighted-sum aggregation.
+Regardless of the architecture chosen, published hybrids tend to share the same blind spots that motivate our contributions. Crossover infeasibility is almost universally patched through repair algorithms rather than prevented structurally. Population diversity, when discussed at all, is managed through generic mechanisms like niching or fitness sharing rather than through mathematically grounded seeding. Dynamic rescheduling receives scant attention, with most papers assuming a static, one-and-done problem instance. And multi-objective treatment, when it appears, typically defaults to a weighted-sum aggregation.
 
 ### 2.4 Multi-Objective Evolutionary Algorithms
 
-The development of Pareto-based multi-objective evolutionary algorithms represents a significant advance over weighted-sum approaches. The NSGA-II algorithm, introduced by Deb et al. (2002), introduced fast non-dominated sorting (O(MN²) complexity for M objectives and N individuals) and crowding distance as a diversity preservation mechanism. NSGA-III, proposed by Deb and Jain (2014), extends the framework to many-objective problems (four or more objectives) using reference-point-based selection.
+The development of Pareto-based multi-objective evolutionary algorithms marks a significant step beyond weighted-sum approaches. NSGA-II, introduced by Deb et al. (2002), brought fast non-dominated sorting (O(MN²) for M objectives and N individuals) and crowding distance as a mechanism for preserving diversity along the Pareto front. The subsequent NSGA-III framework, proposed by Deb and Jain (2014), extends these ideas to many-objective problems (four or more objectives) through reference-point-based selection.
 
-In the timetabling domain, multi-objective approaches have been applied but remain relatively rare. Burke et al. (2001) applied a multi-objective GA to exam timetabling with two objectives. Socha and Sampels (2003) explored ant colony optimization with multiple pheromone matrices for different objectives. More recently, Fonseca et al. (2016) applied NSGA-II to course timetabling with three objectives. However, the integration of NSGA-II within an ILP-GA hybrid pipeline—specifically, using ILP seeding to provide high-quality initial solutions for the multi-objective search—has not been reported in the literature to our knowledge.
+Within timetabling specifically, multi-objective approaches have been explored but remain comparatively uncommon. Burke et al. (2001) applied a multi-objective GA to exam timetabling with two objectives. Socha and Sampels (2003) experimented with ant colony optimization using multiple pheromone matrices for different objectives. More recently, Fonseca et al. (2016) brought NSGA-II to bear on course timetabling with three objectives. However, the specific combination of NSGA-II with ILP-seeded initial populations within a hybrid pipeline—using the ILP's high-quality solutions to jumpstart the multi-objective search—has not, to our knowledge, been reported in the existing literature.
 
 ### 2.5 Dynamic and Incremental Scheduling
 
-The problem of responding to schedule disruptions has been studied more extensively in manufacturing and airline scheduling than in educational timetabling. In production scheduling, the concept of "reactive scheduling" deals with machine breakdowns and order changes through techniques like right-shift rescheduling and match-up scheduling (Vieira et al., 2003). In the educational domain, the few papers that address dynamic scheduling typically focus on incremental construction rather than post-hoc modification. Murray et al. (2007) considered the problem of adding courses to an existing student schedule. Muller and Rudova (2012) addressed incremental changes in the context of a constraint-based solver at Purdue University. However, the specific combination of ILP variable locking with localized GA optimization for partial rescheduling in a hybrid pipeline represents a novel contribution.
+The challenge of adapting to schedule disruptions has received far more attention in manufacturing and airline scheduling than in educational timetabling. In production environments, "reactive scheduling" addresses machine breakdowns and order changes through techniques like right-shift rescheduling and match-up scheduling (Vieira et al., 2003). On the educational side, the handful of papers that touch on dynamic scheduling tend to focus on incremental construction rather than post-hoc modification. Murray et al. (2007) considered adding courses to an existing student schedule, while Muller and Rudova (2012) dealt with incremental changes through a constraint-based solver at Purdue University. The particular combination we propose—ILP variable locking paired with localized GA optimization for partial rescheduling in a hybrid pipeline—represents, as far as we are aware, a novel contribution.
 
 ---
 
@@ -108,7 +108,7 @@ The problem of responding to schedule disruptions has been studied more extensiv
 
 We define the university timetabling problem instance as a tuple P = (C, R, F, S, A, D, P) where:
 
-- **C** = {c₁, c₂, ..., c_|C|} is the set of course assignments. Each course cᵢ is associated with a specific section, subject, faculty member, student count, year level, and subject type (theory or laboratory). Formally, cᵢ = (sec(cᵢ), sub(cᵢ), fac(cᵢ), n(cᵢ), y(cᵢ), type(cᵢ), ppw(cᵢ)) where ppw(cᵢ) denotes the required periods per week.
+- **C** = {c₁, c₂, ..., c_|C|} is the set of course assignments. Each course cᵢ carries information about its section, subject, faculty member, student count, year level, and subject type (theory or laboratory). Formally, cᵢ = (sec(cᵢ), sub(cᵢ), fac(cᵢ), n(cᵢ), y(cᵢ), type(cᵢ), ppw(cᵢ)) where ppw(cᵢ) denotes the required periods per week.
 
 - **R** = {r₁, r₂, ..., r_|R|} is the set of rooms. Each room rⱼ has a capacity cap(rⱼ) and a room type roomType(rⱼ) ∈ {theory, lab}.
 
@@ -118,73 +118,73 @@ We define the university timetabling problem instance as a tuple P = (C, R, F, S
 
 - **A** : F → 2^(D × P) maps each faculty member to their set of available (day, period) pairs.
 
-- **D** = {0, 1, 2, 3, 4, 5} represents days of the week (Monday through Saturday).
+- **D** = {0, 1, 2, 3, 4, 5} represents the days of the week (Monday through Saturday).
 
 - **P** = {1, 2, ..., 8} represents the eight periods in each day.
 
-A timetable slot is a tuple t = (sec, sub, fac, room, d, p_start, p_end) indicating that section sec attends subject sub taught by faculty fac in room room on day d from period p_start to p_end.
+A timetable slot is a tuple t = (sec, sub, fac, room, d, p_start, p_end) specifying that section sec attends subject sub taught by faculty fac in room room on day d from period p_start to p_end.
 
-A complete timetable T is a set of slots. We say T is **feasible** if and only if it satisfies all hard constraints defined in Section 3.2.
+A complete timetable T is a set of such slots. We call T **feasible** if and only if it satisfies every hard constraint defined in Section 3.2.
 
 ### 3.2 Hard Constraints
 
-The following constraints must be satisfied by every feasible timetable. Violation of any hard constraint renders the schedule invalid.
+Every feasible timetable must satisfy the following constraints. Violating any one of them renders the schedule invalid.
 
-**HC1 — Course Coverage**: Every course c ∈ C must be assigned exactly its required number of periods per week. For laboratory courses, this means exactly one contiguous block of LAB_PERIODS periods. For theory courses, this means exactly ppw(c) periods, which may be distributed across the week.
+**HC1 — Course Coverage**: Every course c ∈ C must receive exactly its required number of weekly periods. Laboratory courses get exactly one contiguous block of LAB_PERIODS periods. Theory courses get exactly ppw(c) periods, which may be spread across the week.
 
 ```
 Sum_{t ∈ T | sec(t)=sec(c) ∧ sub(t)=sub(c)} (p_end(t) - p_start(t) + 1) = ppw(c)    ∀ c ∈ C
 ```
 
-**HC2 — Room Non-Overlap**: At most one course may occupy any given room at any given period.
+**HC2 — Room Non-Overlap**: No room may host more than one course at any given period.
 
 ```
 |{t ∈ T | room(t)=r ∧ d(t)=d ∧ p ∈ [p_start(t), p_end(t)]}| ≤ 1    ∀ r ∈ R, d ∈ D, p ∈ P
 ```
 
-**HC3 — Section Non-Overlap**: A section of students cannot attend multiple courses simultaneously.
+**HC3 — Section Non-Overlap**: A section cannot attend multiple courses at the same time.
 
 ```
 |{t ∈ T | sec(t)=s ∧ d(t)=d ∧ p ∈ [p_start(t), p_end(t)]}| ≤ 1    ∀ s ∈ S, d ∈ D, p ∈ P
 ```
 
-**HC4 — Faculty Non-Overlap**: A faculty member cannot teach multiple courses simultaneously.
+**HC4 — Faculty Non-Overlap**: A faculty member cannot teach more than one course at the same time.
 
 ```
 |{t ∈ T | fac(t)=f ∧ d(t)=d ∧ p ∈ [p_start(t), p_end(t)]}| ≤ 1    ∀ f ∈ F, d ∈ D, p ∈ P
 ```
 
-**HC5 — Room Capacity**: The room assigned to a course must have capacity at least 85% of the section's student count (the 85% relaxation accounts for practical tolerance in room assignments).
+**HC5 — Room Capacity**: The assigned room must seat at least 85% of the section's students (the 85% relaxation reflects practical tolerance in room assignments).
 
 ```
 cap(room(t)) ≥ 0.85 × n(c)    ∀ t ∈ T
 ```
 
-**HC6 — Room Type Matching**: Laboratory courses must be assigned to laboratory rooms; theory courses to theory rooms.
+**HC6 — Room Type Matching**: Lab courses go in lab rooms; theory courses go in theory rooms.
 
 ```
 roomType(room(t)) = type(c)    ∀ t ∈ T
 ```
 
-**HC7 — Faculty Availability**: Course slots must fall within the declared available windows of the assigned faculty member.
+**HC7 — Faculty Availability**: Scheduled slots must fall within the declared availability windows of the assigned instructor.
 
 ```
 (d(t), p) ∈ A(fac(t))    ∀ t ∈ T, p ∈ [p_start(t), p_end(t)]
 ```
 
-**HC8 — Laboratory Continuity**: Laboratory courses must be scheduled in exactly one contiguous block. The block must not span across the lunch period (the boundary between period 4 and period 5).
+**HC8 — Laboratory Continuity**: Lab courses must occupy exactly one contiguous block, and that block must not straddle the lunch boundary (between period 4 and period 5).
 
 ```
 type(c) = lab ⟹ p_end(t) - p_start(t) + 1 = LAB_PERIODS    ∀ t ∈ T for lab courses
 ```
 
-**HC9 — Saturday Restriction**: Saturday (day 5) is restricted to morning periods (1-4) for all sections except first-year students, who may use the full day.
+**HC9 — Saturday Restriction**: Saturday (day 5) is limited to morning periods (1–4) for all sections except first-year students, who may use the full day.
 
 ```
 d(t) = 5 ∧ y(c) ≠ 1 ⟹ p_end(t) ≤ 4    ∀ t ∈ T
 ```
 
-**HC10 — Theory Daily Limit**: No more than two periods of a specific theory subject may be scheduled for a section on a single day.
+**HC10 — Theory Daily Limit**: A section may not receive more than two periods of the same theory subject on any single day.
 
 ```
 Sum_{t ∈ T | sec(t)=s ∧ sub(t)=sub ∧ d(t)=d} (p_end(t)-p_start(t)+1) ≤ 2    ∀ s ∈ S, sub, d ∈ D
@@ -192,61 +192,61 @@ Sum_{t ∈ T | sec(t)=s ∧ sub(t)=sub ∧ d(t)=d} (p_end(t)-p_start(t)+1) ≤ 2
 
 ### 3.3 Soft Objectives
 
-Soft constraints represent desirable properties that improve schedule quality but do not affect feasibility. Our framework considers five soft objectives:
+Soft constraints capture desirable schedule properties that improve quality without affecting feasibility. Our framework considers five:
 
-**O1 — Minimize Faculty Idle Gaps (f₁)**: For each faculty member, on each teaching day, we compute the idle periods between their first and last class. Lower values are better. Formally, for faculty f on day d with occupied periods P_f_d:
+**O1 — Minimize Faculty Idle Gaps (f₁)**: For each faculty member on each teaching day, we count the idle periods sitting between their first and last class. Lower is better. Formally, for faculty f on day d with occupied periods P_f_d:
 
 ```
 f₁(T) = (1 / (|F| · |D| · 8)) · Sum_{f ∈ F, d ∈ D} (max(P_f_d ∪ {0}) - min(P_f_d ∪ {9}) + 1 - |P_f_d|)
 ```
 
-**O2 — Minimize Student Idle Gaps (f₂)**: Analogous to faculty gaps, but computed per section. Students with continuous schedules on a given day experience zero gaps.
+**O2 — Minimize Student Idle Gaps (f₂)**: Same idea as faculty gaps, but computed per section. Students with back-to-back classes on a given day have zero gaps.
 
 ```
 f₂(T) = (1 / (|S| · |D| · 8)) · Sum_{s ∈ S, d ∈ D} gap_periods(s, d)
 ```
 
-**O3 — Maximize Workload Balance (f₃)**: We measure the variance of daily teaching load for each faculty member. Lower variance indicates more balanced distribution. We use the coefficient of variation for normalization.
+**O3 — Maximize Workload Balance (f₃)**: We measure the variance of each faculty member's daily teaching load. Lower variance means more even distribution. We use the coefficient of variation for normalization.
 
 ```
 load(f, d) = Sum_{t ∈ T | fac(t)=f ∧ d(t)=d} (p_end(t) - p_start(t) + 1)
 f₃(T) = 1 - (1/|F|) · Sum_{f ∈ F} (σ(load(f,·)) / μ(load(f,·)))
 ```
 
-where σ denotes standard deviation and μ denotes mean across days.
+where σ is standard deviation and μ is the mean across days.
 
-**O4 — Maximize Morning Preference (f₄)**: Preferentially schedule classes in the morning half (periods 1-4).
+**O4 — Maximize Morning Preference (f₄)**: Push as many classes as possible into the morning half (periods 1–4).
 
 ```
 f₄(T) = |{t ∈ T | p_start(t) ≤ 4}| / |T|
 ```
 
-**O5 — Maximize Lab Compactness (f₅)**: Prefer to schedule laboratory sessions earlier in the week.
+**O5 — Maximize Lab Compactness (f₅)**: Schedule lab sessions earlier in the week when possible.
 
 ```
 f₅(T) = (1 / |T_lab|) · Sum_{t ∈ T_lab} (5 - d(t)) / 5
 ```
 
-where T_lab = {t ∈ T | type of associated course is lab}.
+where T_lab = {t ∈ T | the associated course is a lab}.
 
 ### 3.4 Optimization Problem
 
-The complete optimization problem is a multi-objective minimization problem (for minimization objectives) and maximization problem (for maximization objectives). We convert all objectives to minimization form for consistency in Pareto analysis:
+The full optimization problem involves simultaneously minimizing some objectives and maximizing others. For consistency in Pareto analysis, we convert everything to minimization form:
 
 ```
 minimize F(T) = (-f₁(T)', -f₂(T)', -f₃(T), -f₄(T), -f₅(T))
 subject to HC1-HC10
 ```
 
-where f₁' and f₂' are conversions of gap penalties to maximization form (1 minus normalized gap), f₃ through f₅ are already in maximization form, and the negation converts them to minimization.
+Here f₁' and f₂' convert gap penalties into maximization form (1 minus the normalized gap), f₃ through f₅ are already expressed as "higher is better," and negation flips them to minimization.
 
-A solution T₁ is said to **dominate** solution T₂ (denoted T₁ ≺ T₂) if and only if:
+A solution T₁ **dominates** solution T₂ (written T₁ ≺ T₂) if and only if:
 
 ```
 ∀ i ∈ {1,...,5} : F_i(T₁) ≤ F_i(T₂)  ∧  ∃ j ∈ {1,...,5} : F_j(T₁) < F_j(T₂)
 ```
 
-The Pareto-optimal set is the set of all non-dominated feasible solutions:
+The Pareto-optimal set is the collection of all non-dominated feasible solutions:
 
 ```
 P* = {T ∈ feasible space | ¬∃ T' ∈ feasible space : T' ≺ T}
@@ -258,42 +258,44 @@ P* = {T ∈ feasible space | ¬∃ T' ∈ feasible space : T' ≺ T}
 
 ### 4.1 System Architecture Overview
 
-Our enhanced framework preserves the two-phase structure of the baseline system but introduces four interconnected modifications. Figure 1 (conceptual) illustrates the revised pipeline:
+Our enhanced framework retains the two-phase backbone of the baseline system but weaves in four interconnected modifications. Figure 1 illustrates the revised pipeline:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                     ENHANCED ILP-GA FRAMEWORK                        │
+│                     ENHANCED ILP-GA FRAMEWORK                       │
 ├─────────────────────────────────────────────────────────────────────┤
-│                                                                      │
+│                                                                     │
 │  ┌──────────────────┐    ┌──────────────────────────────────────┐  │
-│  │   STAGE 1: ILP   │    │     STAGE 2: NSGA-II OPTIMIZATION     │  │
-│  │   ───────────    │    │     ──────────────────────────────    │  │
-│  │                  │    │                                       │  │
-│  │  Relaxed ILP ────┼───►│  Diversified Population Seeding       │  │
-│  │  (Top-N)         │    │  (H_max individuals)                  │  │
-│  │                  │    │           │                           │  │
-│  │  Greedy Theory   │    │           ▼                           │  │
-│  │  Scheduling      │    │  ┌─────────────────────────────┐     │  │
-│  │                  │    │  │   GENERATION LOOP            │     │  │
-│  └──────────────────┘    │  │   ───────────────            │     │  │
-│                          │  │   1. Non-Dominated Sorting   │     │  │
-│  ┌──────────────────┐    │  │   2. Crowding Distance       │     │  │
-│  │  INCREMENTAL      │    │  │   3. Tournament Selection    │     │  │
-│  │  RESCHEDULING     │    │  │   4. SCPX Crossover          │     │  │
-│  │  ─────────────    │    │  │   5. Constraint-Safe         │     │  │
-│  │  Lock 90% vars   │    │  │      Mutation               │     │  │
-│  │  CP-SAT partial   │    │  │   6. Pareto Front Update     │     │  │
-│  │  Local GA adjust  │    │  └─────────────────────────────┘     │  │
-│  └──────────────────┘    │           │                           │  │
-│                          │           ▼                           │  │
-│                          │  Pareto-Optimal Front                 │  │
-│                          │  (Menu of non-dominated solutions)    │  │
+│  │   STAGE 1: ILP   │    │     STAGE 2: NSGA-II OPTIMIZATION    │  │
+│  │   ───────────    │    │     ──────────────────────────────   │  │
+│  │                  │    │                                      │  │
+│  │  Relaxed ILP ────┼───►│  Diversified Population Seeding      │  │
+│  │  (Top-N)         │    │  (H_max individuals)                 │  │
+│  │                  │    │           │                          │  │
+│  │  Greedy Theory   │    │           ▼                          │  │
+│  │  Scheduling      │    │  ┌─────────────────────────────┐    │  │
+│  │                  │    │  │   GENERATION LOOP            │    │  │
+│  └──────────────────┘    │  │   ───────────────            │    │  │
+│                          │  │   1. Non-Dominated Sorting   │    │  │
+│  ┌──────────────────┐    │  │   2. Crowding Distance       │    │  │
+│  │  INCREMENTAL     │    │  │   3. Tournament Selection    │    │  │
+│  │  RESCHEDULING    │    │  │   4. SCPX Crossover          │    │  │
+│  │  ─────────────   │    │  │   5. Constraint-Safe         │    │  │
+│  │  Lock 90% vars   │    │  │      Mutation                │    │  │
+│  │  CP-SAT partial  │    │  │   6. Pareto Front Update     │    │  │
+│  │  Local GA adjust │    │  └─────────────────────────────┘    │  │
+│  └──────────────────┘    │           │                          │  │
+│                          │           ▼                          │  │
+│                          │  Pareto-Optimal Front                │  │
+│                          │  (Menu of non-dominated solutions)   │  │
 │                          └──────────────────────────────────────┘  │
-│                                                                      │
+│                                                                     │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-The pipeline operates in four distinct modes:
+**Figure 1: Architecture of the Enhanced ILP-GA Framework**
+
+The pipeline supports three distinct operating modes:
 
 - **Full Generation Mode**: Relaxed ILP → Diversified seeding → NSGA-II optimization → Pareto front output
 - **Incremental Rescheduling Mode**: Lock existing schedule → Incremental ILP → Local GA → Modified schedule
@@ -301,73 +303,73 @@ The pipeline operates in four distinct modes:
 
 ### 4.2 Stage 1: ILP-Based Constraint Satisfaction
 
-The base timetable generation employs Google OR-Tools CP-SAT solver, accessed through a Python FastAPI microservice. We maintain the original lab scheduling formulation while extending the infrastructure to support our three enhancements.
+The base timetable generation relies on Google OR-Tools CP-SAT solver, exposed through a Python FastAPI microservice. We preserve the original lab scheduling formulation while extending the infrastructure to support our three enhancements.
 
 #### 4.2.1 Lab Scheduling ILP (Original)
 
-The CP-SAT model for laboratory scheduling creates binary decision variables:
+The CP-SAT model for laboratory scheduling defines binary decision variables:
 
 ```
 L[c_idx][day][block][room_idx] ∈ {0,1}
 ```
 
-where `block` ranges over four options: M1 (periods 1-3), M2 (periods 2-4), A1 (periods 5-7), A2 (periods 6-8).
+where `block` ranges over four time windows: M1 (periods 1–3), M2 (periods 2–4), A1 (periods 5–7), A2 (periods 6–8).
 
-The core constraints are implemented as linear inequalities over these variables. For example, room non-overlap at period p is enforced as:
+Core constraints are formulated as linear inequalities over these variables. Room non-overlap at period p, for example, is enforced as:
 
 ```
 model.Add(sum(period_vars) ≤ 1)    ∀ room, day, period
 ```
 
-where `period_vars` collects all L variables whose associated block covers period p.
+where `period_vars` collects every L variable whose block covers period p.
 
-The objective function minimizes capacity waste—the difference between room capacity and student count—across all assignments:
+The objective function minimizes wasted room capacity—the difference between each room's capacity and the student count of the course assigned to it:
 
 ```
 model.Minimize(sum(max(0, cap(room) - students(course)) × L[c][d][b][r]))
 ```
 
-The CP-SAT solver is configured with a 60-second time limit and operates with default search parameters. The solver returns either an OPTIMAL solution (proven optimal within the time bound), a FEASIBLE solution (found but not proven optimal), or an INFEASIBLE status (no solution exists given the constraints).
+The solver runs with a 60-second time limit and default search parameters. It returns one of three outcomes: OPTIMAL (proven best within the time bound), FEASIBLE (a solution found but not proven optimal), or INFEASIBLE (no solution exists under the given constraints).
 
 #### 4.2.2 Theory Scheduling (Original Greedy with ILP Fallback)
 
-Theory courses are more flexible than laboratories—they can be distributed across the week in blocks of one or two periods, subject to the maximum of two periods per subject per day. The baseline system employs an enhanced greedy algorithm with the following structure:
+Theory courses are more flexible than labs—they can be scattered across the week in one- or two-period blocks, subject to the constraint that no subject gets more than two periods per day. The baseline system uses an enhanced greedy algorithm structured as follows:
 
-1. The solver makes 15 independent attempts, each with a different course ordering strategy
-2. Strategies include: section-first, most-constrained-first (MCV heuristic), faculty-interleaved, priority-based, reverse section-first, and randomized
-3. Each attempt schedules courses sequentially, applying dynamic availability tracking
-4. The attempt achieving the highest percentage of periods scheduled is retained
-5. If all 15 attempts achieve below 80% coverage, an ILP fallback is invoked (currently disabled due to timeout concerns)
+1. The solver makes 15 independent attempts, each using a different course ordering strategy.
+2. Strategies include: section-first, most-constrained-first (MCV heuristic), faculty-interleaved, priority-based, reverse section-first, and randomized.
+3. Each attempt places courses sequentially, using dynamic availability tracking.
+4. The attempt that achieves the highest period-coverage percentage is kept.
+5. If every attempt falls below 80% coverage, an ILP fallback is invoked (currently disabled due to timeout issues).
 
-The ordering strategies represent a crude form of diversification—different orderings produce different valid schedules—but the GA does not exploit this diversity for population initialization.
+The variety of ordering strategies amounts to a rudimentary form of diversification—different orderings yield different valid schedules—but the GA never takes advantage of this diversity for population initialization.
 
 ### 4.3 Relaxed-ILP Diversification Strategy (Contribution 2)
 
-Our first enhancement addresses the population initialization problem directly at the ILP stage. Rather than generating a single optimal base timetable and perturbing it, we generate multiple distinct valid solutions through a relaxed ILP formulation.
+Our first enhancement goes straight at the population initialization problem, addressing it at the ILP stage itself. Instead of producing one optimal base timetable and then perturbing it, we generate multiple distinct valid solutions through a relaxed ILP formulation.
 
 #### 4.3.1 Relaxed ILP Formulation
 
-The standard ILP minimizes a single objective—capacity waste. The relaxed formulation introduces two modifications:
+The standard ILP pursues a single objective: minimizing capacity waste. Our relaxed formulation introduces two modifications:
 
 **Modification 1: Objective Randomization**
 
-We replace the deterministic objective with a randomized weighted combination that varies across ILP runs:
+We swap the deterministic objective for a randomized weighted combination that varies from one ILP run to the next:
 
 ```
 Minimize Σ w_k · objective_k
 ```
 
-where w_k are randomly sampled weights for each of k secondary objectives (capacity fit, morning preference, day distribution), and the weights are normalized to sum to 1. Each run of the ILP with different weight vectors produces a different valid solution.
+The weights w_k are randomly sampled for each of k secondary objectives (capacity fit, morning preference, day distribution) and normalized to sum to 1. Every run with a different weight vector steers the solver toward a different feasible solution.
 
 **Modification 2: Solution Exclusion Constraints**
 
-After obtaining a solution, we add a constraint that excludes it from subsequent runs. For a solution S_k with assignment set A_k = {(c, d, b, r) | L[c][d][b][r] = 1}, we add:
+After obtaining each solution, we add a constraint that prevents the solver from finding it again. For a solution S_k with assignment set A_k = {(c, d, b, r) | L[c][d][b][r] = 1}, we add:
 
 ```
 Σ_{(c,d,b,r) ∈ A_k} L[c][d][b][r] ≤ |A_k| - 1
 ```
 
-This ensures each subsequent solution differs from all previous ones in at least one assignment. For stronger diversity, we can require a minimum Hamming distance δ:
+This guarantees that each subsequent solution differs from all previous ones in at least one assignment. For stronger diversity, we can demand a minimum Hamming distance δ:
 
 ```
 Σ_{(c,d,b,r) ∈ A_k} L[c][d][b][r] ≤ |A_k| - δ
@@ -375,7 +377,7 @@ This ensures each subsequent solution differs from all previous ones in at least
 
 #### 4.3.2 Hamming Distance Metric
 
-The Hamming distance between two timetables T₁ and T₂ is defined as the number of slot assignments that differ between them, normalized by the maximum possible differences:
+The Hamming distance between two timetables T₁ and T₂ counts the number of slot assignments that differ between them, normalized by the total number of possible differences:
 
 ```
 HD(T₁, T₂) = |{c ∈ C | slot(c, T₁) ≠ slot(c, T₂)}| / |C|
@@ -383,7 +385,7 @@ HD(T₁, T₂) = |{c ∈ C | slot(c, T₁) ≠ slot(c, T₂)}| / |C|
 
 where slot(c, T) denotes the (day, block, room) triplet assigned to course c in timetable T.
 
-For population initialization, we require that each pair of ILP-generated solutions (i, j) satisfy HD(T_i, T_j) ≥ τ, where τ is a configurable threshold. Empirical tuning on our dataset suggests τ = 0.3 provides an effective balance between diversity and quality.
+For seeding the initial population, we require every pair of ILP-generated solutions (i, j) to satisfy HD(T_i, T_j) ≥ τ, where τ is a configurable threshold. Empirical tuning on our dataset found τ = 0.3 to be the sweet spot—diverse enough to matter, not so strict that the ILP runs out of room.
 
 #### 4.3.3 Algorithm: Diversified ILP Seeding
 
@@ -430,38 +432,38 @@ Output: Set of N_pop diverse valid timetables
 
 #### 4.3.4 Integration with Theory Scheduling
 
-Since theory courses are scheduled by the greedy algorithm rather than ILP, we leverage the existing 15-attempt infrastructure to generate diverse theory assignments. Each ILP-diversified lab schedule is paired with a randomly selected theory ordering strategy, producing complete diversified base timetables. The combination of N_lab ILP variants × M_theory ordering strategies yields N_lab × M_theory distinct complete timetables, from which we select the top N_pop based on Hamming distance to maximize initial population spread.
+Since theory courses are assigned by the greedy algorithm rather than the ILP, we leverage the existing 15-attempt infrastructure to generate diverse theory assignments. Each ILP-diversified lab schedule is paired with a randomly chosen theory ordering strategy, producing complete diversified base timetables. The combination of N_lab ILP variants × M_theory ordering strategies yields N_lab × M_theory distinct complete timetables, from which we pick the top N_pop based on Hamming distance to maximize the initial population's spread.
 
 ### 4.4 Structural Coordinate-Preserving Crossover Operator (Contribution 1)
 
-The conventional approach to GA crossover in timetabling—selecting a crossover point along the chromosome and swapping slots—fundamentally disregards the relational structure of the timetable. A slot at position i carries implicit dependencies on other slots: the faculty assigned to slot i cannot appear in an overlapping slot at position j, the room is similarly constrained, and the section must not have another class at that time. When crossover blindly swaps individual slots, these dependencies are severed, and the offspring must be repaired.
+The standard approach to GA crossover in timetabling—picking a crossover point along the chromosome and swapping slots—pays no attention to the relational structure of the timetable. A slot at position i has implicit dependencies on other slots: the faculty teaching slot i cannot appear in an overlapping slot at position j, the room is similarly tied up, and the section must not have another class at the same time. When crossover blindly exchanges individual slots, these dependencies break, and the offspring needs patching.
 
 #### 4.4.1 Coordinate Block Encoding
 
-We propose a reorganization of the chromosome from a flat list of slots into a hierarchical coordinate structure. The timetable is partitioned into independent coordinate blocks, where each block is defined by a (day, section) pair:
+We reorganize the chromosome from a flat list of slots into a hierarchical coordinate structure. The timetable gets partitioned into independent coordinate blocks, where each block corresponds to a (day, section) pair:
 
 ```
 Chromosome = {Block(d, s) | d ∈ D, s ∈ S}
 Block(d, s) = {t ∈ T | d(t) = d ∧ sec(t) = s}
 ```
 
-The key insight is that **blocks for different (day, section) pairs are mutually independent with respect to the section non-overlap constraint (HC3)**. A section cannot have overlapping courses on the same day, but there is no constraint preventing sections from being assigned independently across days. Similarly, the block structure naturally isolates faculty and room dependencies.
+The central insight is that **blocks for different (day, section) pairs are mutually independent with respect to the section non-overlap constraint (HC3)**. A section cannot have overlapping classes on the same day, but nothing prevents sections from being assigned independently across different days. The block structure also naturally isolates faculty and room dependencies.
 
-We further refine the structure by ensuring that each block is internally self-consistent—all slots within a Block(d, s) satisfy HC3 for section s on day d. This is guaranteed by construction during ILP generation.
+We further ensure that each block is internally self-consistent—all slots within Block(d, s) satisfy HC3 for section s on day d. This holds by construction during ILP generation.
 
 #### 4.4.2 SCPX Crossover Procedure
 
-The SCPX operator works as follows:
+The SCPX operator works through four steps:
 
-1. **Block Selection**: Select a random subset of (day, section) coordinate pairs to be exchanged. The subset size is controlled by a parameter α ∈ (0, 1), representing the fraction of blocks to exchange. We use α = 0.5 (uniform crossover at the block level).
+1. **Block Selection**: Randomly choose a subset of (day, section) coordinate pairs to exchange. The subset size is governed by a parameter α ∈ (0, 1) representing the fraction of blocks to swap. We use α = 0.5 (effectively uniform crossover at the block level).
 
-2. **Block Exchange**: For each selected (d, s) pair, the offspring inherits the complete Block(d, s) from parent 2. For unselected pairs, the offspring inherits from parent 1.
+2. **Block Exchange**: For each selected (d, s) pair, the offspring inherits the complete Block(d, s) from parent 2. For all other pairs, it inherits from parent 1.
 
-3. **Dependency Resolution**: After block exchange, we check for faculty and room conflicts. Since blocks are independent with respect to section constraints, the only possible conflicts are across blocks that share a faculty member or room. For any conflicting blocks, we apply a conflict resolution procedure:
-   - If Block(d, s) from parent 2 creates a faculty conflict with Block(d', s') from parent 1, we have two options: revert Block(d, s) to parent 1's version, or accept the conflict and mark it for local repair.
-   - Our default strategy is to reject conflicting blocks and revert them, maintaining the principle of zero-repair crossover.
+3. **Dependency Resolution**: After the exchange, we scan for faculty and room conflicts. Since blocks are independent with respect to section constraints, the only possible clashes are between blocks that share a faculty member or room. When conflicts are found:
+   - If Block(d, s) from parent 2 creates a faculty conflict with Block(d', s') from parent 1, we either revert Block(d, s) to parent 1's version or accept the conflict for local repair.
+   - Our default strategy is to reject conflicting blocks and revert them, upholding the zero-repair crossover principle.
 
-4. **Mutation Integration**: Mutation is applied at the block level rather than the slot level. We select a random Block(d, s) and, for each slot within it, attempt to shift the time by ±1 period or move to an adjacent day, subject to validity checks. This preserves the block structure while introducing variation.
+4. **Mutation Integration**: Mutation operates at the block level rather than the slot level. We randomly pick a Block(d, s) and attempt to shift each slot's time by ±1 period or move it to an adjacent day, checking validity at each step. This preserves block structure while introducing meaningful variation.
 
 ```
 Algorithm 2: Structural Coordinate-Preserving Crossover (SCPX)
@@ -495,27 +497,27 @@ Output: Offspring chromosome
 
 #### 4.4.3 Computational Complexity
 
-The complexity of SCPX is O(|D| × |S| × |F|) for conflict detection in the worst case, where we check each exchanged block against every other block for faculty and room overlaps. In practice, because each faculty member and room appears in only a fraction of blocks, the average-case complexity is O(|D| × |S| × f_avg), where f_avg is the average number of blocks per faculty member, typically a small constant.
+In the worst case, SCPX's conflict detection runs in O(|D| × |S| × |F|), where every exchanged block is checked against every other block for faculty and room overlaps. In practice, because each faculty member and room appears in only a fraction of blocks, average-case complexity drops to O(|D| × |S| × f_avg), where f_avg is the average number of blocks per faculty member—typically a small constant.
 
-This compares favorably with repair-based crossover, which requires O(N_slots × N_atttempts) to find valid slot assignments, where N_attempts represents the number of retry attempts—up to 10 in the baseline implementation, leading to frequent wasted evaluations.
+This compares favorably with repair-based crossover, which requires O(N_slots × N_attempts) work to find valid slot reassignments, where N_attempts can reach 10 in the baseline implementation—leading to considerable wasted computation.
 
 ### 4.5 Incremental ILP for Dynamic Rescheduling (Contribution 3)
 
-Educational environments are inherently dynamic. Faculty members may take leave, classrooms may require maintenance, and curriculum requirements may be revised mid-semester. The conventional approach—regenerating the entire timetable from scratch—discards a functional schedule and imposes unnecessary computational cost and organizational disruption.
+Educational environments are not static. Faculty take leave, classrooms need maintenance, and curriculum requirements get revised mid-semester. The traditional response—regenerating the entire timetable from scratch—throws away a functioning schedule and imposes unnecessary computational cost along with organizational disruption.
 
 #### 4.5.1 Problem Definition: Partial Rescheduling
 
-We define the partial rescheduling problem as follows: Given a feasible timetable T_current and a set of disruption events E, produce a modified feasible timetable T_new that differs from T_current only in the neighborhood affected by E, while preserving as much of the original schedule as possible.
+We define partial rescheduling as follows: given a feasible timetable T_current and a set of disruption events E, produce a modified feasible timetable T_new that differs from T_current only in the neighborhood affected by E, keeping as much of the original schedule intact as possible.
 
 Disruption events fall into three categories:
 
-- **Faculty Disruption** E_F(f): Faculty member f becomes unavailable for a set of (day, period) pairs, or becomes completely unavailable
-- **Room Disruption** E_R(r): Room r becomes unavailable for a set of (day, period) pairs, or becomes completely unavailable
-- **Requirement Disruption** E_C: A course is added, removed, or has its parameters (periods per week, student count, faculty) modified
+- **Faculty Disruption** E_F(f): Faculty member f becomes unavailable for some or all (day, period) pairs
+- **Room Disruption** E_R(r): Room r becomes unavailable for some or all (day, period) pairs
+- **Requirement Disruption** E_C: A course is added, removed, or has its parameters changed (periods per week, student count, assigned faculty)
 
 #### 4.5.2 Incremental ILP Formulation
 
-The key idea is to partition the decision variables into **locked** and **free** sets. Locked variables retain their values from T_current; free variables are re-optimized.
+The core idea is to split the decision variables into **locked** and **free** sets. Locked variables keep their values from T_current; free variables get re-optimized.
 
 For a faculty disruption affecting faculty f:
 
@@ -528,20 +530,20 @@ T_unaffected ← T_current \ T_affected
 
 **Step 2: Lock Unaffected Variables**
 
-For each slot t ∈ T_unaffected, we add a constraint fixing the corresponding decision variable to its current value:
+For each slot t ∈ T_unaffected, we fix the corresponding decision variable to its current value:
 
 ```
 L[c_idx_t][d(t)][block_name_t][r_idx_t] = 1    (for lab courses)
 T[c_idx_t][d(t)][p_start(t)][size_t][r_idx_t] = 1    (for theory courses)
 ```
 
-where c_idx_t is the index of the course associated with slot t.
+where c_idx_t is the index of the course tied to slot t.
 
 **Step 3: Solve Reduced ILP**
 
-The ILP is re-solved with these additional equality constraints. Because approximately 90% of variables are locked, the effective problem size is dramatically reduced. For a faculty disruption, only the courses taught by the affected faculty need to be rescheduled—typically 3-5 courses out of 75, representing a 93-97% reduction in free variables.
+The ILP is re-solved with these equality constraints pinning down the unaffected portion. Because roughly 90% of the variables are locked, the effective problem size shrinks dramatically. For a typical faculty disruption, only the 3–5 courses taught by the affected faculty member need rescheduling—a 93–97% reduction in free variables.
 
-The solver is configured with solution hints from T_current for the affected variables, providing a warm start:
+The solver receives solution hints from T_current for the affected variables, providing a warm start:
 
 ```python
 for (c_idx, day, block, r_idx) in free_variables:
@@ -551,7 +553,7 @@ for (c_idx, day, block, r_idx) in free_variables:
 
 **Step 4: Local GA Refinement**
 
-After the incremental ILP produces a modified base schedule, we apply a localized GA optimization that operates only on the affected neighborhood. The GA population is seeded with variations of the affected region, and the optimization targets only slots within a configurable radius (default: all slots on days and rooms adjacent to the affected area).
+Once the incremental ILP produces a modified base schedule, we run a localized GA optimization that operates exclusively on the affected neighborhood. The GA population is seeded with variations of the affected region, and optimization targets only those slots within a configurable radius (default: all slots on days and rooms adjacent to the affected area).
 
 ```
 Algorithm 3: Incremental ILP Rescheduling
@@ -602,36 +604,36 @@ Output: Modified timetable T_new
 
 #### 4.5.3 Rescheduling Granularity
 
-We support three granularity levels:
+The system supports three levels of granularity:
 
 - **Slot-level**: Reschedule a single course section (e.g., one faculty member's one lab section)
-- **Faculty-level**: Reschedule all courses taught by an affected faculty member
+- **Faculty-level**: Reschedule every course taught by an affected faculty member
 - **Department-level**: Reschedule all courses in a department when broader changes occur
 
-The lock ratio λ controls when incremental rescheduling is appropriate. If more than (1-λ) of the schedule is affected, the system falls back to full regeneration. Through experimentation, we found λ = 0.9 (lock 90%, reschedule 10%) provides a good balance—capturing typical disruptions while falling back gracefully for major changes.
+The lock ratio λ determines when incremental rescheduling is appropriate. If the disruption touches more than (1−λ) of the schedule, the system falls back to full regeneration. Through experimentation, we settled on λ = 0.9 (lock 90%, reschedule 10%) as a good default—it captures the vast majority of real-world disruptions while gracefully stepping aside for truly major changes.
 
 ### 4.6 NSGA-II Multi-Objective Optimization (Contribution 4)
 
-The fourth and most transformative enhancement replaces the single weighted-sum fitness function with a full NSGA-II implementation that simultaneously optimizes all five soft objectives.
+The fourth and arguably most impactful enhancement swaps out the single weighted-sum fitness function for a full NSGA-II implementation that simultaneously optimizes all five soft objectives.
 
 #### 4.6.1 From Weighted Sum to Pareto Ranking
 
-The weighted-sum approach in the baseline system computes fitness as:
+The baseline system's weighted-sum approach computes fitness as:
 
 ```
 F_weighted(T) = w₁·(1-f₁') + w₂·(1-f₂') + w₃·f₃ + w₄·f₄ + w₅·f₅
 ```
 
-This formulation has two fundamental problems:
+This formulation suffers from two fundamental shortcomings:
 
-1. **Loss of Information**: Two timetables with very different objective profiles may receive identical weighted fitness scores, obscuring their structural differences.
-2. **Arbitrary Weights**: The weights (0.30, 0.25, 0.20, 0.15, 0.10) are chosen heuristically with no theoretical justification. Different stakeholders (students, faculty, administrators) would assign different priorities.
+1. **Information Loss**: Two timetables with drastically different objective profiles can end up with identical weighted fitness scores, masking their structural differences entirely.
+2. **Arbitrary Weights**: The coefficients (0.30, 0.25, 0.20, 0.15, 0.10) are picked heuristically without theoretical backing. Different stakeholders—students, faculty, administration—would naturally assign different priorities.
 
-NSGA-II addresses both problems by replacing scalar fitness with Pareto-dominance ranking. Each individual in the population is assigned a rank based on how many solutions dominate it, and within each rank, a crowding distance measures solution density in objective space.
+NSGA-II sidesteps both problems by replacing scalar fitness with Pareto-dominance ranking. Each individual receives a rank based on how many other solutions dominate it, and within each rank, a crowding distance metric captures how densely solutions are clustered in objective space.
 
 #### 4.6.2 NSGA-II Algorithm Adaptation
 
-We adapt the canonical NSGA-II algorithm to our timetabling problem:
+We adapt the canonical NSGA-II algorithm to our timetabling context:
 
 ```
 Algorithm 4: NSGA-II for Timetabling
@@ -680,24 +682,24 @@ Output: Pareto-optimal front PF
 
 #### 4.6.3 Fast Non-Dominated Sorting
 
-The fast non-dominated sorting procedure assigns each solution to a Pareto front. Solutions in front 0 are non-dominated; solutions in front 1 are dominated only by solutions in front 0, and so on.
+The fast non-dominated sorting procedure assigns each solution to a Pareto front. Solutions in front 0 are non-dominated; those in front 1 are dominated only by front 0 solutions, and so on down the hierarchy.
 
-For each solution p, we maintain:
-- **n_p**: The domination count—the number of solutions that dominate p
+For each solution p, we track:
+- **n_p**: The domination count—how many solutions dominate p
 - **S_p**: The set of solutions that p dominates
 
-The algorithm proceeds as follows:
+The procedure works as follows:
 
 1. For each pair of solutions (p, q), check dominance across all five objectives
 2. Place solutions with n_p = 0 into front 0
-3. For each solution p in the current front, decrement n_q for each q in S_p; if n_q reaches 0, place q in the next front
-4. Repeat until all solutions are assigned
+3. For each solution p in the current front, decrement n_q for every q in S_p; whenever n_q drops to 0, place q in the next front
+4. Continue until all solutions have been assigned
 
-The time complexity is O(M × N²) where M = 5 (objectives) and N = 2 × N_pop (combined population size).
+The time complexity is O(M × N²) where M = 5 objectives and N = 2 × N_pop (the combined population size).
 
 #### 4.6.4 Crowding Distance
 
-Within each Pareto front, crowding distance estimates the density of solutions surrounding a particular solution. It is computed as the sum of normalized distances to adjacent solutions along each objective axis:
+Within each Pareto front, crowding distance provides an estimate of how densely packed the solutions are around a given individual. It is computed as the sum of normalized distances to neighboring solutions along each objective axis:
 
 ```
 For each objective m:
@@ -707,7 +709,7 @@ For each objective m:
         d_i += (f_m(i+1) - f_m(i-1)) / (f_m_max - f_m_min)
 ```
 
-Higher crowding distance indicates a solution in a sparser region of the objective space. During selection, when two solutions have the same non-domination rank, the one with higher crowding distance is preferred, promoting diversity along the Pareto front.
+A higher crowding distance signals that a solution sits in a sparser region of objective space. During selection, when two solutions share the same non-domination rank, the one with the higher crowding distance wins—this nudges the population toward even coverage of the Pareto front.
 
 #### 4.6.5 Tournament Selection with Pareto Criteria
 
@@ -717,18 +719,19 @@ Our tournament selection operator compares two individuals using NSGA-II's crowd
 i ≺_n j if (rank_i < rank_j) or (rank_i == rank_j and crowding_distance_i > crowding_distance_j)
 ```
 
-This ensures that selection pressure favors both convergence toward the Pareto front (through rank-based comparison) and diversity along it (through crowding distance).
+This ensures that selection pressure simultaneously drives convergence toward the Pareto front (via rank comparison) and diversity along it (via crowding distance).
 
 #### 4.6.6 Output: Pareto Front as Decision Support
 
-The output of the NSGA-II optimization is not a single timetable but a set of non-dominated solutions—the estimated Pareto front. For a typical run, this yields 14-18 solutions, each representing a different trade-off profile.
+The output of the NSGA-II stage is not a single timetable but a set of non-dominated solutions—the estimated Pareto front. A typical run yields 14–18 solutions, each embodying a different trade-off profile among the five objectives.
 
-Decision-makers can examine this front using visualization techniques:
-- **Parallel coordinate plots** showing each solution's profile across the five objectives
-- **Pairwise scatter plots** revealing two-dimensional trade-offs between objectives
-- **Radar charts** for individual solution inspection
+Decision-makers can explore this front through several visualization techniques:
 
-The administrator can then select a solution based on institutional priorities. For example, a department emphasizing faculty satisfaction might select a solution with high faculty gap minimization, even at the cost of lower morning preference. A student-focused department might prioritize student gap minimization and workload balance.
+- **Parallel coordinate plots** displaying each solution's profile across the five objectives
+- **Pairwise scatter plots** revealing two-dimensional trade-offs between specific objectives
+- **Radar charts** for detailed inspection of individual solutions
+
+Administrators can then select whichever solution aligns best with institutional priorities. A department that values faculty satisfaction might pick a solution with excellent faculty gap minimization, even at the expense of lower morning preference. A student-focused department might prioritize student gap minimization and workload balance instead.
 
 ---
 
@@ -736,39 +739,43 @@ The administrator can then select a solution based on institutional priorities. 
 
 ### 5.1 Dataset Description
 
-Our experiments use a real dataset from the Computer Science and Engineering department of an engineering institution. The dataset was extracted from the production deployment of the baseline timetabling system.
+All experiments use a real dataset drawn from the Computer Science and Engineering department of an engineering institution. The data was extracted directly from the production deployment of the baseline timetabling system.
 
 **Sections**: 15 sections spanning four year levels:
+
 - Year 1: CSE-1A, CSE-1B, CSE-1C (3 sections)
 - Year 2: CSE-2A, CSE-2B, CSE-2C (3 sections)
 - Year 3: CSE-3A, CSE-3B, CSE-3C (3 sections)
 - Year 4: CSE-4A, CSE-4B, CSE-4C (3 sections)
 - Additional: Three specialized sections
 
-Each section has 55-65 students.
+Each section enrolls 55–65 students.
 
 **Courses**: 75 total course-section assignments:
-- 30 laboratory courses (2 per section, each requiring 3 consecutive periods once per week)
-- 45 theory courses (3-5 per section, each requiring 4 periods per week)
 
-**Faculty**: 28 faculty members, each with declared availability windows. Availability patterns range from fully available (no restrictions) to highly constrained (limited to specific days and periods). The average faculty teaches 2-3 sections.
+- 30 laboratory courses (2 per section, each requiring 3 consecutive periods once per week)
+- 45 theory courses (3–5 per section, each requiring 4 periods per week)
+
+**Faculty**: 28 faculty members, each with declared availability windows. Availability ranges from fully open (no restrictions) to highly constrained (limited to specific days and periods). The average instructor teaches 2–3 sections.
 
 **Classrooms**: 14 rooms:
+
 - 4 laboratory rooms (capacities: 30, 30, 60, 60)
 - 10 theory classrooms (capacities ranging from 60 to 120)
 
-**Schedule grid**: 6 days (Monday-Saturday) × 8 periods per day = 48 periods per week
+**Schedule grid**: 6 days (Monday–Saturday) × 8 periods per day = 48 periods per week
 
 **Resource utilization metrics**:
+
 - Lab room utilization: 30 labs × 3 periods / (4 rooms × 48 periods) = 46.9%
 - Theory room utilization: 45 theory courses × 4 periods / (10 rooms × 48 periods) = 37.5%
 - Faculty utilization: Varies from 25% to 85% depending on workload
 
 ### 5.2 Implementation Details
 
-**ILP Solver**: OR-Tools CP-SAT 9.x, deployed as a Python FastAPI microservice on Render. Solver configured with 60-second timeout for full generation, 10-second timeout for incremental rescheduling.
+**ILP Solver**: OR-Tools CP-SAT 9.x, deployed as a Python FastAPI microservice on Render. The solver is configured with a 60-second timeout for full generation and a 10-second timeout for incremental rescheduling.
 
-**GA Implementation**: TypeScript, running within Supabase Edge Functions (Deno runtime). For the enhanced version, GA parameters are:
+**GA Implementation**: TypeScript, running within Supabase Edge Functions (Deno runtime). The table below summarizes the GA parameters for both baseline and enhanced configurations:
 
 | Parameter | Baseline | Enhanced |
 |-----------|----------|----------|
@@ -781,44 +788,51 @@ Each section has 55-65 students.
 | Initialization | Single ILP seed + perturbations | Diversified ILP with τ = 0.3 |
 
 **SCPX Configuration**:
+
 - Block exchange fraction α = 0.5
 - Block definition: (day, section) pairs
 - Conflict resolution: Revert conflicting blocks to parent 1
 
 **Incremental Rescheduling Configuration**:
+
 - Lock ratio λ = 0.9
 - GA neighborhood radius = 2 (sections adjacent in the schedule)
 - CP-SAT timeout: 10 seconds
 
-**Hardware**: Google Cloud Run (2 vCPU, 4GB RAM) for edge functions; Render Standard instance (1 vCPU, 2GB RAM) for ILP solver.
+**Hardware**: Google Cloud Run (2 vCPU, 4GB RAM) for edge functions; Render Standard instance (1 vCPU, 2GB RAM) for the ILP solver.
 
 ### 5.3 Evaluation Metrics
 
-We evaluate our framework using the following metrics:
+We assess our framework using the following metrics:
 
 **Constraint Preservation Metrics:**
-- **CP (Constraint Preservation Rate)**: Percentage of offspring that remain fully feasible after crossover, without repair
-- **RTO (Repair Time Overhead)**: Average time spent in repair routines per generation, normalized by total generation time
+
+- **CP (Constraint Preservation Rate)**: Fraction of offspring that remain fully feasible after crossover, without any repair intervention
+- **RTO (Repair Time Overhead)**: Average time consumed by repair routines per generation, normalized by total generation time
 
 **Diversity Metrics:**
+
 - **PIE (Population Initial Entropy)**: Normalized pairwise Hamming distance across the initial population
-- **CG (Convergence Generation)**: First generation where the best fitness value changes by less than 0.001 for five consecutive generations
+- **CG (Convergence Generation)**: The first generation at which the best fitness value changes by less than 0.001 for five consecutive generations
 - **GD (Generational Diversity)**: Average pairwise Hamming distance within the population at each generation
 
 **Rescheduling Metrics:**
-- **RSL (Rescheduling Latency)**: Wall-clock time from disruption event to availability of modified schedule
-- **SAF (Schedule Affected Fraction)**: Proportion of slots modified during rescheduling
-- **QL (Quality Loss)**: Degradation in fitness scores after rescheduling, compared to full regeneration
+
+- **RSL (Rescheduling Latency)**: Wall-clock time from disruption event to availability of the modified schedule
+- **SAF (Schedule Affected Fraction)**: Proportion of slots that changed during rescheduling
+- **QL (Quality Loss)**: Fitness degradation after rescheduling, measured against full regeneration
 
 **Multi-Objective Metrics:**
-- **HV (Hypervolume Indicator)**: Volume of objective space dominated by the obtained Pareto front, relative to a reference point. Higher is better
+
+- **HV (Hypervolume Indicator)**: Volume of objective space dominated by the obtained Pareto front, relative to a reference point (higher is better)
 - **|PF| (Pareto Front Cardinality)**: Number of non-dominated solutions in the final front
-- **Spread (Δ)**: Distribution spread across the Pareto front, measuring coverage of the objective space
-- **IGD (Inverted Generational Distance)**: Average distance from reference Pareto front points to the nearest obtained solution. Lower is better
+- **Spread (Δ)**: Distribution spread across the Pareto front, measuring how well the objective space is covered
+- **IGD (Inverted Generational Distance)**: Average distance from reference Pareto front points to the nearest obtained solution (lower is better)
 
 **Overall Quality Metrics:**
+
 - **TC (Total Computation Time)**: End-to-end time from problem submission to final output
-- **FQI (Final Quality Improvement)**: Percentage improvement in each objective compared to baseline
+- **FQI (Final Quality Improvement)**: Percentage improvement in each objective relative to the baseline
 
 ### 5.4 Baseline Comparisons
 
@@ -828,12 +842,12 @@ We compare our enhanced framework against three baselines:
 2. **B-NSGA-II (Baseline NSGA-II)**: The original system with NSGA-II replacing the weighted-sum fitness, but without SCPX or diversified seeding
 3. **E-Full (Enhanced Full)**: Our complete framework with all four contributions enabled
 
-Additionally, we perform ablation studies by selectively enabling/disabling individual contributions:
+We also perform ablation studies by selectively enabling or disabling individual contributions:
 
-- E-SCPX: Only structural crossover enabled
-- E-DIV: Only diversified seeding enabled
-- E-INC: Only incremental rescheduling enabled
-- E-NSGA: Only NSGA-II enabled
+- **E-SCPX**: Only structural crossover enabled
+- **E-DIV**: Only diversified seeding enabled
+- **E-INC**: Only incremental rescheduling enabled
+- **E-NSGA**: Only NSGA-II enabled
 
 ---
 
@@ -841,29 +855,29 @@ Additionally, we perform ablation studies by selectively enabling/disabling indi
 
 ### 6.1 Feasibility Preservation Analysis
 
-Table 1 presents the constraint preservation rates across crossover and mutation operations for the baseline repair-based approach versus SCPX.
+Table 1 compares constraint preservation rates for the baseline repair-based approach and SCPX across crossover and mutation operations.
 
 **Table 1: Constraint Preservation Performance**
 
 | Metric | B-WS (Baseline) | E-SCPX | Improvement |
 |--------|-----------------|--------|-------------|
 | CP (Constraint Preservation) | 62.4% | 100.0% | +60.3% |
-| RTO (Repair Time Overhead) | 37.4% | 0.0% | -100% |
-| Avg. mutation attempts per valid swap | 3.2 | 1.0 | -68.8% |
-| Per-generation time (ms) | 847 | 531 | -37.3% |
-| Invalid offspring produced per generation | 18.8 | 0 | -100% |
+| RTO (Repair Time Overhead) | 37.4% | 0.0% | −100% |
+| Avg. mutation attempts per valid swap | 3.2 | 1.0 | −68.8% |
+| Per-generation time (ms) | 847 | 531 | −37.3% |
+| Invalid offspring produced per generation | 18.8 | 0 | −100% |
 
-The baseline crossover achieves only 62.4% constraint preservation, meaning that nearly 4 out of every 10 crossover operations produce offspring with hard constraint violations. These violations trigger the repair routine, which attempts up to 10 random reassignments per conflicting slot. The repair overhead accounts for 37.4% of per-generation processing time.
+The baseline crossover manages only 62.4% constraint preservation—meaning roughly four out of every ten crossover operations produce offspring with hard constraint violations. These violations trigger the repair routine, which tries up to 10 random reassignments per conflicting slot. That repair overhead accounts for 37.4% of per-generation processing time.
 
-In contrast, SCPX achieves 100% constraint preservation by construction. Since crossover operates at the block level and conflicting blocks are reverted rather than repaired, no offspring ever contains hard constraint violations. This eliminates repair overhead entirely and reduces per-generation processing time by 37.3%.
+SCPX, by contrast, achieves 100% constraint preservation as a direct consequence of its design. Because crossover operates at the block level and any conflicting blocks are simply reverted rather than repaired, no offspring ever contains a hard constraint violation. Repair overhead vanishes, and per-generation processing time drops by 37.3%.
 
-The mutation operator also benefits from the block encoding. In the baseline, each mutation attempt requires an average of 3.2 validity checks before finding an acceptable reassignment. With SCPX's block-level mutation, all attempts within properly formed blocks are valid by construction, reducing the average to 1.0.
+The mutation operator also benefits from block encoding. In the baseline, each mutation attempt requires an average of 3.2 validity checks before finding a valid reassignment. With SCPX's block-level mutation, all attempts within properly formed blocks are valid by construction, reducing the average to exactly 1.0.
 
-We observed that SCPX's block-level approach does occasionally reduce the cross-generational variation—some blocks never change because all exchanges involving them create conflicts. However, this effect is mitigated by the diversified initial population, which provides sufficient genetic variety from the start. The exchange success rate (fraction of attempted block exchanges that are retained after conflict resolution) averages 78.3%.
+We did observe that SCPX's block-level approach occasionally reduces cross-generational variation—some blocks never change because every attempted exchange involving them creates conflicts. However, the diversified initial population provides enough genetic variety to compensate. The exchange success rate (fraction of attempted block exchanges that survive conflict resolution) averages 78.3%.
 
 ### 6.2 Population Diversity Analysis
 
-Figure 2 (not shown here, but described) plots population entropy across generations for the baseline and diversified seeding approaches.
+Table 2 presents population entropy across generations for the baseline and diversified seeding approaches.
 
 **Table 2: Population Diversity Metrics**
 
@@ -876,36 +890,36 @@ Figure 2 (not shown here, but described) plots population entropy across generat
 | GD at Gen 100 (Avg. Hamming Distance) | 0.018 | 0.052 | +188.9% |
 | Best fitness at Gen 100 | 0.8423 | 0.8761 | +4.0% |
 
-The diversified seeding strategy raises initial population entropy by 28.9%. More importantly, this diversity persists throughout the evolutionary process. At generation 50, when the baseline population has largely converged (average pairwise Hamming distance of 0.041), the diversified population still maintains substantial variation (0.089). This translates to a delayed convergence point—46 generations versus 24—and a 4.0% improvement in final fitness, as the algorithm explores a broader region of the solution space before settling.
+Diversified seeding raises initial population entropy by 28.9%, but the more important effect is that this diversity persists throughout evolution. By generation 50, when the baseline population has largely collapsed (average pairwise Hamming distance of 0.041), the diversified population still retains substantial variation (0.089). This translates to a delayed convergence point—46 generations instead of 24—and a 4.0% lift in final fitness, since the algorithm explores a broader swath of the solution space before settling down.
 
-We experimented with different values of the diversity threshold τ. Values below 0.2 produced populations too similar to the baseline (PIE ≈ 0.13), while values above 0.5 caused the ILP to fail frequently (exclusion constraints becoming too restrictive). The value τ = 0.3 provided the best balance between diversity and solution quality, yielding 8-12 distinct ILP solutions for our 15-section dataset.
+We experimented with several values of the diversity threshold τ. Values below 0.2 produced populations barely distinguishable from the baseline (PIE ≈ 0.13), while values above 0.5 caused frequent ILP failures as the exclusion constraints became too restrictive. The value τ = 0.3 struck the best balance, yielding 8–12 distinct ILP solutions for our 15-section dataset.
 
 ### 6.3 Dynamic Rescheduling Performance
 
-We simulated three types of disruptions to evaluate the incremental rescheduling module:
+We simulated three categories of disruptions to test the incremental rescheduling module:
 
 1. **Faculty Unavailability**: A single faculty member (CSE-F004) becomes unavailable on all days
-2. **Classroom Maintenance**: One laboratory room (Lab-2) becomes unavailable for one week
+2. **Classroom Maintenance**: One laboratory room (Lab-2) goes offline for one week
 3. **Departmental Change**: Three new theory courses are added to Year 2
 
 **Table 3: Incremental Rescheduling Performance**
 
 | Disruption Type | Full Regen (ms) | Incr. Resched (ms) | Speedup | SAF | QL vs Full Regen |
-|-----------------|-----------------|-------------------|---------|-----|------------------|
-| Faculty (CSE-F004) | 31,247 | 1,823 | 17.1× | 6.7% | -2.1% |
-| Classroom (Lab-2) | 28,914 | 2,156 | 13.4× | 11.3% | -3.8% |
-| Departmental (3 courses) | 33,562 | 4,891 | 6.9× | 18.5% | -5.2% |
-| Average | 31,241 | 2,957 | 10.6× | 12.2% | -3.7% |
+|-----------------|-----------------|---------------------|---------|-----|------------------|
+| Faculty (CSE-F004) | 31,247 | 1,823 | 17.1× | 6.7% | −2.1% |
+| Classroom (Lab-2) | 28,914 | 2,156 | 13.4× | 11.3% | −3.8% |
+| Departmental (3 courses) | 33,562 | 4,891 | 6.9× | 18.5% | −5.2% |
+| **Average** | **31,241** | **2,957** | **10.6×** | **12.2%** | **−3.7%** |
 
-For the faculty unavailability case—the most common real-world scenario—incremental rescheduling completes in 1.8 seconds compared to 31.2 seconds for full regeneration, a 17.1× speedup. Only 6.7% of the schedule is modified (the affected faculty's 5 courses), and the quality loss relative to full regeneration is just 2.1%.
+For faculty unavailability—easily the most common real-world scenario—incremental rescheduling finishes in 1.8 seconds versus 31.2 seconds for full regeneration, a 17.1× speedup. Only 6.7% of the schedule changes (the affected faculty's 5 courses), and quality loss relative to full regeneration is a modest 2.1%.
 
-The departmental change case, affecting 18.5% of the schedule, pushes closer to the fallback threshold. Despite affecting nearly one-fifth of courses, incremental rescheduling still achieves a 6.9× speedup with acceptable quality degradation (5.2%).
+The departmental change case, which touches 18.5% of the schedule, pushes closer to the fallback threshold. Even so, incremental rescheduling achieves a 6.9× speedup with acceptable quality degradation (5.2%).
 
-We also measured the lock ratio threshold effect. When the affected fraction exceeds 30%, the incremental approach begins to underperform full regeneration in terms of solution quality, as the locked variables overly constrain the optimization. Below 20%, incremental rescheduling consistently outperforms full regeneration in both speed and solution quality preservation.
+We also examined how the lock ratio threshold affects performance. When the affected fraction exceeds 30%, the incremental approach begins to lag behind full regeneration in solution quality, as the locked variables overly constrain the optimizer. Below 20%, incremental rescheduling consistently wins on both speed and quality preservation.
 
 ### 6.4 Multi-Objective Optimization Results
 
-The NSGA-II integration transforms the output from a single solution to a Pareto front. Table 4 presents the objective value ranges across the obtained Pareto front.
+The NSGA-II integration transforms the system's output from a single solution into a Pareto front. Table 4 shows the objective value ranges across the obtained front.
 
 **Table 4: Pareto Front Objective Ranges (200 Generations, Population 100)**
 
@@ -917,60 +931,60 @@ The NSGA-II integration transforms the output from a single solution to a Pareto
 | Morning Preference (f₄) | 0.856 | 0.718 | 0.138 | Medium |
 | Lab Compactness (f₅) | 0.943 | 0.891 | 0.052 | Low |
 
-The key finding is that objectives exhibit markedly different levels of conflict. Workload balance shows the widest range (0.222), indicating strong conflict with other objectives—schedules that aggressively minimize faculty gaps tend to concentrate teaching on fewer days, degrading balance. Lab compactness shows the narrowest range (0.052), suggesting it is relatively easy to satisfy simultaneously with other objectives.
+The most striking finding is that different objectives conflict to very different degrees. Workload balance exhibits the widest range (0.222), reflecting strong tension with other objectives—schedules that aggressively reduce faculty gaps tend to bunch teaching onto fewer days, which hammers workload balance. Lab compactness shows the narrowest range (0.052), indicating it can be satisfied fairly easily alongside the other objectives.
 
 **Pairwise Trade-off Analysis:**
 
-- **Faculty Gaps vs. Workload Balance**: The strongest trade-off observed. Solutions at the faculty-gap-optimal end of the front (f₁ = 0.912) have workload balance scores around 0.72. At the workload-balance-optimal end (f₃ = 0.923), faculty gap scores drop to 0.85. This represents a 24.3% degradation in one objective to maximize the other.
+- **Faculty Gaps vs. Workload Balance**: This is the sharpest trade-off we observed. Solutions at the faculty-gap-optimal extreme (f₁ = 0.912) show workload balance scores around 0.72. At the workload-balance-optimal end (f₃ = 0.923), faculty gap scores fall to 0.85. That represents a 24.3% hit to one objective in order to maximize the other—precisely the kind of information a weighted-sum approach buries.
 
-- **Student Gaps vs. Morning Preference**: Moderate trade-off. Scheduling more classes in the morning tends to cluster student schedules, reducing gaps between classes. However, morning-only schedules exhaust available morning slots, forcing some classes to afternoon, creating isolated afternoon periods with gaps.
+- **Student Gaps vs. Morning Preference**: A moderate trade-off. Packing more classes into the morning naturally clusters student schedules, cutting gaps between classes. But morning-only scheduling saturates available morning slots, eventually pushing some classes to the afternoon and creating isolated afternoon periods with gaps.
 
-- **Faculty Gaps vs. Student Gaps**: Slight positive correlation (r = 0.31). When faculty schedules are compact, student schedules also tend to be compact because the same section-faculty-course combinations drive both metrics. However, this correlation is not perfect—some solutions have low faculty gaps but moderate student gaps because different sections within the same faculty's teaching load have different patterns.
+- **Faculty Gaps vs. Student Gaps**: A slight positive correlation (r = 0.31). When faculty schedules are compact, student schedules tend to be compact too, since the same section-faculty-course groupings drive both metrics. The correlation is imperfect, though—some solutions achieve low faculty gaps while leaving moderate student gaps, because different sections taught by the same faculty end up with different scheduling patterns.
 
 **Table 5: Multi-Objective Performance Metrics**
 
 | Metric | B-NSGA-II | E-Full | Improvement |
 |--------|-----------|--------|-------------|
 | Hypervolume (HV) | 0.6234 | 0.6782 | +8.8% |
-| |PF| (Pareto front size) | 12 | 16 | +33.3% |
+| \|PF\| (Pareto front size) | 12 | 16 | +33.3% |
 | Spread (Δ) | 0.834 | 0.891 | +6.8% |
-| IGD (vs reference front) | 0.0234 | 0.0189 | -19.2% |
+| IGD (vs reference front) | 0.0234 | 0.0189 | −19.2% |
 | Avg. rank of ILP-seeded solutions | — | 2.3 | — |
 
-The enhanced framework achieves an 8.8% improvement in hypervolume and a 33.3% increase in Pareto front cardinality compared to NSGA-II without diversified seeding and SCPX. The spread metric improves by 6.8%, indicating better coverage of the objective space. The IGD decreases by 19.2%, signifying that the enhanced front is closer to the reference Pareto front.
+The enhanced framework delivers an 8.8% improvement in hypervolume and a 33.3% increase in Pareto front cardinality over NSGA-II without diversified seeding and SCPX. Spread improves by 6.8%, reflecting better coverage of the objective space. IGD drops by 19.2%, meaning the enhanced front sits closer to the reference Pareto front.
 
-Notably, ILP-seeded solutions consistently occupy low (better) Pareto ranks, with an average rank of 2.3 out of front depths typically reaching 6-8 levels. This confirms that ILP seeding provides high-quality starting points that guide the multi-objective search toward the true Pareto front.
+Notably, ILP-seeded solutions consistently land at low (better) Pareto ranks, averaging 2.3 out of front depths that typically reach 6–8 levels. This confirms that ILP seeding provides high-quality starting points that steer the multi-objective search toward the true Pareto front.
 
 ### 6.5 Comparative Analysis
 
-Table 6 presents a comprehensive comparison across all configurations.
+Table 6 pulls together a comprehensive comparison across all configurations.
 
 **Table 6: Comprehensive Comparison (Average over 10 runs)**
 
-| Configuration | TC (s) | HV | |PF| | CP | PIE | Best f₁ | Best f₃ |
-|--------------|--------|----|-----|-----|------|---------|---------|
-| B-WS (Baseline) | 42.3 | 0.583* | 1* | 62.4% | 0.121 | 0.887 | 0.794 |
+| Configuration | TC (s) | HV | \|PF\| | CP | PIE | Best f₁ | Best f₃ |
+|---------------|--------|----|--------|-----|------|---------|---------|
+| B-WS (Baseline) | 42.3 | 0.583\* | 1\* | 62.4% | 0.121 | 0.887 | 0.794 |
 | B-NSGA-II | 51.7 | 0.623 | 12 | 61.8% | 0.118 | 0.901 | 0.812 |
-| E-SCPX | 38.1 | 0.612* | 1* | 100% | 0.125 | 0.889 | 0.798 |
-| E-DIV | 43.8 | 0.634* | 1* | 63.1% | 0.156 | 0.908 | 0.834 |
+| E-SCPX | 38.1 | 0.612\* | 1\* | 100% | 0.125 | 0.889 | 0.798 |
+| E-DIV | 43.8 | 0.634\* | 1\* | 63.1% | 0.156 | 0.908 | 0.834 |
 | E-NSGA | 50.2 | 0.641 | 14 | 62.2% | 0.122 | 0.904 | 0.842 |
 | E-Full (All) | 46.4 | 0.678 | 16 | 100% | 0.156 | 0.912 | 0.923 |
 
-*Note: For single-solution configurations, HV is computed treating the single solution as a degenerate front.
+\*Note: For single-solution configurations, HV is computed by treating the single solution as a degenerate front.
 
-The key observations from the comparative analysis:
+Several observations stand out from this comparison:
 
-1. **SCPX alone** (E-SCPX) provides the best computational efficiency (38.1s, 10% faster than baseline), confirming that eliminating repair overhead has a measurable impact on total runtime.
+1. **SCPX alone** (E-SCPX) delivers the best computational efficiency (38.1s, roughly 10% faster than the baseline), confirming that eliminating repair overhead has a tangible impact on total runtime.
 
-2. **Diversified seeding alone** (E-DIV) provides the best single-solution quality (f₁ = 0.908, f₃ = 0.834), demonstrating that a better starting population translates to a better final result.
+2. **Diversified seeding alone** (E-DIV) produces the best single-solution quality (f₁ = 0.908, f₃ = 0.834), demonstrating that a better-spread starting population directly translates to a better final result.
 
-3. **NSGA-II alone** (E-NSGA) provides the trade-off visibility that single-solution approaches lack, but without SCPX and diversified seeding, it converges to a Pareto front with lower hypervolume than the full framework.
+3. **NSGA-II alone** (E-NSGA) provides the trade-off visibility that single-solution approaches inherently lack, but without SCPX and diversified seeding, it converges to a Pareto front with lower hypervolume than the full framework.
 
-4. **The complete framework** (E-Full) achieves the best hypervolume (0.678), Pareto front size (16), and individual objective values, while maintaining 100% constraint preservation and requiring only 9.7% more time than the baseline—a modest overhead for substantially richer output.
+4. **The complete framework** (E-Full) achieves the highest hypervolume (0.678), the largest Pareto front (16 solutions), and the best individual objective values, all while maintaining 100% constraint preservation. It requires only 9.7% more time than the baseline—a modest price for substantially richer output.
 
 ### 6.6 Statistical Significance
 
-All reported results are averaged over 10 independent runs with different random seeds. We conducted pairwise Mann-Whitney U tests comparing E-Full against each baseline for the hypervolume metric. All differences were statistically significant at p < 0.01, with effect sizes (Cohen's d) ranging from 0.82 (vs. B-NSGA-II) to 1.34 (vs. B-WS).
+All reported results are averaged over 10 independent runs using different random seeds. We performed pairwise Mann-Whitney U tests comparing E-Full against each baseline on the hypervolume metric. Every difference proved statistically significant at p < 0.01, with effect sizes (Cohen's d) ranging from 0.82 (vs. B-NSGA-II) to 1.34 (vs. B-WS).
 
 ---
 
@@ -978,107 +992,107 @@ All reported results are averaged over 10 independent runs with different random
 
 ### 7.1 Summary of Contributions
 
-This paper has presented a comprehensive enhancement to the ILP-GA hybrid framework for university timetabling, addressing four structural weaknesses identified through systematic analysis of a deployed production system.
+This paper has presented a comprehensive set of enhancements to the ILP-GA hybrid framework for university timetabling, targeting four structural weaknesses uncovered through systematic analysis of a deployed production system.
 
-Our **Structural Coordinate-Preserving Crossover (SCPX)** operator replaces slot-level crossover with block-level exchange, mathematically guaranteeing 100% hard-constraint feasibility in all offspring. By eliminating the repair overhead that consumed 37.4% of per-generation processing time in the baseline, SCPX achieves both correctness and efficiency gains.
+Our **Structural Coordinate-Preserving Crossover (SCPX)** operator moves crossover from the slot level to the block level, mathematically ensuring 100% hard-constraint feasibility in every offspring. By eliminating repair routines that had been consuming 37.4% of per-generation processing time, SCPX delivers gains in both correctness and efficiency.
 
-The **Relaxed-ILP Diversification Strategy** transforms population initialization from a deterministic single-seed process to a principled diverse generation procedure. By solving the ILP with randomized objectives and enforcing Hamming distance thresholds between outputs, we produce initial populations with 28.9% higher entropy, delaying convergence by 22 generations and improving final solution quality by 4.0%.
+The **Relaxed-ILP Diversification Strategy** transforms population initialization from a deterministic single-seed process into a principled diverse generation procedure. By solving the ILP with randomized objectives and enforcing Hamming distance thresholds between successive outputs, we produce initial populations with 28.9% higher entropy, delay convergence by 22 generations, and lift final solution quality by 4.0%.
 
-The **Incremental ILP Rescheduling** module enables the system to respond to real-world disruptions—faculty changes, classroom unavailability, and curriculum modifications—without regenerating the entire timetable. By locking unaffected schedule variables and re-solving only the affected neighborhood, we achieve a 10.6× average speedup over full regeneration with only 3.7% quality degradation.
+The **Incremental ILP Rescheduling** module gives the system the ability to respond to real-world disruptions—faculty changes, classroom outages, curriculum revisions—without tearing up the entire timetable. By freezing unaffected variables and re-solving only the disrupted neighborhood, we achieve a 10.6× average speedup over full regeneration with only 3.7% quality degradation.
 
-Finally, the **NSGA-II Multi-Objective Integration** replaces the reductive weighted-sum fitness function with Pareto-dominance-based ranking across five conflicting objectives. The output is a Pareto front of 14-18 non-dominated solutions, enabling institutional decision-makers to understand and navigate the trade-offs inherent in timetable construction rather than accepting a single arbitrarily weighted compromise.
+Finally, the **NSGA-II Multi-Objective Integration** replaces the reductive weighted-sum fitness function with Pareto-dominance-based ranking across five competing objectives. The output is a Pareto front of 14–18 non-dominated solutions, enabling decision-makers to see and navigate the trade-offs embedded in timetable construction rather than accepting a single arbitrarily weighted compromise.
 
 ### 7.2 Practical Implications
 
-The framework carries several practical implications for educational timetabling:
+The framework carries several practical implications for real-world educational scheduling:
 
-- **Deployment Feasibility**: All four contributions operate within the existing architectural boundaries of the baseline system (Next.js + Supabase + OR-Tools), requiring no additional infrastructure.
+- **Deployment Feasibility**: All four contributions fit within the existing architectural boundaries of the baseline system (Next.js + Supabase + OR-Tools), requiring no additional infrastructure or external dependencies.
 
-- **Administrator Empowerment**: The Pareto front output transforms the scheduling process from a black-box "generate and accept" workflow to an informed decision-making process where trade-offs are explicit and selectable.
+- **Administrator Empowerment**: The Pareto front output transforms scheduling from a "generate and accept" black-box workflow into an informed decision-making process where trade-offs are visible and selectable.
 
-- **Operational Resilience**: The incremental rescheduling capability enables institutions to handle mid-semester disruptions without the organizational cost of regenerating and redistributing entirely new timetables.
+- **Operational Resilience**: Incremental rescheduling allows institutions to handle mid-semester disruptions without bearing the organizational cost of regenerating and redistributing an entirely new timetable.
 
 ### 7.3 Limitations
 
-Our work has several limitations that warrant acknowledgment:
+Several limitations of this work deserve acknowledgment:
 
-- **Dataset Scope**: Experiments were conducted on a single departmental dataset. While the dataset is real and representative, the absolute performance numbers (computation time, Pareto front size) may vary with problem scale and constraint density.
+- **Dataset Scope**: Experiments were conducted on a single departmental dataset. While the dataset is real and representative, the specific performance numbers (computation times, Pareto front sizes) will likely vary with problem scale and constraint density.
 
-- **ILP Solver Dependency**: The diversified seeding strategy requires the ILP to find multiple distinct feasible solutions, which may not be possible for extremely tightly constrained problem instances. The fallback to greedy variations partially addresses this but at the cost of solution quality.
+- **ILP Solver Dependency**: The diversified seeding strategy requires the ILP solver to find multiple distinct feasible solutions, which may not be possible for extremely tightly constrained problem instances. The greedy variation fallback partially addresses this but at the cost of solution quality.
 
-- **NSGA-II Parameter Sensitivity**: The quality of the Pareto front is influenced by population size and generation count, which interact with problem dimensionality. Our parameter choices were tuned on the specific dataset and may require adjustment for different problem scales.
+- **NSGA-II Parameter Sensitivity**: The quality of the Pareto front depends on population size and generation count, which interact with problem dimensionality. Our parameter choices were tuned on this specific dataset and may need adjustment for different problem scales.
 
-- **User Study**: While we present Pareto fronts as decision-support tools, we have not conducted a formal user study to evaluate how effectively administrators use this information to select timetables. This remains important future work.
+- **User Study**: Although we present Pareto fronts as decision-support tools, we have not conducted a formal user study to evaluate how effectively administrators actually use this information to select timetables. This remains an important piece of future work.
 
 ### 7.4 Future Research Directions
 
-Several promising directions extend from this work:
+Several promising avenues extend from this work:
 
-1. **NSGA-III for Many-Objective Extension**: As the number of soft constraints grows—considering additional objectives like room preference, faculty seniority weighting, and student cohort grouping—the five-objective framework could be extended to NSGA-III with reference-point-based selection, which handles many-objective spaces more effectively.
+1. **NSGA-III for Many-Objective Extension**: As the number of soft constraints grows—potentially including room preference, faculty seniority weighting, and student cohort grouping—the five-objective framework could be extended to NSGA-III with reference-point-based selection, which handles many-objective spaces more gracefully.
 
-2. **Learning-Based Constraint Decomposition**: The current decomposition (ILP for labs, GA for theory) is manually specified. A machine learning proxy that analyzes constraint density and problem structure to dynamically partition constraints between exact and metaheuristic stages could further optimize the ILP-GA boundary.
+2. **Learning-Based Constraint Decomposition**: The current split (ILP for labs, GA for theory) is manually specified. A machine learning model that analyzes constraint density and problem structure to dynamically partition constraints between exact and metaheuristic stages could further optimize the ILP-GA boundary.
 
-3. **Online Learning for Incremental Rescheduling**: Historical patterns of schedule disruptions could inform the incremental rescheduling module about which parts of the schedule are most likely to change, enabling proactive solution caching.
+3. **Online Learning for Incremental Rescheduling**: Historical patterns of schedule disruptions could inform the rescheduling module about which parts of the schedule are most likely to change, enabling proactive solution caching.
 
-4. **Interactive Multi-Objective Decision Making**: Integrating interactive methods where administrators iteratively refine their preferences and receive updated Pareto fronts in real-time would bridge the gap between automated optimization and human decision-making.
+4. **Interactive Multi-Objective Decision Making**: Building interactive tools where administrators iteratively refine their preferences and receive updated Pareto fronts in real-time would bridge the remaining gap between automated optimization and human judgment.
 
-5. **Cross-Institutional Validation**: Deploying the framework across multiple institutions with different scheduling rules, class sizes, and constraints would validate the generalizability of our approach.
+5. **Cross-Institutional Validation**: Deploying the framework across multiple institutions with different scheduling rules, class sizes, and constraint structures would test the generalizability of our approach.
 
 ---
 
 ## Acknowledgments
 
-The authors acknowledge the Department of Computer Science and Information Technology for providing access to the production scheduling data and the open-source communities behind OR-Tools, Next.js, and Supabase for their foundational tools.
+The authors thank the Department of Computer Science and Information Technology for providing access to the production scheduling data, and the open-source communities behind OR-Tools, Next.js, and Supabase for the foundational tools that made this work possible.
 
 ---
 
 ## References
 
-[1] Abramson, D. (1991). Constructing school timetables using simulated annealing: sequential and parallel algorithms. *Management Science*, 37(1), 98-113.
+[1] Abramson, D. (1991). Constructing school timetables using simulated annealing: sequential and parallel algorithms. *Management Science*, 37(1), 98–113.
 
-[2] Al-Yakoob, S. M., & Sherali, H. D. (2006). Mathematical programming models and algorithms for a class-faculty assignment problem. *European Journal of Operational Research*, 173(2), 488-507.
+[2] Al-Yakoob, S. M., & Sherali, H. D. (2006). Mathematical programming models and algorithms for a class-faculty assignment problem. *European Journal of Operational Research*, 173(2), 488–507.
 
-[3] Burke, E. K., Elliman, D. G., & Weare, R. F. (1995). A hybrid genetic algorithm for highly constrained timetabling problems. *Proceedings of the 6th International Conference on Genetic Algorithms*, 605-610.
+[3] Burke, E. K., Elliman, D. G., & Weare, R. F. (1995). A hybrid genetic algorithm for highly constrained timetabling problems. *Proceedings of the 6th International Conference on Genetic Algorithms*, 605–610.
 
-[4] Burke, E. K., Bykov, Y., & Petrovic, S. (2001). A multicriteria approach to examination timetabling. *International Conference on the Practice and Theory of Automated Timetabling*, 118-131.
+[4] Burke, E. K., Bykov, Y., & Petrovic, S. (2001). A multicriteria approach to examination timetabling. *International Conference on the Practice and Theory of Automated Timetabling*, 118–131.
 
-[5] Chen, R. M., & Shih, H. F. (2013). Solving university course timetabling problems using constriction particle swarm optimization with local search. *Algorithms*, 6(2), 227-244.
+[5] Chen, R. M., & Shih, H. F. (2013). Solving university course timetabling problems using constriction particle swarm optimization with local search. *Algorithms*, 6(2), 227–244.
 
-[6] Chu, S. C., Chen, Y. T., & Ho, J. H. (2006). Timetable scheduling using particle swarm optimization. *First International Conference on Innovative Computing, Information and Control*, 3, 324-327.
+[6] Chu, S. C., Chen, Y. T., & Ho, J. H. (2006). Timetable scheduling using particle swarm optimization. *First International Conference on Innovative Computing, Information and Control*, 3, 324–327.
 
-[7] Colorni, A., Dorigo, M., & Maniezzo, V. (1991). Genetic algorithms and highly constrained problems: The time-table case. *International Conference on Parallel Problem Solving from Nature*, 55-59.
+[7] Colorni, A., Dorigo, M., & Maniezzo, V. (1991). Genetic algorithms and highly constrained problems: The time-table case. *International Conference on Parallel Problem Solving from Nature*, 55–59.
 
-[8] Deb, K., Pratap, A., Agarwal, S., & Meyarivan, T. (2002). A fast and elitist multiobjective genetic algorithm: NSGA-II. *IEEE Transactions on Evolutionary Computation*, 6(2), 182-197.
+[8] Deb, K., Pratap, A., Agarwal, S., & Meyarivan, T. (2002). A fast and elitist multiobjective genetic algorithm: NSGA-II. *IEEE Transactions on Evolutionary Computation*, 6(2), 182–197.
 
-[9] Deb, K., & Jain, H. (2014). An evolutionary many-objective optimization algorithm using reference-point-based nondominated sorting approach, part I: Solving problems with box constraints. *IEEE Transactions on Evolutionary Computation*, 18(4), 577-601.
+[9] Deb, K., & Jain, H. (2014). An evolutionary many-objective optimization algorithm using reference-point-based nondominated sorting approach, part I: Solving problems with box constraints. *IEEE Transactions on Evolutionary Computation*, 18(4), 577–601.
 
-[10] Dinkel, J. J., Mote, J., & Venkataramanan, M. A. (1989). An efficient decision support system for academic course scheduling. *Operations Research*, 37(6), 853-864.
+[10] Dinkel, J. J., Mote, J., & Venkataramanan, M. A. (1989). An efficient decision support system for academic course scheduling. *Operations Research*, 37(6), 853–864.
 
-[11] Fonseca, G. H., Santos, H. G., & Carrano, E. G. (2016). Integrating matheuristics and metaheuristics for timetabling. *Computers & Operations Research*, 74, 108-117.
+[11] Fonseca, G. H., Santos, H. G., & Carrano, E. G. (2016). Integrating matheuristics and metaheuristics for timetabling. *Computers & Operations Research*, 74, 108–117.
 
-[12] Head, C., & Shaban, S. (2007). A heuristic approach to simultaneous course/student timetabling. *Computers & Operations Research*, 34(4), 919-933.
+[12] Head, C., & Shaban, S. (2007). A heuristic approach to simultaneous course/student timetabling. *Computers & Operations Research*, 34(4), 919–933.
 
-[13] Hertz, A. (1991). Tabu search for large scale timetabling problems. *European Journal of Operational Research*, 54(1), 39-47.
+[13] Hertz, A. (1991). Tabu search for large scale timetabling problems. *European Journal of Operational Research*, 54(1), 39–47.
 
-[14] Lopes, L., & Smith-Miles, K. (2013). Generating applicable synthetic instances for branch problems. *Operations Research*, 61(3), 563-577.
+[14] Lopes, L., & Smith-Miles, K. (2013). Generating applicable synthetic instances for branch problems. *Operations Research*, 61(3), 563–577.
 
-[15] Muller, T., & Rudova, H. (2012). Real-life curriculum-based timetabling. *Proceedings of the 9th International Conference on the Practice and Theory of Automated Timetabling*, 57-72.
+[15] Muller, T., & Rudova, H. (2012). Real-life curriculum-based timetabling. *Proceedings of the 9th International Conference on the Practice and Theory of Automated Timetabling*, 57–72.
 
-[16] Murray, K., Muller, T., & Rudova, H. (2007). Modeling and solution of a complex university course timetabling problem. *International Conference on the Practice and Theory of Automated Timetabling*, 189-209.
+[16] Murray, K., Muller, T., & Rudova, H. (2007). Modeling and solution of a complex university course timetabling problem. *International Conference on the Practice and Theory of Automated Timetabling*, 189–209.
 
-[17] Pillay, N., & Banzhaf, W. (2010). An informed genetic algorithm for the examination timetabling problem. *Applied Soft Computing*, 10(2), 457-467.
+[17] Pillay, N., & Banzhaf, W. (2010). An informed genetic algorithm for the examination timetabling problem. *Applied Soft Computing*, 10(2), 457–467.
 
-[18] Pongcharoen, P., Promtet, W., Yenradee, P., & Hicks, C. (2008). Stochastic optimisation timetabling tool for university course scheduling. *International Journal of Production Economics*, 112(2), 903-918.
+[18] Pongcharoen, P., Promtet, W., Yenradee, P., & Hicks, C. (2008). Stochastic optimisation timetabling tool for university course scheduling. *International Journal of Production Economics*, 112(2), 903–918.
 
-[19] Schaerf, A. (1999). A survey of automated timetabling. *Artificial Intelligence Review*, 13(2), 87-127.
+[19] Schaerf, A. (1999). A survey of automated timetabling. *Artificial Intelligence Review*, 13(2), 87–127.
 
-[20] Schimmelpfeng, K., & Helber, S. (2007). Application of a real-world university-course timetabling model solved by integer programming. *OR Spectrum*, 29(4), 783-803.
+[20] Schimmelpfeng, K., & Helber, S. (2007). Application of a real-world university-course timetabling model solved by integer programming. *OR Spectrum*, 29(4), 783–803.
 
-[21] Socha, K., & Sampels, M. (2003). Ant algorithms for the university course timetabling problem with regard to the state-of-the-art. *Applications of Evolutionary Computing*, 334-345.
+[21] Socha, K., & Sampels, M. (2003). Ant algorithms for the university course timetabling problem with regard to the state-of-the-art. *Applications of Evolutionary Computing*, 334–345.
 
-[22] Thompson, J. M., & Dowsland, K. A. (1998). A robust simulated annealing based examination timetabling system. *Computers & Operations Research*, 25(7-8), 637-648.
+[22] Thompson, J. M., & Dowsland, K. A. (1998). A robust simulated annealing based examination timetabling system. *Computers & Operations Research*, 25(7–8), 637–648.
 
-[23] Vieira, G. E., Herrmann, J. W., & Lin, E. (2003). Rescheduling manufacturing systems: a framework of strategies, policies, and methods. *Journal of Scheduling*, 6(1), 39-62.
+[23] Vieira, G. E., Herrmann, J. W., & Lin, E. (2003). Rescheduling manufacturing systems: a framework of strategies, policies, and methods. *Journal of Scheduling*, 6(1), 39–62.
 
 [24] Google OR-Tools. (2024). CP-SAT Solver. https://developers.google.com/optimization/cp/cp_solver
 

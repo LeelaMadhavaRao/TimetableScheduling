@@ -151,10 +151,10 @@ export function RegistrationRequestDialog() {
         <DialogHeader>
           <DialogTitle className="text-2xl font-bold text-white flex items-center gap-2">
             <UserPlus className="w-6 h-6 text-purple-400" />
-            Request Timetable Administrator Access
+            Request College Administrator Access
           </DialogTitle>
           <DialogDescription className="text-slate-300">
-            Fill out the form below to request access as a Timetable Administrator. 
+            Fill out the form below to request access as a College Administrator. 
             A system administrator will review your request.
           </DialogDescription>
         </DialogHeader>

@@ -1,0 +1,79 @@
+import { getSupabaseServerClient, getCurrentDepartmentAdmin } from "@/lib/server"
+import { SubjectList } from "@/components/subject-list"
+import { SubjectDialog } from "@/components/subject-dialog"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { BookOpen, ArrowLeft, Info } from "lucide-react"
+import Link from "next/link"
+import ClickSpark from "@/components/ClickSpark"
+
+export default async function SubjectsPage() {
+  const supabase = await getSupabaseServerClient()
+  const admin = await getCurrentDepartmentAdmin()
+  const departmentId = admin?.departmentId || "00000000-0000-0000-0000-000000000000"
+  const collegeId = admin?.collegeId || "00000000-0000-0000-0000-000000000000"
+
+  // Subjects belong to this department; any faculty of the college can be mapped to them
+  // (e.g. a Mathematics faculty member from Basic Sciences teaching a CSE subject)
+  const { data: subjects } = await supabase
+    .from("subjects")
+    .select("*, departments(name, code), subject_faculty(faculty(id, code, name))")
+    .eq("department_id", departmentId)
+    .order("name")
+  const { data: departments } = await supabase.from("departments").select("*").eq("id", departmentId)
+  const { data: faculty } = await supabase.from("faculty").select("*").eq("college_id", collegeId).eq("is_active", true).order("name")
+
+  return (
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <div className="flex items-start justify-between gap-4">
+        <div className="space-y-1 flex-1">
+          <div className="flex items-center gap-3">
+            <Link href="/department">
+              <ClickSpark sparkColor="#6366f1" sparkSize={10} sparkRadius={15} sparkCount={8} duration={400}>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="hover:bg-primary/10 transition-all duration-200 hover:scale-105"
+                >
+                  <ArrowLeft className="w-5 h-5" />
+                </Button>
+              </ClickSpark>
+            </Link>
+            <div>
+              <h1 className="text-3xl font-bold text-white mb-1">
+                Subject Management
+              </h1>
+              <p className="text-slate-300">Manage subjects with faculty assignments and weekly periods</p>
+            </div>
+          </div>
+        </div>
+        <SubjectDialog departments={departments || []} faculty={faculty || []} />
+      </div>
+
+      <Card className="bg-slate-800/50 border-slate-700 backdrop-blur-xl shadow-lg hover:shadow-xl transition-all duration-300 hover:border-blue-500/50">
+        <CardHeader className="bg-gradient-to-r from-blue-500/10 to-transparent">
+          <div className="flex items-center gap-2">
+            <div className="p-2 rounded-lg bg-blue-500/20">
+              <BookOpen className="w-5 h-5 text-blue-400" />
+            </div>
+            <div className="flex-1">
+              <CardTitle className="flex items-center gap-2 text-white">
+                Subjects
+                <span className="text-sm font-normal text-slate-400">
+                  ({subjects?.length || 0} total)
+                </span>
+              </CardTitle>
+              <CardDescription className="flex items-center gap-1 mt-1 text-slate-300">
+                <Info className="w-3 h-3" />
+                Define subjects with faculty mappings (e.g., JAVA - KSR) and periods per week
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="pt-6">
+          <SubjectList subjects={subjects || []} departments={departments || []} faculty={faculty || []} />
+        </CardContent>
+      </Card>
+    </div>
+  )
+}

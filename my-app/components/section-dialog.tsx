@@ -20,6 +20,7 @@ import type { Section, Department } from "@/lib/database"
 import { getSupabaseBrowserClient } from "@/lib/client"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/contexts/AuthContext"
+import { getUserScope } from "@/lib/auth"
 
 interface SectionDialogProps {
   section?: Section
@@ -34,13 +35,13 @@ export function SectionDialog({ section, departments, trigger }: SectionDialogPr
     name: section?.name || "",
     year_level: section?.year_level || 1,
     student_count: section?.student_count || 60,
-    department_id: section?.department_id || "",
+    department_id: section?.department_id || (departments.length === 1 ? departments[0].id : ""),
   })
   const [studentCountError, setStudentCountError] = useState("")
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const router = useRouter()
   const { user, role } = useAuth()
-  const adminId = role === 'timetable_admin' && user ? (user as any).id : null
+  const { collegeId } = getUserScope(user, role)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -63,7 +64,7 @@ export function SectionDialog({ section, departments, trigger }: SectionDialogPr
         return
       }
     } else {
-      const insertData = adminId ? { ...formData, created_by: adminId } : formData
+      const insertData = { ...formData, college_id: collegeId, created_by: user?.id ?? null }
       const { error } = await supabase.from("sections").insert(insertData)
 
       if (error) {

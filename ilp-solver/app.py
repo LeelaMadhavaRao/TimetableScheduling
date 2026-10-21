@@ -84,6 +84,17 @@ class ProblemData(BaseModel):
     rooms: List[Room]
     facultyAvailability: List[FacultyAvailability]
     rules: Rules
+    # roomId -> [[day, period], ...] already committed by other departments' timetables
+    blockedRoomSlots: Dict[str, List[List[int]]] = {}
+
+
+class DiverseProblemData(ProblemData):
+    numSolutions: int = 6
+    # tau: minimum fraction of labs that must differ between any two returned solutions
+    minHammingFraction: float = 0.3
+    randomSeed: int = 7
+    timeLimitPerSolution: float = 6.0
+
 
 # Output Models
 class Assignment(BaseModel):
@@ -99,6 +110,15 @@ class SolutionResponse(BaseModel):
     status: str
     message: str
     assignments: List[Assignment]
+    solveTimeMs: int
+
+class DiverseSolutionResponse(BaseModel):
+    success: bool
+    status: str
+    message: str
+    solutions: List[List[Assignment]]
+    objectiveWeights: List[Dict[str, float]]
+    pairwiseHamming: List[float]
     solveTimeMs: int
 
 @app.get("/")
@@ -194,6 +214,10 @@ def solve_lab_timetable(data: ProblemData):
                 print(f"[Solver]      Windows: {[(s.dayOfWeek, s.startPeriod, s.endPeriod) for s in fa.slots]}")
         
         print(f"\n[Solver] Problem size: {len(courses)} labs, {len(rooms)} rooms")
+
+        lab_room_blocked = {room_id: {(d, p) for d, p in slots} for room_id, slots in data.blockedRoomSlots.items()}
+        if lab_room_blocked:
+            print(f"[Solver] Rooms with periods committed by other departments: {len(lab_room_blocked)}")
         
         # ============================================
         # DECISION VARIABLES
@@ -222,6 +246,10 @@ def solve_lab_timetable(data: ProblemData):
                         # Accept rooms with at least 85% capacity to handle shortages
                         min_acceptable = int(course.studentCount * 0.85)
                         if room.capacity < min_acceptable:
+                            continue
+
+                        # Room already committed by another department at these periods
+                        if any((day, p) in lab_room_blocked.get(room.id, set()) for p in block_periods[block_name]):
                             continue
                         
                         # Create decision variable
@@ -479,6 +507,161 @@ def solve_lab_timetable(data: ProblemData):
         print(f"[Solver] ❌ Error: {str(e)}")
         print(f"[Solver] Request failed with exception: {type(e).__name__}\n")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================
+# RELAXED-ILP DIVERSIFICATION ENDPOINT (Enhancement 2)
+# ============================================
+
+LAB_BLOCKS = [
+    {"name": "M1", "start": 1, "half": "M"},
+    {"name": "M2", "start": 2, "half": "M"},
+    {"name": "A1", "start": 5, "half": "A"},
+    {"name": "A2", "start": 6, "half": "A"},
+]
+
+
+def _build_lab_model(data: ProblemData):
+    """Same hard constraints as /solve-labs, returned as a reusable model."""
+    model = cp_model.CpModel()
+    courses, rooms, rules = data.courses, data.rooms, data.rules
+    block_periods = {b["name"]: list(range(b["start"], b["start"] + rules.labPeriods)) for b in LAB_BLOCKS}
+    days = list(range(rules.daysPerWeek))
+
+    faculty_avail = {}
+    for fa in data.facultyAvailability:
+        if fa.slots:
+            faculty_avail[fa.facultyId] = {
+                (s.dayOfWeek, p) for s in fa.slots for p in range(s.startPeriod, s.endPeriod + 1)
+            }
+    room_blocked = {room_id: {(d, p) for d, p in slots} for room_id, slots in data.blockedRoomSlots.items()}
+
+    L = {}
+    for c_idx, course in enumerate(courses):
+        allowed = faculty_avail.get(course.facultyId)
+        for day in days:
+            for block in LAB_BLOCKS:
+                if day == 5 and block["half"] == "A" and course.yearLevel != 1:
+                    continue
+                periods = block_periods[block["name"]]
+                if allowed is not None and not all((day, p) in allowed for p in periods):
+                    continue
+                for r_idx, room in enumerate(rooms):
+                    if room.capacity < int(course.studentCount * 0.85):
+                        continue
+                    if any((day, p) in room_blocked.get(room.id, set()) for p in periods):
+                        continue
+                    L[(c_idx, day, block["name"], r_idx)] = model.NewBoolVar(f"L_{c_idx}_{day}_{block['name']}_{r_idx}")
+
+    missing = [courses[c].subjectCode + " (" + courses[c].sectionName + ")"
+               for c in range(len(courses)) if not any(k[0] == c for k in L)]
+    if missing:
+        raise ValueError(f"INFEASIBLE: no valid lab slot for {', '.join(missing)}")
+
+    for c_idx in range(len(courses)):
+        model.AddExactlyOne([v for k, v in L.items() if k[0] == c_idx])
+
+    def no_overlap(group_of):
+        buckets = {}
+        for (c_idx, day, block, r_idx), var in L.items():
+            for p in block_periods[block]:
+                buckets.setdefault((group_of(c_idx, r_idx), day, p), []).append(var)
+        for vars_ in buckets.values():
+            if len(vars_) > 1:
+                model.Add(sum(vars_) <= 1)
+
+    no_overlap(lambda c, r: ("room", r))
+    no_overlap(lambda c, r: ("section", courses[c].sectionId))
+    no_overlap(lambda c, r: ("faculty", courses[c].facultyId))
+    return model, L, block_periods
+
+
+@app.post("/solve-labs-diverse", response_model=DiverseSolutionResponse)
+def solve_labs_diverse(data: DiverseProblemData):
+    """
+    Relaxed-ILP Diversification Strategy (Algorithm 1 of the research paper).
+
+    Solution k minimizes a randomly weighted objective over (capacity waste, afternoon
+    blocks, Saturday, late-week days, random noise). After each solution, an exclusion
+    constraint  sum(L[a] for a in A_k) <= |C| - delta  forces every later solution to move
+    at least delta = ceil(tau * |C|) labs, i.e. pairwise Hamming distance >= tau.
+    The first solution uses the standard capacity-waste objective (as /solve-labs).
+    """
+    import math
+    import random
+
+    start_time = time.time()
+    rng = random.Random(data.randomSeed)
+    courses, rooms = data.courses, data.rooms
+    delta = max(1, math.ceil(data.minHammingFraction * len(courses)))
+    print(f"\n[Diverse] {len(courses)} labs, {len(rooms)} rooms, N={data.numSolutions}, tau={data.minHammingFraction} (delta={delta})")
+
+    try:
+        model, L, block_periods = _build_lab_model(data)
+    except ValueError as e:
+        return DiverseSolutionResponse(success=False, status="INFEASIBLE", message=str(e), solutions=[],
+                                       objectiveWeights=[], pairwiseHamming=[], solveTimeMs=int((time.time() - start_time) * 1000))
+
+    noise = {k: rng.random() for k in L}
+    max_waste = max([max(0, rooms[k[3]].capacity - courses[k[0]].studentCount) for k in L] + [1])
+    chosen_sets = []
+    solutions = []
+    weights_used = []
+    status_name = "UNKNOWN"
+
+    for k in range(data.numSolutions):
+        if k == 0:
+            w = {"capacity": 1.0, "afternoon": 0.0, "saturday": 0.0, "lateWeek": 0.0, "noise": 0.0}
+        else:
+            raw = [rng.random() for _ in range(5)]
+            total = sum(raw)
+            w = dict(zip(["capacity", "afternoon", "saturday", "lateWeek", "noise"], [x / total for x in raw]))
+
+        terms = []
+        for key, var in L.items():
+            c_idx, day, block, r_idx = key
+            waste = max(0, rooms[r_idx].capacity - courses[c_idx].studentCount) / max_waste
+            cost = (w["capacity"] * waste + w["afternoon"] * (1 if block.startswith("A") else 0)
+                    + w["saturday"] * (1 if day == 5 else 0) + w["lateWeek"] * day / 5 + w["noise"] * noise[key])
+            terms.append(int(round(cost * 1000)) * var)
+        model.Minimize(sum(terms))
+
+        solver = cp_model.CpSolver()
+        solver.parameters.max_time_in_seconds = data.timeLimitPerSolution
+        solver.parameters.random_seed = data.randomSeed + k
+        status = solver.Solve(model)
+        status_name = solver.StatusName(status)
+        if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+            print(f"[Diverse] solution {k}: {status_name} - stopping")
+            break
+
+        chosen = [key for key, var in L.items() if solver.Value(var) == 1]
+        chosen_sets.append(set(chosen))
+        weights_used.append(w)
+        solutions.append([
+            Assignment(sectionId=courses[c].sectionId, subjectId=courses[c].subjectId, day=d,
+                       startPeriod=block_periods[b][0], endPeriod=block_periods[b][-1], roomId=rooms[r].id)
+            for (c, d, b, r) in chosen
+        ])
+        # Exclusion constraint: at least delta labs must change in every later solution
+        model.Add(sum(L[key] for key in chosen) <= len(courses) - delta)
+        print(f"[Diverse] solution {k}: {status_name}, weights={ {n: round(v, 2) for n, v in w.items()} }")
+
+    pairwise = []
+    for i in range(len(chosen_sets)):
+        for j in range(i + 1, len(chosen_sets)):
+            pairwise.append(1 - len(chosen_sets[i] & chosen_sets[j]) / max(1, len(courses)))
+
+    solve_ms = int((time.time() - start_time) * 1000)
+    return DiverseSolutionResponse(
+        success=len(solutions) > 0,
+        status=status_name,
+        message=f"{len(solutions)} distinct lab schedules (min Hamming {delta}/{len(courses)} labs)",
+        solutions=solutions,
+        objectiveWeights=weights_used,
+        pairwiseHamming=pairwise,
+        solveTimeMs=solve_ms,
+    )
 
 
 # ============================================

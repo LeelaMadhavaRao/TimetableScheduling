@@ -265,7 +265,7 @@ export default function AdminDashboardPage() {
                 </div>
                 <div>
                   <p className="text-2xl font-bold text-white">{administrators.length}</p>
-                  <p className="text-sm text-slate-400">Timetable Administrators</p>
+                  <p className="text-sm text-slate-400">College Administrators</p>
                 </div>
               </div>
             </CardContent>
@@ -308,9 +308,9 @@ export default function AdminDashboardPage() {
         <Card className="bg-slate-800/50 border-slate-700">
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
-              <CardTitle className="text-white">Timetable Administrators</CardTitle>
+              <CardTitle className="text-white">College Administrators</CardTitle>
               <CardDescription className="text-slate-400">
-                Manage users who can create and manage timetables
+                Each college administrator manages one college: its faculty, classrooms and department accounts
               </CardDescription>
             </div>
             <ClickSpark sparkColor="#22c55e">
@@ -319,7 +319,7 @@ export default function AdminDashboardPage() {
                 className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
               >
                 <Plus className="h-4 w-4 mr-2" />
-                Add Administrator
+                Add College
               </Button>
             </ClickSpark>
           </CardHeader>
@@ -331,8 +331,8 @@ export default function AdminDashboardPage() {
             ) : administrators.length === 0 ? (
               <div className="text-center py-8 text-slate-400">
                 <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>No timetable administrators yet</p>
-                <p className="text-sm">Click &quot;Add Administrator&quot; to create one</p>
+                <p>No college administrators yet</p>
+                <p className="text-sm">Click &quot;Add College&quot; to create one</p>
               </div>
             ) : (
               <Table>
@@ -340,7 +340,7 @@ export default function AdminDashboardPage() {
                   <TableRow className="border-slate-700 hover:bg-slate-800/50">
                     <TableHead className="text-slate-400">Name</TableHead>
                     <TableHead className="text-slate-400">Username</TableHead>
-                    <TableHead className="text-slate-400">Institution</TableHead>
+                    <TableHead className="text-slate-400">College</TableHead>
                     <TableHead className="text-slate-400">Status</TableHead>
                     <TableHead className="text-slate-400">Last Login</TableHead>
                     <TableHead className="text-slate-400 text-right">Actions</TableHead>
@@ -410,12 +410,12 @@ export default function AdminDashboardPage() {
         <DialogContent className="bg-slate-900 border-slate-700 text-white">
           <DialogHeader>
             <DialogTitle>
-              {editingAdmin ? 'Edit Administrator' : 'Add New Administrator'}
+              {editingAdmin ? 'Edit College Administrator' : 'Add College Administrator'}
             </DialogTitle>
             <DialogDescription className="text-slate-400">
               {editingAdmin 
                 ? 'Update administrator details. Leave password blank to keep existing.'
-                : 'Create a new timetable administrator account.'
+                : 'Create the administrator account for a college. The college name is shown to its departments and faculty.'
               }
             </DialogDescription>
           </DialogHeader>
@@ -490,12 +490,13 @@ export default function AdminDashboardPage() {
               </div>
               
               <div className="grid gap-2">
-                <Label htmlFor="institution_name" className="text-slate-300">Institution Name (optional)</Label>
+                <Label htmlFor="institution_name" className="text-slate-300">College Name</Label>
                 <Input
                   id="institution_name"
                   value={formData.institution_name}
                   onChange={(e) => setFormData({ ...formData, institution_name: e.target.value })}
                   className="bg-slate-800 border-slate-700 text-white"
+                  required
                 />
               </div>
 
@@ -544,10 +545,10 @@ export default function AdminDashboardPage() {
       <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
         <DialogContent className="bg-slate-900 border-slate-700 text-white">
           <DialogHeader>
-            <DialogTitle>Delete Administrator</DialogTitle>
+            <DialogTitle>Delete College Administrator</DialogTitle>
             <DialogDescription className="text-slate-400">
               Are you sure you want to delete <span className="text-white font-medium">{deleteAdmin?.name}</span>? 
-              This action cannot be undone.
+              This permanently deletes the college with all of its departments, faculty, classrooms and timetables. This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

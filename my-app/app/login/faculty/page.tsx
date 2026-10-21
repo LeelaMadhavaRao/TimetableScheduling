@@ -127,15 +127,20 @@ export default function FacultyLoginPage() {
 
             <div className="mt-6 text-center space-y-2">
               <p className="text-slate-500 text-sm">Other login options:</p>
-              <div className="flex gap-2 justify-center">
+              <div className="flex flex-wrap gap-2 justify-center">
                 <Link href="/login/admin">
                   <Button variant="outline" size="sm" className="border-slate-700 text-slate-400 hover:text-white hover:bg-slate-800">
                     System Admin
                   </Button>
                 </Link>
-                <Link href="/login/timetable-admin">
+                <Link href="/login/college-admin">
                   <Button variant="outline" size="sm" className="border-slate-700 text-slate-400 hover:text-white hover:bg-slate-800">
-                    Timetable Admin
+                    College Admin
+                  </Button>
+                </Link>
+                <Link href="/login/department-admin">
+                  <Button variant="outline" size="sm" className="border-slate-700 text-slate-400 hover:text-white hover:bg-slate-800">
+                    Department Admin
                   </Button>
                 </Link>
               </div>

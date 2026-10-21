@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
 
     if (!session || session.user_type !== 'admin') {
       return NextResponse.json(
-        { success: false, message: "Only system administrators can create timetable administrators" },
+        { success: false, message: "Only system administrators can create college administrators" },
         { status: 403 }
       )
     }
@@ -89,7 +89,7 @@ export async function POST(request: NextRequest) {
     // Send welcome email with credentials
     if (email) {
       try {
-        const loginUrl = `${process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'http://localhost:3000'}/login/timetable-admin`
+        const loginUrl = `${process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'http://localhost:3000'}/login/college-admin`
         const emailData = generateAdminCreatedEmail({
           adminName: name,
           username,

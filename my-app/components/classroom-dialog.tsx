@@ -20,6 +20,7 @@ import type { Classroom } from "@/lib/database"
 import { getSupabaseBrowserClient } from "@/lib/client"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/contexts/AuthContext"
+import { getUserScope } from "@/lib/auth"
 
 interface ClassroomDialogProps {
   classroom?: Classroom
@@ -40,7 +41,7 @@ export function ClassroomDialog({ classroom, trigger }: ClassroomDialogProps) {
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const router = useRouter()
   const { user, role } = useAuth()
-  const adminId = role === 'timetable_admin' && user ? (user as any).id : null
+  const { collegeId } = getUserScope(user, role)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -63,7 +64,7 @@ export function ClassroomDialog({ classroom, trigger }: ClassroomDialogProps) {
         return
       }
     } else {
-      const insertData = adminId ? { ...formData, created_by: adminId } : formData
+      const insertData = { ...formData, college_id: collegeId, created_by: user?.id ?? null }
       const { error } = await supabase.from("classrooms").insert(insertData)
 
       if (error) {

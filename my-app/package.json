@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "experiment": "node experiments/build.mjs && node .experiments-build/experiments/compare-pipelines.js",
+    "experiment:sql": "node experiments/build.mjs && node .experiments-build/experiments/emit-sample-sql.js"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

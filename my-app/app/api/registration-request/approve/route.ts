@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getSupabaseServerClient, getCurrentAdminId } from "@/lib/server"
+import { getSupabaseServerClient } from "@/lib/server"
 import { generateRequestApprovedEmail } from "@/lib/email-templates"
 import nodemailer from "nodemailer"
 
@@ -21,11 +21,7 @@ export async function POST(request: NextRequest) {
   try {
     const supabase = await getSupabaseServerClient()
     
-    // Get admin ID from session (must be system admin)
-    const adminId = await getCurrentAdminId()
-    
-    // For this endpoint, we need to check if user is a SYSTEM admin, not timetable admin
-    // Let's get it from cookies directly
+    // Only a SYSTEM admin may approve; check the session from the cookie
     const cookies = request.cookies
     const sessionToken = cookies.get('timetable_session_token')?.value
     
@@ -96,7 +92,7 @@ export async function POST(request: NextRequest) {
           throw new Error('Email configuration not set')
         }
         
-        const loginUrl = `${process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'http://localhost:3000'}/login/timetable-admin`
+        const loginUrl = `${process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'http://localhost:3000'}/login/college-admin`
         const emailData = generateRequestApprovedEmail({
           name: data.full_name || data.name,
           username: data.username,

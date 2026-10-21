@@ -23,6 +23,7 @@ import { getSupabaseBrowserClient } from "@/lib/client"
 import { RULES } from "@/lib/timetable"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/contexts/AuthContext"
+import { getUserScope } from "@/lib/auth"
 
 interface SubjectDialogProps {
   subject?: Subject & { subject_faculty?: { faculty: Faculty }[] }
@@ -39,13 +40,13 @@ export function SubjectDialog({ subject, departments, faculty, trigger }: Subjec
     name: subject?.name || "",
     subject_type: subject?.subject_type || "theory",
     periods_per_week: subject?.periods_per_week || 3,
-    department_id: subject?.department_id || "",
+    department_id: subject?.department_id || (departments.length === 1 ? departments[0].id : ""),
   })
   const [selectedFaculty, setSelectedFaculty] = useState<string[]>([])
   const [facultySearch, setFacultySearch] = useState("")
   const router = useRouter()
   const { user, role } = useAuth()
-  const adminId = role === 'timetable_admin' && user ? (user as any).id : null
+  const { collegeId } = getUserScope(user, role)
 
   useEffect(() => {
     if (subject && open) {
@@ -70,7 +71,7 @@ export function SubjectDialog({ subject, departments, faculty, trigger }: Subjec
         return
       }
     } else {
-      const insertData = adminId ? { ...formData, created_by: adminId } : formData
+      const insertData = { ...formData, college_id: collegeId, created_by: user?.id ?? null }
       const { data, error } = await supabase.from("subjects").insert(insertData).select().single()
       if (error) {
         alert("Error creating subject: " + error.message)

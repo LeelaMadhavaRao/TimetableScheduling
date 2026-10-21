@@ -28,7 +28,7 @@ export async function PUT(request: NextRequest) {
 
     if (!session || session.user_type !== 'admin') {
       return NextResponse.json(
-        { success: false, message: "Only system administrators can update timetable administrators" },
+        { success: false, message: "Only system administrators can update college administrators" },
         { status: 403 }
       )
     }
@@ -133,7 +133,7 @@ export async function PUT(request: NextRequest) {
     
     if (notificationEmail && updatedFields.length > 0) {
       try {
-        const loginUrl = `${process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'http://localhost:3000'}/login/timetable-admin`
+        const loginUrl = `${process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'http://localhost:3000'}/login/college-admin`
         const emailData = generateAdminUpdatedEmail({
           adminName: name || currentAdmin.name,
           username: currentAdmin.username,

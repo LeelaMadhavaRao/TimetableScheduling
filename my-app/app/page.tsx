@@ -3,9 +3,10 @@
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Calendar, Settings, Sparkles, Zap, Shield, GraduationCap, Clock, CheckCircle2, BarChart3, Database, Cpu } from "lucide-react"
+import { Calendar, Settings, Sparkles, Zap, Shield, GraduationCap, Clock, CheckCircle2, BarChart3, Database, Cpu, Layers } from "lucide-react"
 import ClickSpark from "@/components/ClickSpark"
 import { useAuth } from "@/contexts/AuthContext"
+import { ROLE_HOME } from "@/lib/auth"
 import { useRouter } from "next/navigation"
 import { useEffect } from "react"
 import { RegistrationRequestDialog } from "@/components/registration-request-dialog"
@@ -16,14 +17,8 @@ export default function HomePage() {
 
   // Redirect authenticated users to their respective dashboards
   useEffect(() => {
-    if (!isLoading && isAuthenticated) {
-      if (role === 'admin') {
-        router.push('/dashboard/admin')
-      } else if (role === 'timetable_admin') {
-        router.push('/admin')
-      } else if (role === 'faculty') {
-        router.push('/faculty')
-      }
+    if (!isLoading && isAuthenticated && role) {
+      router.push(ROLE_HOME[role])
     }
   }, [isAuthenticated, role, isLoading, router])
 
@@ -73,11 +68,19 @@ export default function HomePage() {
                   </Button>
                 </ClickSpark>
               </Link>
-              <Link href="/login/timetable-admin">
+              <Link href="/login/college-admin">
                 <ClickSpark sparkColor="#3b82f6" sparkSize={14} sparkRadius={25} sparkCount={12} duration={500}>
                   <Button size="lg" className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 shadow-lg shadow-blue-500/30">
                     <Calendar className="w-4 h-4 mr-2" />
-                    Timetable Admin
+                    College Admin
+                  </Button>
+                </ClickSpark>
+              </Link>
+              <Link href="/login/department-admin">
+                <ClickSpark sparkColor="#f59e0b" sparkSize={14} sparkRadius={25} sparkCount={12} duration={500}>
+                  <Button size="lg" className="bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 shadow-lg shadow-amber-500/30">
+                    <Layers className="w-4 h-4 mr-2" />
+                    Department Admin
                   </Button>
                 </ClickSpark>
               </Link>
@@ -187,10 +190,10 @@ export default function HomePage() {
         <div className="mb-16">
           <h2 className="text-3xl font-bold text-white text-center mb-4">User Roles & Access</h2>
           <p className="text-slate-300 text-center mb-8 max-w-2xl mx-auto">
-            Three distinct roles with tailored access levels for complete timetable management
+            A four-level hierarchy: the system admin onboards colleges, each college admin onboards its departments
           </p>
           
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <Card className="bg-gradient-to-br from-purple-500/10 to-pink-500/10 border-purple-500/30 backdrop-blur-xl hover:shadow-2xl hover:shadow-purple-500/20 transition-all duration-300 hover:-translate-y-2">
               <CardHeader>
                 <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center mb-3 shadow-lg shadow-purple-500/50">
@@ -198,13 +201,13 @@ export default function HomePage() {
                 </div>
                 <CardTitle className="text-white text-xl">System Admin</CardTitle>
                 <CardDescription className="text-slate-300">
-                  Create and manage Timetable Administrator accounts with full system access and control
+                  Create and manage College Administrator accounts with full system access and control
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-2">
                 <div className="flex items-center gap-2 text-slate-300 text-sm">
                   <CheckCircle2 className="w-4 h-4 text-purple-400" />
-                  <span>Create timetable admins</span>
+                  <span>Create college admins</span>
                 </div>
                 <div className="flex items-center gap-2 text-slate-300 text-sm">
                   <CheckCircle2 className="w-4 h-4 text-purple-400" />
@@ -222,23 +225,49 @@ export default function HomePage() {
                 <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center mb-3 shadow-lg shadow-blue-500/50">
                   <Calendar className="w-7 h-7 text-white" />
                 </div>
-                <CardTitle className="text-white text-xl">Timetable Admin</CardTitle>
+                <CardTitle className="text-white text-xl">College Admin</CardTitle>
                 <CardDescription className="text-slate-300">
-                  Manage faculty, subjects, classrooms, sections and generate optimized timetables
+                  Maintain the college-wide faculty pool and classrooms, and create one account per department
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-2">
                 <div className="flex items-center gap-2 text-slate-300 text-sm">
                   <CheckCircle2 className="w-4 h-4 text-blue-400" />
-                  <span>Manage all resources</span>
+                  <span>All faculty & availability</span>
                 </div>
                 <div className="flex items-center gap-2 text-slate-300 text-sm">
                   <CheckCircle2 className="w-4 h-4 text-blue-400" />
-                  <span>Generate timetables</span>
+                  <span>Shared classrooms</span>
                 </div>
                 <div className="flex items-center gap-2 text-slate-300 text-sm">
                   <CheckCircle2 className="w-4 h-4 text-blue-400" />
-                  <span>View analytics</span>
+                  <span>Department admin accounts</span>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-gradient-to-br from-amber-500/10 to-orange-500/10 border-amber-500/30 backdrop-blur-xl hover:shadow-2xl hover:shadow-amber-500/20 transition-all duration-300 hover:-translate-y-2">
+              <CardHeader>
+                <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center mb-3 shadow-lg shadow-amber-500/50">
+                  <Layers className="w-7 h-7 text-white" />
+                </div>
+                <CardTitle className="text-white text-xl">Department Admin</CardTitle>
+                <CardDescription className="text-slate-300">
+                  Define subjects and sections, then generate timetables around what other departments already booked
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <div className="flex items-center gap-2 text-slate-300 text-sm">
+                  <CheckCircle2 className="w-4 h-4 text-amber-400" />
+                  <span>Generate for selected classes</span>
+                </div>
+                <div className="flex items-center gap-2 text-slate-300 text-sm">
+                  <CheckCircle2 className="w-4 h-4 text-amber-400" />
+                  <span>Baseline vs enhanced comparison</span>
+                </div>
+                <div className="flex items-center gap-2 text-slate-300 text-sm">
+                  <CheckCircle2 className="w-4 h-4 text-amber-400" />
+                  <span>Publish & reschedule</span>
                 </div>
               </CardContent>
             </Card>

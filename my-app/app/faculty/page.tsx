@@ -12,9 +12,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { 
-  GraduationCap, 
-  LogOut, 
+import {
+  GraduationCap,
+  LogOut,
   Calendar,
   Loader2,
   Clock,
@@ -40,7 +40,7 @@ interface TimetableSlot {
   classroom_id: string;
   created_by: string | null;
   sections?: { name: string };
-  subjects?: { name: string; code: string };
+  subjects?: { name: string; code: string; subject_type?: string };
   classrooms?: { name: string; building?: string };
 }
 
@@ -64,7 +64,7 @@ function getSubjectColor(subjectName: string): string {
     'bg-indigo-500/20 border-indigo-500/50 text-indigo-300',
     'bg-teal-500/20 border-teal-500/50 text-teal-300',
   ];
-  
+
   let hash = 0;
   for (let i = 0; i < subjectName.length; i++) {
     hash = subjectName.charCodeAt(i) + ((hash << 5) - hash);
@@ -75,7 +75,7 @@ function getSubjectColor(subjectName: string): string {
 export default function FacultyDashboardPage() {
   const { user, logout, isLoading: authLoading } = useAuth();
   const { isLoading: requireAuthLoading } = useRequireAuth(['faculty']);
-  
+
   const [timetableSlots, setTimetableSlots] = useState<TimetableSlot[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedDay, setSelectedDay] = useState<string>('all');
@@ -91,46 +91,29 @@ export default function FacultyDashboardPage() {
 
   const loadTimetable = useCallback(async () => {
     if (!facultyUser?.id) return;
-    
+
     setIsLoading(true);
     const supabase = getSupabaseBrowserClient();
 
     try {
-      // Step 1: Check the latest timetable job status
-      const { data: latestJob, error: jobError } = await supabase
-        .from('timetable_jobs')
-        .select('id, status')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (jobError) {
-        console.error('Error fetching timetable job:', jobError);
-      }
-
-      // Step 2: Determine which table to query based on job status
-      // If job status is 'completed', fetch from timetable_optimized
-      // Otherwise, fetch from timetable_base
-      const isOptimized = latestJob?.status === 'completed';
-      const tableName = isOptimized ? 'timetable_optimized' : 'timetable_base';
-      
-      console.log(`[Faculty Timetable] Fetching from ${tableName} (Job status: ${latestJob?.status || 'none'})`);
-
-      // Step 3: Fetch timetable entries for this faculty from the appropriate table
+      // A faculty member may teach for several departments: their week is the union of
+      // every PUBLISHED department timetable that assigns them a class
       const { data: slots, error } = await supabase
-        .from(tableName)
+        .from('timetable_optimized')
         .select(`
           *,
           sections(name),
-          subjects(name, code),
-          classrooms(name, building)
+          subjects(name, code, subject_type),
+          classrooms(name, building),
+          timetable_jobs!inner(is_published)
         `)
         .eq('faculty_id', facultyUser.id)
+        .eq('timetable_jobs.is_published', true)
         .order('day_of_week')
         .order('start_period');
 
       // No error occurred - check if we have data
-      if (!error && (!slots || slots.length === 0)) {
+      if (error || !slots || slots.length === 0) {
         console.log('No timetable found for faculty:', facultyUser.name);
         console.log('This is normal if no timetable has been generated yet.');
         setTimetableSlots([]);
@@ -138,12 +121,12 @@ export default function FacultyDashboardPage() {
       } else {
         setTimetableSlots(slots);
         setHasTimetable(true);
-        
+
         // Calculate stats
-        const labs = slots.filter((s: TimetableSlot) => s.subjects?.code?.includes('L')); // Lab subjects usually have 'L' suffix
+        const labs = slots.filter((s: TimetableSlot) => s.subjects?.subject_type === 'lab');
         const subjects = new Set(slots.map((s: TimetableSlot) => s.subject_id));
         const sections = new Set(slots.map((s: TimetableSlot) => s.section_id));
-        
+
         setStats({
           totalClasses: slots.length - labs.length,
           totalLabs: labs.length,
@@ -174,7 +157,7 @@ export default function FacultyDashboardPage() {
   // Get timetable data organized by day and period
   const getTimetableGrid = () => {
     const grid: Record<string, Record<number, TimetableSlot | null>> = {};
-    
+
     DAYS.forEach(day => {
       grid[day] = {};
       PERIODS.forEach(period => {
@@ -221,8 +204,8 @@ export default function FacultyDashboardPage() {
             </div>
           </div>
           <ClickSpark sparkColor="#ef4444">
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               onClick={handleLogout}
               className="border-slate-700 text-slate-300 hover:text-white hover:bg-slate-800"
             >
@@ -249,7 +232,7 @@ export default function FacultyDashboardPage() {
               </div>
             </CardContent>
           </Card>
-          
+
           <Card className="bg-slate-800/50 border-slate-700">
             <CardContent className="pt-6">
               <div className="flex items-center gap-3">
@@ -263,7 +246,7 @@ export default function FacultyDashboardPage() {
               </div>
             </CardContent>
           </Card>
-          
+
           <Card className="bg-slate-800/50 border-slate-700">
             <CardContent className="pt-6">
               <div className="flex items-center gap-3">
@@ -277,7 +260,7 @@ export default function FacultyDashboardPage() {
               </div>
             </CardContent>
           </Card>
-          
+
           <Card className="bg-slate-800/50 border-slate-700">
             <CardContent className="pt-6">
               <div className="flex items-center gap-3">
@@ -329,7 +312,7 @@ export default function FacultyDashboardPage() {
                 <AlertCircle className="h-16 w-16 mb-4 text-yellow-500/50" />
                 <h3 className="text-xl font-semibold text-white mb-2">Timetable Not Generated Yet</h3>
                 <p className="text-center max-w-md">
-                  Your timetable has not been generated by any administrator yet. 
+                  Your timetable has not been generated by any administrator yet.
                   Please check back later or contact your department administrator.
                 </p>
               </div>
@@ -342,8 +325,8 @@ export default function FacultyDashboardPage() {
                         Day
                       </th>
                       {PERIODS.map(period => (
-                        <th 
-                          key={period} 
+                        <th
+                          key={period}
                           className="border border-slate-700 bg-slate-800 px-4 py-3 text-center text-sm font-medium text-slate-300"
                         >
                           Period {period}
@@ -355,7 +338,7 @@ export default function FacultyDashboardPage() {
                     {filteredDays.map(day => {
                       const daySlots = timetableGrid[day];
                       const skipPeriods = new Set<number>();
-                      
+
                       return (
                         <tr key={day}>
                           <td className="border border-slate-700 bg-slate-800/50 px-4 py-3 font-medium text-white">
@@ -365,12 +348,12 @@ export default function FacultyDashboardPage() {
                             if (skipPeriods.has(period)) {
                               return null;
                             }
-                            
+
                             const slot = daySlots[period];
-                            
+
                             if (!slot) {
                               return (
-                                <td 
+                                <td
                                   key={period}
                                   className="border border-slate-700 px-2 py-2 text-center text-slate-500"
                                 >
@@ -378,22 +361,22 @@ export default function FacultyDashboardPage() {
                                 </td>
                               );
                             }
-                            
+
                             // Calculate period span and check if it's a lab
                             const periodSpan = slot.end_period - slot.start_period + 1;
                             const isLab = slot.subjects?.code?.includes('L'); // Lab subjects usually have 'L' suffix
-                            
+
                             // Mark subsequent periods to skip if multi-period
                             if (periodSpan > 1) {
                               for (let i = 1; i < periodSpan; i++) {
                                 skipPeriods.add(period + i);
                               }
                             }
-                            
+
                             const colorClass = getSubjectColor(slot.subjects?.name || '');
-                            
+
                             return (
-                              <td 
+                              <td
                                 key={period}
                                 colSpan={periodSpan}
                                 className={`border border-slate-700 px-2 py-2`}
@@ -440,7 +423,7 @@ export default function FacultyDashboardPage() {
               {(() => {
                 const todayDayOfWeek = new Date().getDay() - 1; // getDay() returns 0 for Sunday, we want 0=Monday
                 const todaySlots = timetableSlots.filter(s => s.day_of_week === todayDayOfWeek);
-                
+
                 if (todayDayOfWeek < 0 || todayDayOfWeek > 5 || todaySlots.length === 0) {
                   return (
                     <div className="text-center py-8 text-slate-400">
@@ -449,14 +432,14 @@ export default function FacultyDashboardPage() {
                     </div>
                   );
                 }
-                
+
                 return (
                   <div className="space-y-3">
                     {todaySlots.map(slot => {
                       const colorClass = getSubjectColor(slot.subjects?.name || '');
                       const isLab = slot.subjects?.code?.includes('L');
                       return (
-                        <div 
+                        <div
                           key={slot.id}
                           className={`rounded-lg border p-4 ${colorClass}`}
                         >

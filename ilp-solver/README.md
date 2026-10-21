@@ -68,6 +68,15 @@ Health check endpoint
 }
 ```
 
+### `POST /solve-labs-diverse` (Relaxed-ILP diversification)
+Same request body as `/solve-labs` plus `numSolutions` (default 6), `minHammingFraction`
+(τ, default 0.3), `randomSeed` and `timeLimitPerSolution` (seconds). Solution 0 uses the
+standard capacity-waste objective; each later solution minimizes randomly weighted
+(capacity waste, afternoon, Saturday, late-week, noise) costs, and after every solution an
+exclusion constraint `Σ L[a ∈ A_k] ≤ |C| − ⌈τ·|C|⌉` forces at least τ of the labs to move.
+Returns `solutions` (one assignment list per solution), `objectiveWeights` and
+`pairwiseHamming`. Used by the enhanced ("after enhancement") pipeline to seed NSGA-II.
+
 ### `POST /solve-labs`
 Solve the lab scheduling problem
 
@@ -110,6 +119,11 @@ Solve the lab scheduling problem
   }
 }
 ```
+
+Optional `"blockedRoomSlots": { "<roomId>": [[day, period], ...] }` lists room periods already
+committed by other departments' published timetables; those (day, block, room) combinations
+are never used. Faculty periods committed elsewhere are sent as reduced `facultyAvailability`
+windows (a window with `endPeriod < startPeriod` means "not available at all").
 
 **Response (Success):**
 ```json

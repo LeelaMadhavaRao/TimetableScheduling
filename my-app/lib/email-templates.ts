@@ -27,7 +27,7 @@ export interface AdminUpdatedEmailData {
 }
 
 export function generateAdminCreatedEmail(data: AdminCreatedEmailData): { subject: string; html: string; text: string } {
-  const subject = 'Welcome! Your Timetable Administrator Account Has Been Created'
+  const subject = 'Welcome! Your College Administrator Account Has Been Created'
   
   const html = `
 <!DOCTYPE html>
@@ -51,7 +51,7 @@ export function generateAdminCreatedEmail(data: AdminCreatedEmailData): { subjec
     </div>
     <div class="content">
       <h2>Hello ${data.adminName},</h2>
-      <p>Your Timetable Administrator account has been successfully created by the System Administrator.</p>
+      <p>Your College Administrator account has been successfully created by the System Administrator.</p>
       
       <p>You can now access the system to manage timetables, faculty schedules, and class assignments.</p>
       
@@ -97,7 +97,7 @@ Welcome to Timetable Scheduling System!
 
 Hello ${data.adminName},
 
-Your Timetable Administrator account has been successfully created by the System Administrator.
+Your College Administrator account has been successfully created by the System Administrator.
 
 Your Login Credentials:
 Username: ${data.username}
@@ -123,7 +123,7 @@ Timetable Scheduling System
 }
 
 export function generateRequestApprovedEmail(data: RequestApprovedEmailData): { subject: string; html: string; text: string } {
-  const subject = '✅ Your Timetable Administrator Access Request Has Been Approved!'
+  const subject = '✅ Your College Administrator Access Request Has Been Approved!'
   
   const html = `
 <!DOCTYPE html>
@@ -147,7 +147,7 @@ export function generateRequestApprovedEmail(data: RequestApprovedEmailData): { 
     </div>
     <div class="content">
       <h2>Congratulations ${data.name}!</h2>
-      <p>Your request for Timetable Administrator access has been <strong>approved</strong> by the System Administrator.</p>
+      <p>Your request for College Administrator access has been <strong>approved</strong> by the System Administrator.</p>
       
       <p>Your account is now active and ready to use!</p>
       
@@ -193,7 +193,7 @@ Request Approved!
 
 Congratulations ${data.name}!
 
-Your request for Timetable Administrator access has been approved by the System Administrator.
+Your request for College Administrator access has been approved by the System Administrator.
 
 Your Login Credentials:
 Username: ${data.username}
@@ -219,7 +219,7 @@ Timetable Scheduling System
 }
 
 export function generateRequestRejectedEmail(data: RequestRejectedEmailData): { subject: string; html: string; text: string } {
-  const subject = 'Update on Your Timetable Administrator Access Request'
+  const subject = 'Update on Your College Administrator Access Request'
   
   const html = `
 <!DOCTYPE html>
@@ -241,7 +241,7 @@ export function generateRequestRejectedEmail(data: RequestRejectedEmailData): { 
     </div>
     <div class="content">
       <h2>Dear ${data.name},</h2>
-      <p>Thank you for your interest in becoming a Timetable Administrator.</p>
+      <p>Thank you for your interest in becoming a College Administrator.</p>
       
       <p>After careful review, we regret to inform you that your access request has not been approved at this time.</p>
       
@@ -256,7 +256,7 @@ export function generateRequestRejectedEmail(data: RequestRejectedEmailData): { 
       <ul>
         <li>You may reapply after addressing the concerns mentioned above</li>
         <li>Contact the System Administrator for more information</li>
-        <li>Ensure you meet all the requirements for the Timetable Administrator role</li>
+        <li>Ensure you meet all the requirements for the College Administrator role</li>
       </ul>
       
       <p>We appreciate your understanding and interest in contributing to our timetable management system.</p>
@@ -278,7 +278,7 @@ Request Status Update
 
 Dear ${data.name},
 
-Thank you for your interest in becoming a Timetable Administrator.
+Thank you for your interest in becoming a College Administrator.
 
 After careful review, we regret to inform you that your access request has not been approved at this time.
 
@@ -287,7 +287,7 @@ ${data.reason ? `Reason: ${data.reason}\n` : ''}
 What's Next?
 - You may reapply after addressing the concerns mentioned above
 - Contact the System Administrator for more information
-- Ensure you meet all the requirements for the Timetable Administrator role
+- Ensure you meet all the requirements for the College Administrator role
 
 We appreciate your understanding and interest in contributing to our timetable management system.
 
@@ -299,7 +299,7 @@ Timetable Scheduling System
 }
 
 export function generateAdminUpdatedEmail(data: AdminUpdatedEmailData): { subject: string; html: string; text: string } {
-  const subject = 'Your Timetable Administrator Account Has Been Updated'
+  const subject = 'Your College Administrator Account Has Been Updated'
   
   const fieldsUpdatedList = data.updatedFields.join(', ')
   
@@ -325,7 +325,7 @@ export function generateAdminUpdatedEmail(data: AdminUpdatedEmailData): { subjec
     </div>
     <div class="content">
       <h2>Hello ${data.adminName},</h2>
-      <p>Your Timetable Administrator account details have been updated by the System Administrator.</p>
+      <p>Your College Administrator account details have been updated by the System Administrator.</p>
       
       <div class="update-box">
         <h3>📝 Updated Information</h3>
@@ -367,7 +367,7 @@ Account Information Updated
 
 Hello ${data.adminName},
 
-Your Timetable Administrator account details have been updated by the System Administrator.
+Your College Administrator account details have been updated by the System Administrator.
 
 Updated Information:
 ${data.updatedFields.map(field => `- ${field}`).join('\n')}

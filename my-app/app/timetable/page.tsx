@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect, useState, useCallback } from "react"
+import { useEffect, useState, useCallback, Suspense } from "react"
+import { useSearchParams } from "next/navigation"
 import { getSupabaseBrowserClient } from "@/lib/client"
 import { TimetableViewer } from "@/components/timetable-viewer"
 import { Card, CardDescription, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
@@ -9,6 +10,7 @@ import { Calendar, ArrowLeft, Loader2, RefreshCw, AlertCircle } from "lucide-rea
 import Link from "next/link"
 import type { TimetableJob, Section, Faculty, Classroom } from "@/lib/database"
 import { useAuth } from "@/contexts/AuthContext"
+import { getUserScope, ROLE_HOME } from "@/lib/auth"
 
 interface TimetableSlotWithDetails {
   id: string
@@ -26,8 +28,20 @@ interface TimetableSlotWithDetails {
   fitness_score?: number
 }
 
+const SLOT_SELECT = "*, sections(name, year_level), subjects(name, code, subject_type), faculty(name, code), classrooms(name)"
+
 export default function TimetablePage() {
-  const { user, role } = useAuth()
+  return (
+    <Suspense fallback={null}>
+      <TimetablePageContent />
+    </Suspense>
+  )
+}
+
+function TimetablePageContent() {
+  const { user, role, isLoading: authLoading } = useAuth()
+  const searchParams = useSearchParams()
+  const jobParam = searchParams.get("job")
   const [isLoading, setIsLoading] = useState(true)
   const [latestJob, setLatestJob] = useState<TimetableJob | null>(null)
   const [timetableSlots, setTimetableSlots] = useState<TimetableSlotWithDetails[]>([])
@@ -37,8 +51,8 @@ export default function TimetablePage() {
   const [error, setError] = useState<string | null>(null)
   const [isRefreshing, setIsRefreshing] = useState(false)
 
-  // Get admin ID if user is a timetable administrator
-  const adminId = role === 'timetable_admin' && user ? (user as { id: string }).id : null
+  const { collegeId, departmentId } = getUserScope(user, role)
+  const backHref = role ? ROLE_HOME[role] : "/"
 
   const fetchTimetableData = useCallback(async (showRefreshLoader = false) => {
     if (showRefreshLoader) {
@@ -49,55 +63,57 @@ export default function TimetablePage() {
     try {
       const supabase = getSupabaseBrowserClient()
 
-      // Fetch latest completed job
-      let jobQuery = supabase
-        .from("timetable_jobs")
-        .select("*")
-        .in("status", ["base_complete", "completed"])
-        .order("created_at", { ascending: false })
-        .limit(1)
+      let slotsData: TimetableSlotWithDetails[] | null = null
 
-      if (adminId) {
-        jobQuery = jobQuery.eq("created_by", adminId)
-      }
-
-      const { data: jobData, error: jobError } = await jobQuery.maybeSingle()
-
-      if (jobError) {
-        console.error("[TimetablePage] Error fetching job:", jobError)
-        setError("Failed to fetch timetable job")
-        setIsLoading(false)
-        setIsRefreshing(false)
-        return
-      }
-
-      if (!jobData) {
-        console.log("[TimetablePage] No completed job found")
-        setLatestJob(null)
-        setIsLoading(false)
-        setIsRefreshing(false)
-        return
-      }
-
-      console.log("[TimetablePage] Found job:", jobData.id, "Status:", jobData.status)
-      setLatestJob(jobData)
-
-      // Decide which timetable to show
-      const useOptimized = jobData.status === "completed"
-      const tableName = useOptimized ? "timetable_optimized" : "timetable_base"
-
-      // Fetch timetable data
-      const { data: slotsData, error: slotsError } = await supabase
-        .from(tableName)
-        .select("*, sections(name, year_level), subjects(name, code, subject_type), faculty(name, code), classrooms(name)")
-        .eq("job_id", jobData.id)
-
-      if (slotsError) {
-        console.error("[TimetablePage] Error fetching slots:", slotsError)
-        setError("Failed to fetch timetable slots")
-        setIsLoading(false)
-        setIsRefreshing(false)
-        return
+      if (jobParam) {
+        // One specific run (baseline, enhanced or rescheduled)
+        const { data: jobData, error: jobError } = await supabase.from("timetable_jobs").select("*").eq("id", jobParam).maybeSingle()
+        if (jobError || !jobData) {
+          setError("Timetable run not found")
+          return
+        }
+        setLatestJob(jobData)
+        const tableName = jobData.status === "completed" ? "timetable_optimized" : "timetable_base"
+        const { data, error: slotsError } = await supabase.from(tableName).select(SLOT_SELECT).eq("job_id", jobData.id)
+        if (slotsError) {
+          setError("Failed to fetch timetable slots")
+          return
+        }
+        slotsData = data
+      } else {
+        // Every published (committed) timetable in the viewer's department or college
+        if (!collegeId) {
+          setLatestJob(null)
+          return
+        }
+        let query = supabase
+          .from("timetable_optimized")
+          .select(`${SLOT_SELECT}, timetable_jobs!inner(is_published, college_id, department_id, published_at, message)`)
+          .eq("timetable_jobs.is_published", true)
+          .eq("timetable_jobs.college_id", collegeId)
+        if (departmentId) query = query.eq("timetable_jobs.department_id", departmentId)
+        const { data, error: slotsError } = await query
+        if (slotsError) {
+          console.error("[TimetablePage] Error fetching published slots:", slotsError)
+          setError("Failed to fetch published timetables")
+          return
+        }
+        if (!data || data.length === 0) {
+          setLatestJob(null)
+          setTimetableSlots([])
+          return
+        }
+        const jobCount = new Set(data.map((row: { job_id: string }) => row.job_id)).size
+        setLatestJob({
+          id: "published",
+          status: "completed",
+          progress: 100,
+          message: `${departmentId ? "Department" : "College-wide"} view of ${jobCount} published timetable(s)`,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          is_published: true,
+        } as TimetableJob)
+        slotsData = data
       }
 
       console.log("[TimetablePage] Fetched slots:", slotsData?.length || 0)
@@ -111,7 +127,6 @@ export default function TimetablePage() {
       console.log("[TimetablePage] Section IDs in timetable:", sectionIdsInTimetable.length)
       console.log("[TimetablePage] Faculty IDs in timetable:", facultyIdsInTimetable.length)
       console.log("[TimetablePage] Classroom IDs in timetable:", classroomIdsInTimetable.length)
-      console.log("[TimetablePage] Admin ID:", adminId)
 
       // Fetch only sections, faculty, and classrooms that are in the timetable
       const [sectionsRes, facultyRes, classroomsRes] = await Promise.all([
@@ -148,12 +163,11 @@ export default function TimetablePage() {
       setIsLoading(false)
       setIsRefreshing(false)
     }
-  }, [adminId])
+  }, [jobParam, collegeId, departmentId])
 
   useEffect(() => {
-    console.log("[TimetablePage] Initial load, fetching data...")
-    fetchTimetableData()
-  }, [fetchTimetableData])
+    if (!authLoading) fetchTimetableData()
+  }, [fetchTimetableData, authLoading])
 
   // Loading state with animated spinner
   if (isLoading) {
@@ -161,10 +175,10 @@ export default function TimetablePage() {
       <div className="min-h-screen bg-linear-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
         <div className="container mx-auto px-4 py-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
           <div className="mb-6">
-            <Link href="/">
+            <Link href={backHref}>
               <Button variant="ghost" size="sm" className="mb-4">
                 <ArrowLeft className="w-4 h-4 mr-2" />
-                Back to Home
+                Back
               </Button>
             </Link>
           </div>
@@ -197,10 +211,10 @@ export default function TimetablePage() {
       <div className="min-h-screen bg-linear-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
         <div className="container mx-auto px-4 py-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
           <div className="mb-6">
-            <Link href="/">
+            <Link href={backHref}>
               <Button variant="ghost" size="sm" className="mb-4">
                 <ArrowLeft className="w-4 h-4 mr-2" />
-                Back to Home
+                Back
               </Button>
             </Link>
           </div>
@@ -230,10 +244,10 @@ export default function TimetablePage() {
       <div className="min-h-screen bg-linear-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
         <div className="container mx-auto px-4 py-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
           <div className="mb-6">
-            <Link href="/">
+            <Link href={backHref}>
               <Button variant="ghost" size="sm" className="mb-4">
                 <ArrowLeft className="w-4 h-4 mr-2" />
-                Back to Home
+                Back
               </Button>
             </Link>
           </div>
@@ -249,7 +263,7 @@ export default function TimetablePage() {
                 </p>
               </div>
               <div className="flex gap-3 mt-4">
-                <Link href="/admin/generate">
+                <Link href="/department/generate">
                   <Button className="bg-blue-600 hover:bg-blue-700 dark:bg-blue-700 dark:hover:bg-blue-800">
                     Generate Timetable
                   </Button>
@@ -272,7 +286,7 @@ export default function TimetablePage() {
     <div className="min-h-screen bg-linear-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
       <div className="container mx-auto px-4 py-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
         <div className="mb-6">
-          <Link href="/">
+          <Link href={backHref}>
             <Button variant="ghost" size="sm" className="mb-4">
               <ArrowLeft className="w-4 h-4 mr-2" />
               Back to Home
@@ -285,9 +299,9 @@ export default function TimetablePage() {
               </h1>
               <p className="text-slate-600 dark:text-slate-400">View generated timetables by section or faculty</p>
             </div>
-            <Button 
-              onClick={() => fetchTimetableData(true)} 
-              variant="outline" 
+            <Button
+              onClick={() => fetchTimetableData(true)}
+              variant="outline"
               size="sm"
               disabled={isRefreshing}
               className="bg-white dark:bg-slate-800"
@@ -303,7 +317,9 @@ export default function TimetablePage() {
             <div className="flex items-center gap-2">
               <Calendar className="w-5 h-5 text-blue-600 dark:text-blue-400" />
               <CardTitle className="text-slate-900 dark:text-slate-100">
-                {useOptimized ? "✨ Optimized Timetable" : "📋 Base Timetable"} - Job {latestJob.id.slice(0, 8)}
+                {latestJob.id === "published"
+                  ? "✅ Published Timetables"
+                  : `${latestJob.run_type === "reschedule" ? "🔁 Rescheduled" : latestJob.algorithm_mode === "enhanced" ? "✨ After Enhancement" : "📋 Before Enhancement"}${useOptimized ? "" : " (base only)"} - Run ${latestJob.id.slice(0, 8)}${latestJob.is_published ? " • published" : ""}`}
               </CardTitle>
             </div>
             <CardDescription className="text-slate-700 dark:text-slate-300">

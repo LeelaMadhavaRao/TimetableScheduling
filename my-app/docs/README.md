@@ -17,6 +17,7 @@ This documentation explains how the timetable scheduling system generates and op
 | 07 | [Scheduling Rules & Constraints](./07-scheduling-rules-constraints.md) | Hard and soft constraints enforced |
 | 08 | [Database Schema](./08-database-schema.md) | Tables, relationships, and queries |
 | 09 | [Complete Generation Flow](./09-complete-generation-flow.md) | End-to-end walkthrough from click to display |
+| 10 | [College Hierarchy & Enhanced ILP-GA](./10-college-hierarchy-and-enhanced-ilp-ga.md) | College/department roles, publishing & occupancy, baseline vs enhanced pipelines, measured results |
 
 ## 🎯 Quick Start
 

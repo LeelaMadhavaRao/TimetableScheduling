@@ -1,17 +1,18 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
-import { 
-  validateSession, 
+import {
+  validateSession,
   logout as authLogout,
-  AdminUser, 
-  TimetableAdministrator, 
+  AuthUser,
   UserRole,
-  AuthSession
+  AuthSession,
+  ROLE_HOME,
+  ROLE_LOGIN,
 } from '@/lib/auth';
 
 interface AuthContextType {
-  user: AdminUser | TimetableAdministrator | { id: string; code: string; name: string } | null;
+  user: AuthUser | null;
   role: UserRole | null;
   session: AuthSession | null;
   isLoading: boolean;
@@ -139,23 +140,11 @@ export function useRequireAuth(allowedRoles?: UserRole[]) {
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
       // Redirect based on attempted role or default to faculty login
-      const storedRole = localStorage.getItem(ROLE_KEY);
-      if (storedRole === 'admin') {
-        window.location.href = '/login/admin';
-      } else if (storedRole === 'timetable_admin') {
-        window.location.href = '/login/timetable-admin';
-      } else {
-        window.location.href = '/login/faculty';
-      }
+      const storedRole = localStorage.getItem(ROLE_KEY) as UserRole | null;
+      window.location.href = storedRole && ROLE_LOGIN[storedRole] ? ROLE_LOGIN[storedRole] : ROLE_LOGIN.faculty;
     } else if (!isLoading && isAuthenticated && allowedRoles && role && !allowedRoles.includes(role)) {
       // User authenticated but wrong role
-      if (role === 'admin') {
-        window.location.href = '/dashboard/admin';
-      } else if (role === 'timetable_admin') {
-        window.location.href = '/admin';
-      } else {
-        window.location.href = '/faculty';
-      }
+      window.location.href = ROLE_HOME[role] || '/';
     }
   }, [isLoading, isAuthenticated, role, allowedRoles]);
 

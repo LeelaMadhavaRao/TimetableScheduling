@@ -395,7 +395,7 @@ export default function RegistrationRequestsPage() {
                 </div>
                 <div className="p-3 bg-green-500/10 border border-green-500/30 rounded-md">
                   <p className="text-sm text-green-400">
-                    This will create a new Timetable Administrator account with the provided credentials.
+                    This will create a new College Administrator account with the provided credentials.
                   </p>
                 </div>
               </div>

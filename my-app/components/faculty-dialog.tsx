@@ -20,6 +20,7 @@ import { Plus } from "lucide-react"
 import type { Faculty, Department } from "@/lib/database"
 import { getSupabaseBrowserClient } from "@/lib/client"
 import { useAuth } from "@/contexts/AuthContext"
+import { getUserScope } from "@/lib/auth"
 
 interface FacultyDialogProps {
   faculty?: Faculty
@@ -40,7 +41,7 @@ export function FacultyDialog({ faculty, departments, trigger }: FacultyDialogPr
   const [phoneError, setPhoneError] = useState("")
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const { user, role } = useAuth()
-  const adminId = role === 'timetable_admin' && user ? (user as any).id : null
+  const { collegeId } = getUserScope(user, role)
 
   const validatePhone = (phone: string) => {
     const digitCount = phone.replace(/\D/g, "").length
@@ -72,7 +73,7 @@ export function FacultyDialog({ faculty, departments, trigger }: FacultyDialogPr
         return
       }
     } else {
-      const insertData = adminId ? { ...formData, created_by: adminId } : formData
+      const insertData = { ...formData, college_id: collegeId, created_by: user?.id ?? null }
       const { error } = await supabase.from("faculty").insert(insertData)
 
       if (error) {

@@ -12,6 +12,7 @@ import { getSupabaseBrowserClient } from "@/lib/client"
 
 interface SubjectWithFaculty extends Subject {
   subject_faculty?: { faculty: Faculty }[]
+  departments?: { code: string } | null
 }
 
 interface SectionSubjectsDialogProps {
@@ -120,6 +121,7 @@ export function SectionSubjectsDialog({ section, subjects, open, onOpenChange }:
                     {subjects.map((subject) => (
                       <SelectItem key={subject.id} value={subject.id}>
                         {subject.name} ({subject.code}) - {subject.subject_type}
+                        {subject.department_id !== section.department_id && subject.departments?.code ? ` · offered by ${subject.departments.code}` : ""}
                       </SelectItem>
                     ))}
                   </SelectContent>

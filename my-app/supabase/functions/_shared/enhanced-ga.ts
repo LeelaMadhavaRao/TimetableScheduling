@@ -21,6 +21,7 @@ import {
   BASELINE_WEIGHTS,
   computeObjectives,
   dominates,
+  hypervolume,
   objectiveArray,
   OBJECTIVE_KEYS,
   ObjectiveVector,
@@ -38,6 +39,8 @@ export interface EnhancedConfig {
   /** alpha: fraction of coordinate groups exchanged by SCPX */
   exchangeFraction: number
   maxFrontSize: number
+  /** Stop after this many generations without improvement of the best solution */
+  patience: number
   rngSeed: number
 }
 
@@ -48,7 +51,8 @@ export const ENHANCED_CONFIG: EnhancedConfig = {
   mutationRate: 0.6,
   maxMutationMoves: 3,
   exchangeFraction: 0.5,
-  maxFrontSize: 12,
+  maxFrontSize: 3,
+  patience: 8,
   rngSeed: 20260101,
 }
 
@@ -71,6 +75,9 @@ export interface EnhancedStats {
   mutationMoves: number
   mutationAttempts: number
   mutationAccepted: number
+  candidatesScreened: number
+  generationsRun: number
+  fullFrontSize: number
   totalTimeMs: number
   bestQualityHistory: number[]
   diversityHistory: number[]
@@ -101,6 +108,9 @@ export class NSGA2TimetableOptimizer {
     mutationMoves: 0,
     mutationAttempts: 0,
     mutationAccepted: 0,
+    candidatesScreened: 0,
+    generationsRun: 0,
+    fullFrontSize: 0,
     totalTimeMs: 0,
     bestQualityHistory: [],
     diversityHistory: [],
@@ -307,7 +317,7 @@ export class NSGA2TimetableOptimizer {
     const grid = FeasibilityGrid.fromSlots(this.ctx, child)
     for (let m = 0; m < moves; m++) {
       this.stats.mutationMoves++
-      for (let attempt = 0; attempt < 6; attempt++) {
+      for (let attempt = 0; attempt < 4; attempt++) {
         const r = this.rng()
         const moved =
           r < 0.5
@@ -325,26 +335,50 @@ export class NSGA2TimetableOptimizer {
   }
 
   /**
+   * Feasibility-aware placement: candidates are screened with the cheap room-independent
+   * check (FeasibilityGrid.timeFree - section/faculty free, availability, occupancy, daily
+   * limit); only survivors cost an attempt, i.e. a room search. Applies the first that fits.
+   */
+  private placeFirstFeasible(child: TimetableSlot[], grid: FeasibilityGrid, index: number, candidates: TimetableSlot[], limit = 6): boolean {
+    const slot = child[index]
+    grid.remove(slot)
+    let tried = 0
+    for (const c of candidates) {
+      this.stats.candidatesScreened++
+      if (!grid.timeFree(c)) continue
+      this.stats.mutationAttempts++
+      const rooms = grid.roomsFor(c)
+      if (rooms.length > 0) {
+        const placed = { ...c, classroomId: rooms[0] }
+        grid.add(placed)
+        child[index] = placed
+        return true
+      }
+      if (++tried >= limit) break
+    }
+    grid.add(slot)
+    return false
+  }
+
+  /**
    * Objective-directed relocation: pick one of the five objectives at random and move a slot
    * to the feasible position that looks best for that objective (randomly choosing the
    * objective keeps offspring spread along the Pareto front instead of collapsing to one
-   * weighting). Candidate positions are ranked by a cheap local score; the first one the
-   * FeasibilityGrid accepts is applied.
+   * weighting). Candidate positions are ranked by a cheap local score.
    */
   private directedRelocate(child: TimetableSlot[], grid: FeasibilityGrid, objective: number): boolean {
     const key = OBJECTIVE_KEYS[objective]
     const isLab = (s: TimetableSlot) => this.ctx.courseByKey.get(courseKey(s.sectionId, s.subjectId))?.subjectType === "lab"
 
     // Pick a slot that has room for improvement on this objective
-    const pool = child
-      .map((s, i) => ({ s, i }))
-      .filter(({ s }) => {
-        if (key === "labCompactness") return isLab(s) && s.day > 0
-        if (key === "morningPreference") return s.startPeriod > HARD_RULES.LUNCH_AFTER_PERIOD
-        return true
-      })
+    const pool: number[] = []
+    for (let i = 0; i < child.length; i++) {
+      const s = child[i]
+      if (key === "labCompactness" ? isLab(s) && s.day > 0 : key === "morningPreference" ? s.startPeriod > HARD_RULES.LUNCH_AFTER_PERIOD : true) pool.push(i)
+    }
     if (pool.length === 0) return false
-    const { s: slot, i: index } = pool[Math.floor(this.rng() * pool.length)]
+    const index = pool[Math.floor(this.rng() * pool.length)]
+    const slot = child[index]
     const length = slotPeriods(slot)
 
     // A 3-period lab rarely fits into a busy earlier day on its own: move the whole day block
@@ -353,10 +387,18 @@ export class NSGA2TimetableOptimizer {
       return this.swapSectionDays(child, grid, slot.sectionId, slot.day, earlier)
     }
 
-    const occupied = (owner: (s: TimetableSlot) => boolean, day: number, period: number) =>
-      child.some((o) => o !== slot && owner(o) && o.day === day && o.startPeriod <= period && period <= o.endPeriod)
+    // Per-day occupancy of the section / faculty (excluding the slot being moved)
+    const busy = (owner: "section" | "faculty") => {
+      const days = Array.from({ length: 6 }, () => new Uint8Array(10))
+      for (const o of child) {
+        if (o === slot || (owner === "section" ? o.sectionId !== slot.sectionId : o.facultyId !== slot.facultyId)) continue
+        for (let p = o.startPeriod; p <= o.endPeriod; p++) days[o.day][p] = 1
+      }
+      return days
+    }
+    const ownerBusy = key === "studentGap" ? busy("section") : key === "facultyGap" ? busy("faculty") : null
     const facultyLoad = new Array(6).fill(0)
-    for (const o of child) if (o !== slot && o.facultyId === slot.facultyId) facultyLoad[o.day] += slotPeriods(o)
+    if (key === "workloadBalance") for (const o of child) if (o !== slot && o.facultyId === slot.facultyId) facultyLoad[o.day] += slotPeriods(o)
 
     const candidates: { c: TimetableSlot; score: number }[] = []
     for (let day = 0; day < 6; day++) {
@@ -375,32 +417,17 @@ export class NSGA2TimetableOptimizer {
           case "workloadBalance":
             score = facultyLoad[day]
             break
-          case "studentGap":
-          case "facultyGap": {
-            const owner = key === "studentGap" ? (o: TimetableSlot) => o.sectionId === slot.sectionId : (o: TimetableSlot) => o.facultyId === slot.facultyId
-            const adjacent = occupied(owner, day, start - 1) || occupied(owner, day, end + 1)
-            const sameDay = child.some((o) => o !== slot && owner(o) && o.day === day)
-            score = adjacent ? 0 : sameDay ? 2 : 1
-            break
+          default: {
+            const d = ownerBusy![day]
+            const adjacent = (start > 1 && d[start - 1] === 1) || (end < 8 && d[end + 1] === 1)
+            score = adjacent ? 0 : d.some((v) => v === 1) ? 2 : 1
           }
         }
         candidates.push({ c: { ...slot, day: day as DayOfWeek, startPeriod: start as Period, endPeriod: end as Period }, score: score + this.rng() * 0.5 })
       }
     }
     candidates.sort((a, b) => a.score - b.score)
-
-    grid.remove(slot)
-    for (const { c } of candidates.slice(0, 12)) {
-      this.stats.mutationAttempts++
-      const rooms = grid.roomsFor(c)
-      if (rooms.length === 0) continue
-      const placed = { ...c, classroomId: rooms[0] }
-      grid.add(placed)
-      child[index] = placed
-      return true
-    }
-    grid.add(slot)
-    return false
+    return this.placeFirstFeasible(child, grid, index, candidates.map((x) => x.c))
   }
 
   /** Block(d, s) <-> Block(d', s): the section's whole day moves, keeping course coverage */
@@ -412,31 +439,45 @@ export class NSGA2TimetableOptimizer {
 
   private swapSectionDays(child: TimetableSlot[], grid: FeasibilityGrid, sectionId: string, d1: DayOfWeek, d2: DayOfWeek): boolean {
     if (d1 === d2) return false
-    this.stats.mutationAttempts++
 
-    const indices = child
-      .map((s, i) => ({ s, i }))
-      .filter(({ s }) => s.sectionId === sectionId && (s.day === d1 || s.day === d2))
-    for (const { s } of indices) grid.remove(s)
+    const indices: number[] = []
+    for (let i = 0; i < child.length; i++) if (child[i].sectionId === sectionId && (child[i].day === d1 || child[i].day === d2)) indices.push(i)
+    const original = indices.map((i) => child[i])
+    for (const s of original) grid.remove(s)
+    const moved = original.map((s) => ({ ...s, day: (s.day === d1 ? d2 : d1) as DayOfWeek }))
 
-    const moved = indices.map(({ s }) => ({ ...s, day: (s.day === d1 ? d2 : d1) as DayOfWeek }))
+    // Screen the time constraints of the whole swap first (cheap); only then try the rooms
+    this.stats.candidatesScreened++
     const placed: TimetableSlot[] = []
     let ok = true
     for (const s of moved) {
-      if (!grid.canPlace(s)) {
+      if (!grid.timeFree(s)) {
         ok = false
         break
       }
       grid.add(s)
       placed.push(s)
     }
+    if (ok) {
+      this.stats.mutationAttempts++
+      for (const s of placed) grid.remove(s)
+      placed.length = 0
+      for (const s of moved) {
+        if (!grid.canPlace(s)) {
+          ok = false
+          break
+        }
+        grid.add(s)
+        placed.push(s)
+      }
+    }
 
     if (!ok) {
       for (const s of placed) grid.remove(s)
-      for (const { s } of indices) grid.add(s)
+      for (const s of original) grid.add(s)
       return false
     }
-    indices.forEach(({ i }, k) => (child[i] = moved[k]))
+    indices.forEach((i, k) => (child[i] = moved[k]))
     return true
   }
 
@@ -449,7 +490,6 @@ export class NSGA2TimetableOptimizer {
     const index = Math.floor(this.rng() * child.length)
     const slot = child[index]
     const length = slotPeriods(slot)
-    grid.remove(slot)
 
     const at = (day: number, start: number): TimetableSlot | null => {
       const end = start + length - 1
@@ -469,20 +509,7 @@ export class NSGA2TimetableOptimizer {
       const c = at(slot.day, start)
       if (c && !local.some((l) => l.day === c.day && l.startPeriod === c.startPeriod)) sameDay.push(c)
     }
-    const candidates = local.concat(this.shuffle(sameDay))
-
-    for (const candidate of candidates) {
-      this.stats.mutationAttempts++
-      const rooms = grid.roomsFor(candidate)
-      if (rooms.length === 0) continue
-      const placed = { ...candidate, classroomId: rooms[0] }
-      grid.add(placed)
-      child[index] = placed
-      return true
-    }
-
-    grid.add(slot)
-    return false
+    return this.placeFirstFeasible(child, grid, index, local.concat(this.shuffle(sameDay)))
   }
 
   private shuffle<T>(items: T[]): T[] {
@@ -497,6 +524,33 @@ export class NSGA2TimetableOptimizer {
   // ------------------------------------------------------------------
   // Main loop (Algorithm 4)
   // ------------------------------------------------------------------
+
+  /**
+   * The timetables offered to the administrator: the best weighted-quality solution plus the
+   * front members that add the most hypervolume to the selection (greedy HV contribution),
+   * i.e. a few genuinely different trade-offs rather than many near-duplicates.
+   */
+  private pickOffered(front: Individual[]): Individual[] {
+    if (front.length <= this.config.maxFrontSize) return front
+    const anchor = front.reduce((best, ind) => (this.qualityOf(ind) > this.qualityOf(best) ? ind : best))
+    const chosen = [anchor]
+    while (chosen.length < this.config.maxFrontSize) {
+      const base = hypervolume(chosen.map((c) => c.objectives))
+      let best: Individual | null = null
+      let bestGain = -1
+      for (const ind of front) {
+        if (chosen.includes(ind)) continue
+        const gain = hypervolume(chosen.map((c) => c.objectives).concat([ind.objectives])) - base
+        if (gain > bestGain) {
+          bestGain = gain
+          best = ind
+        }
+      }
+      if (!best || bestGain <= 1e-9) break
+      chosen.push(best)
+    }
+    return chosen
+  }
 
   optimize(): { front: ParetoSolution[]; chosenIndex: number; population: TimetableSlot[][]; frontPoints: number[][] } {
     const started = Date.now()
@@ -516,6 +570,8 @@ export class NSGA2TimetableOptimizer {
     for (const front of this.fastNonDominatedSort(population)) this.assignCrowding(front)
     this.stats.diversityHistory.push(populationDiversity(population.map((p) => p.slots)))
 
+    let bestSoFar = -Infinity
+    let stagnant = 0
     for (let g = 0; g < this.config.generations; g++) {
       const offspring: Individual[] = []
       while (offspring.length < n) {
@@ -537,19 +593,24 @@ export class NSGA2TimetableOptimizer {
       population = this.environmentalSelection(population.concat(offspring))
       const bestQuality = Math.max(...population.map((p) => this.qualityOf(p)))
       this.stats.bestQualityHistory.push(bestQuality)
-      this.stats.diversityHistory.push(populationDiversity(population.map((p) => p.slots)))
+      this.stats.generationsRun = g + 1
+
+      // Early stop once the best solution has not improved for `patience` generations
+      if (bestQuality > bestSoFar + 1e-6) {
+        bestSoFar = bestQuality
+        stagnant = 0
+      } else if (++stagnant >= this.config.patience) {
+        break
+      }
     }
+    this.stats.diversityHistory.push(populationDiversity(population.map((p) => p.slots)))
 
     // Final Pareto front: rank 0, least violation, unique objective vectors
     const minViolation = Math.min(...population.map((p) => p.violation))
     const ranked = this.fastNonDominatedSort(population.filter((p) => p.violation === minViolation))
-    let front = ranked[0] || []
-    this.assignCrowding(front)
-    if (front.length > this.config.maxFrontSize) {
-      const anchor = front.reduce((best, ind) => (this.qualityOf(ind) > this.qualityOf(best) ? ind : best))
-      const kept = front.filter((ind) => ind !== anchor).sort((a, b) => b.crowding - a.crowding).slice(0, this.config.maxFrontSize - 1)
-      front = [anchor, ...kept]
-    }
+    const fullFront = ranked[0] || []
+    this.stats.fullFrontSize = fullFront.length
+    const front = this.pickOffered(fullFront)
 
     const solutions: ParetoSolution[] = front.map((ind) => {
       const objectives = Object.fromEntries(OBJECTIVE_KEYS.map((key, i) => [key, ind.objectives[i]])) as unknown as ObjectiveVector

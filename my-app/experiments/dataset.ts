@@ -57,101 +57,196 @@ export const DEPARTMENTS = [
 
 export const DEPARTMENT_ADMIN_PASSWORD = "Dept@123"
 
-const weekdays = (start: number, end: number, days = [0, 1, 2, 3, 4]) => days.map((day) => ({ day, start, end }))
+// ---------------------------------------------------------------------------
+// Curriculum: 20 sections, each with 5 theory subjects (4 periods/week) and 3 labs
+// (3 continuous periods) = 29 periods/week per section.
+//   - 4 theory subjects + 3 labs from the section's own department
+//   - 1 theory subject from Basic Sciences & Humanities (BSH), shared by every department
+// ---------------------------------------------------------------------------
 
-export const FACULTY: DatasetFaculty[] = [
-  { code: "CSE-F01", name: "Dr. K. Srinivasa Rao", dept: "CSE", phone: "9848000101" },
-  { code: "CSE-F02", name: "Dr. P. Lakshmi", dept: "CSE", phone: "9848000102", availability: [...weekdays(1, 8, [0, 1, 2, 3]), { day: 5, start: 1, end: 4 }] },
-  { code: "CSE-F03", name: "Mr. V. Ramesh", dept: "CSE", phone: "9848000103" },
-  { code: "CSE-F04", name: "Ms. S. Anusha", dept: "CSE", phone: "9848000104" },
-  { code: "CSE-F05", name: "Dr. M. Venkatesh", dept: "CSE", phone: "9848000105" },
-  { code: "CSE-F06", name: "Mr. T. Kiran Kumar", dept: "CSE", phone: "9848000106" },
-  { code: "CSE-F07", name: "Ms. R. Divya", dept: "CSE", phone: "9848000107" },
-  { code: "CSE-F08", name: "Dr. G. Sudhakar", dept: "CSE", phone: "9848000108" },
-  { code: "IT-F01", name: "Dr. B. Suresh", dept: "IT", phone: "9848000201" },
-  { code: "IT-F02", name: "Ms. N. Swathi", dept: "IT", phone: "9848000202" },
-  { code: "IT-F03", name: "Mr. Ch. Praveen", dept: "IT", phone: "9848000203" },
-  { code: "IT-F04", name: "Ms. K. Bhavani", dept: "IT", phone: "9848000204" },
-  { code: "IT-F05", name: "Mr. A. Naresh", dept: "IT", phone: "9848000205" },
-  { code: "ECE-F01", name: "Dr. Y. Rajasekhar", dept: "ECE", phone: "9848000301" },
-  { code: "ECE-F02", name: "Ms. P. Hemalatha", dept: "ECE", phone: "9848000302" },
-  { code: "ECE-F03", name: "Mr. D. Satish", dept: "ECE", phone: "9848000303" },
-  { code: "ECE-F04", name: "Ms. L. Madhuri", dept: "ECE", phone: "9848000304", availability: [0, 1, 2, 3, 4, 5].map((day) => ({ day, start: 1, end: 4 })) },
-  { code: "ECE-F05", name: "Mr. J. Vamsi", dept: "ECE", phone: "9848000305" },
-  { code: "BSH-M01", name: "Dr. S. Ravi Kumar (Mathematics)", dept: "BSH", phone: "9848000401", availability: weekdays(1, 6) },
-  { code: "BSH-M02", name: "Dr. A. Padmaja (Mathematics)", dept: "BSH", phone: "9848000402" },
-  { code: "BSH-E01", name: "Ms. M. Sravani (English)", dept: "BSH", phone: "9848000403" },
-  { code: "BSH-E02", name: "Mr. R. Prasad (English)", dept: "BSH", phone: "9848000404" },
+export const THEORY_PERIODS = 4
+export const LAB_PERIODS = 3
+/** Weekly teaching load cap per faculty member used to size the faculty pool */
+export const MAX_FACULTY_LOAD = 18
+
+const CURRICULUM: Record<string, Record<number, { theory: [string, string][]; labs: [string, string][] }>> = {
+  CSE: {
+    2: {
+      theory: [["CS201", "Data Structures"], ["CS202", "Object Oriented Programming"], ["CS203", "Database Management Systems"], ["CS204", "Computer Organization"]],
+      labs: [["CS201L", "Data Structures Lab"], ["CS202L", "OOP (Java) Lab"], ["CS203L", "DBMS Lab"]],
+    },
+    3: {
+      theory: [["CS301", "Operating Systems"], ["CS302", "Computer Networks"], ["CS303", "Software Engineering"], ["CS304", "Theory of Computation"]],
+      labs: [["CS301L", "Operating Systems Lab"], ["CS302L", "Networks Lab"], ["CS303L", "Software Engineering Lab"]],
+    },
+  },
+  IT: {
+    2: {
+      theory: [["IT201", "Data Structures & Algorithms"], ["IT202", "Web Technologies"], ["IT203", "Database Systems"], ["IT204", "Discrete Mathematics"]],
+      labs: [["IT201L", "DSA Lab"], ["IT202L", "Web Technologies Lab"], ["IT203L", "Database Lab"]],
+    },
+    3: {
+      theory: [["IT301", "Cloud Computing"], ["IT302", "Information Security"], ["IT303", "Data Mining"], ["IT304", "Mobile Computing"]],
+      labs: [["IT301L", "Cloud Lab"], ["IT302L", "Security Lab"], ["IT303L", "Data Mining Lab"]],
+    },
+  },
+  ECE: {
+    2: {
+      theory: [["EC201", "Electronic Devices & Circuits"], ["EC202", "Signals & Systems"], ["EC203", "Digital Logic Design"], ["EC204", "Network Analysis"]],
+      labs: [["EC201L", "EDC Lab"], ["EC202L", "Signals Lab"], ["EC203L", "Digital Logic Lab"]],
+    },
+    3: {
+      theory: [["EC301", "Analog Communications"], ["EC302", "Microprocessors"], ["EC303", "Control Systems"], ["EC304", "Linear IC Applications"]],
+      labs: [["EC301L", "Communications Lab"], ["EC302L", "Microprocessors Lab"], ["EC303L", "LIC Lab"]],
+    },
+  },
+}
+const BSH_THEORY: Record<number, [string, string]> = {
+  2: ["MA201", "Probability & Statistics"],
+  3: ["HS301", "Managerial Economics"],
+}
+/** Sections per department and year */
+const SECTION_PLAN: { dept: string; year: number; count: number }[] = [
+  { dept: "CSE", year: 2, count: 4 },
+  { dept: "CSE", year: 3, count: 4 },
+  { dept: "IT", year: 2, count: 3 },
+  { dept: "IT", year: 3, count: 3 },
+  { dept: "ECE", year: 2, count: 3 },
+  { dept: "ECE", year: 3, count: 3 },
 ]
 
 export const SUBJECTS: DatasetSubject[] = [
-  // BSH subjects taught to every department
-  { code: "MA201", name: "Probability & Statistics", dept: "BSH", type: "theory", periods: 4 },
-  { code: "HS201", name: "Professional Communication", dept: "BSH", type: "theory", periods: 2 },
-  // CSE
-  { code: "CS201", name: "Data Structures", dept: "CSE", type: "theory", periods: 4 },
-  { code: "CS202", name: "Object Oriented Programming (Java)", dept: "CSE", type: "theory", periods: 4 },
-  { code: "CS203", name: "Database Management Systems", dept: "CSE", type: "theory", periods: 4 },
-  { code: "CS204", name: "Computer Organization", dept: "CSE", type: "theory", periods: 3 },
-  { code: "CS201L", name: "Data Structures Lab", dept: "CSE", type: "lab", periods: 3 },
-  { code: "CS202L", name: "Java Programming Lab", dept: "CSE", type: "lab", periods: 3 },
-  { code: "CS301", name: "Operating Systems", dept: "CSE", type: "theory", periods: 4 },
-  { code: "CS302", name: "Computer Networks", dept: "CSE", type: "theory", periods: 4 },
-  { code: "CS303", name: "Software Engineering", dept: "CSE", type: "theory", periods: 3 },
-  { code: "CS304", name: "Theory of Computation", dept: "CSE", type: "theory", periods: 4 },
-  { code: "CS301L", name: "Operating Systems Lab", dept: "CSE", type: "lab", periods: 3 },
-  { code: "CS302L", name: "Networks Lab", dept: "CSE", type: "lab", periods: 3 },
-  // IT
-  { code: "IT201", name: "Data Structures & Algorithms", dept: "IT", type: "theory", periods: 4 },
-  { code: "IT202", name: "Web Technologies", dept: "IT", type: "theory", periods: 4 },
-  { code: "IT203", name: "Database Systems", dept: "IT", type: "theory", periods: 4 },
-  { code: "IT201L", name: "DSA Lab", dept: "IT", type: "lab", periods: 3 },
-  { code: "IT202L", name: "Web Technologies Lab", dept: "IT", type: "lab", periods: 3 },
-  { code: "IT301", name: "Cloud Computing", dept: "IT", type: "theory", periods: 4 },
-  { code: "IT302", name: "Information Security", dept: "IT", type: "theory", periods: 4 },
-  { code: "IT303", name: "Data Mining", dept: "IT", type: "theory", periods: 3 },
-  { code: "IT301L", name: "Cloud Lab", dept: "IT", type: "lab", periods: 3 },
-  // ECE
-  { code: "EC201", name: "Electronic Devices & Circuits", dept: "ECE", type: "theory", periods: 4 },
-  { code: "EC202", name: "Signals & Systems", dept: "ECE", type: "theory", periods: 4 },
-  { code: "EC203", name: "Digital Logic Design", dept: "ECE", type: "theory", periods: 4 },
-  { code: "EC201L", name: "EDC Lab", dept: "ECE", type: "lab", periods: 3 },
-  { code: "EC203L", name: "Digital Logic Lab", dept: "ECE", type: "lab", periods: 3 },
-  { code: "EC301", name: "Analog Communications", dept: "ECE", type: "theory", periods: 4 },
-  { code: "EC302", name: "Microprocessors", dept: "ECE", type: "theory", periods: 4 },
-  { code: "EC303", name: "Control Systems", dept: "ECE", type: "theory", periods: 3 },
-  { code: "EC302L", name: "Microprocessors Lab", dept: "ECE", type: "lab", periods: 3 },
+  ...Object.values(BSH_THEORY).map(([code, name]) => ({ code, name, dept: "BSH", type: "theory" as const, periods: THEORY_PERIODS })),
+  ...Object.entries(CURRICULUM).flatMap(([dept, years]) =>
+    Object.values(years).flatMap(({ theory, labs }) => [
+      ...theory.map(([code, name]) => ({ code, name, dept, type: "theory" as const, periods: THEORY_PERIODS })),
+      ...labs.map(([code, name]) => ({ code, name, dept, type: "lab" as const, periods: LAB_PERIODS })),
+    ]),
+  ),
 ]
 
-export const SECTIONS: DatasetSection[] = [
-  // CSE (5 sections)
-  { name: "CSE-2A", dept: "CSE", year: 2, students: 62, courses: { CS201: "CSE-F01", CS202: "CSE-F02", CS203: "CSE-F03", CS204: "CSE-F04", CS201L: "CSE-F01", CS202L: "CSE-F02", MA201: "BSH-M01", HS201: "BSH-E01" } },
-  { name: "CSE-2B", dept: "CSE", year: 2, students: 60, courses: { CS201: "CSE-F05", CS202: "CSE-F06", CS203: "CSE-F03", CS204: "CSE-F04", CS201L: "CSE-F05", CS202L: "CSE-F06", MA201: "BSH-M01", HS201: "BSH-E01" } },
-  { name: "CSE-2C", dept: "CSE", year: 2, students: 58, courses: { CS201: "CSE-F01", CS202: "CSE-F06", CS203: "CSE-F07", CS204: "CSE-F08", CS201L: "CSE-F07", CS202L: "CSE-F06", MA201: "BSH-M02", HS201: "BSH-E02" } },
-  { name: "CSE-3A", dept: "CSE", year: 3, students: 61, courses: { CS301: "CSE-F07", CS302: "CSE-F08", CS303: "CSE-F02", CS304: "CSE-F05", CS301L: "CSE-F07", CS302L: "CSE-F08" } },
-  { name: "CSE-3B", dept: "CSE", year: 3, students: 59, courses: { CS301: "CSE-F03", CS302: "CSE-F08", CS303: "CSE-F04", CS304: "CSE-F05", CS301L: "CSE-F03", CS302L: "CSE-F04" } },
-  // IT (3 sections)
-  { name: "IT-2A", dept: "IT", year: 2, students: 60, courses: { IT201: "IT-F01", IT202: "IT-F02", IT203: "IT-F03", IT201L: "IT-F01", IT202L: "IT-F02", MA201: "BSH-M01", HS201: "BSH-E01" } },
-  { name: "IT-2B", dept: "IT", year: 2, students: 58, courses: { IT201: "IT-F04", IT202: "IT-F02", IT203: "IT-F03", IT201L: "IT-F04", IT202L: "IT-F05", MA201: "BSH-M02", HS201: "BSH-E02" } },
-  { name: "IT-3A", dept: "IT", year: 3, students: 57, courses: { IT301: "IT-F05", IT302: "IT-F01", IT303: "IT-F04", IT301L: "IT-F05" } },
-  // ECE (3 sections)
-  { name: "ECE-2A", dept: "ECE", year: 2, students: 63, courses: { EC201: "ECE-F01", EC202: "ECE-F02", EC203: "ECE-F03", EC201L: "ECE-F01", EC203L: "ECE-F03", MA201: "BSH-M02", HS201: "BSH-E02" } },
-  { name: "ECE-2B", dept: "ECE", year: 2, students: 60, courses: { EC201: "ECE-F05", EC202: "ECE-F02", EC203: "ECE-F04", EC201L: "ECE-F05", EC203L: "ECE-F03", MA201: "BSH-M01", HS201: "BSH-E02" } },
-  { name: "ECE-3A", dept: "ECE", year: 3, students: 56, courses: { EC301: "ECE-F01", EC302: "ECE-F04", EC303: "ECE-F05", EC302L: "ECE-F02" } },
-]
+interface Demand {
+  section: string
+  subject: string
+  owner: string
+  periods: number
+  /** Theory subject a lab belongs to (lab i <-> theory i), so the same teacher can take both */
+  pairedTheory?: string
+}
 
+const sectionDemand: { name: string; dept: string; year: number; students: number; demand: Demand[] }[] = []
+for (const plan of SECTION_PLAN) {
+  for (let i = 0; i < plan.count; i++) {
+    const name = `${plan.dept}-${plan.year}${String.fromCharCode(65 + i)}`
+    const { theory, labs } = CURRICULUM[plan.dept][plan.year]
+    const demand: Demand[] = [
+      ...theory.map(([code]) => ({ section: name, subject: code, owner: plan.dept, periods: THEORY_PERIODS })),
+      { section: name, subject: BSH_THEORY[plan.year][0], owner: "BSH", periods: THEORY_PERIODS },
+      ...labs.map(([code], k) => ({ section: name, subject: code, owner: plan.dept, periods: LAB_PERIODS, pairedTheory: theory[k][0] })),
+    ]
+    // Section sizes 55-65, deterministic
+    const students = 55 + ((sectionDemand.length * 7 + 3) % 11)
+    sectionDemand.push({ name, dept: plan.dept, year: plan.year, students, demand })
+  }
+}
+
+/**
+ * Faculty pool sized from demand: each department gets ceil(total periods / MAX_FACULTY_LOAD)
+ * faculty, then courses are packed onto the least-loaded member (longest first), preferring
+ * someone who already teaches the subject and giving each lab to the teacher of its theory.
+ * Everyone ends up within a period or two of the average load, so no faculty member idles.
+ */
+function assignFaculty() {
+  const faculty: DatasetFaculty[] = []
+  const teacher = new Map<string, string>() // section|subject -> faculty code
+  const load = new Map<string, number>()
+  const subjectsOf = new Map<string, Set<string>>()
+
+  const owners = ["BSH", ...Object.keys(CURRICULUM)]
+  for (const owner of owners) {
+    const courses = sectionDemand.flatMap((s) => s.demand).filter((d) => d.owner === owner)
+    const total = courses.reduce((sum, d) => sum + d.periods, 0)
+    const count = Math.ceil(total / MAX_FACULTY_LOAD)
+    const pool: string[] = []
+    for (let i = 1; i <= count; i++) {
+      const code = `${owner}-F${String(i).padStart(2, "0")}`
+      faculty.push({ code, name: `${owner} Faculty ${i}`, dept: owner, phone: `98480${String(faculty.length + 1).padStart(5, "0")}` })
+      pool.push(code)
+      load.set(code, 0)
+      subjectsOf.set(code, new Set())
+    }
+
+    // Theory first (larger items), labs after so they can follow their theory teacher
+    const ordered = courses.slice().sort((a, b) => b.periods - a.periods || a.subject.localeCompare(b.subject) || a.section.localeCompare(b.section))
+    // Pack against the department's average load first; the hard cap is only a fallback
+    const target = Math.ceil(total / count)
+    for (const d of ordered) {
+      const fits = (cap: number) => (f: string) => load.get(f)! + d.periods <= cap
+      const leastLoaded = (candidates: string[], cap: number) =>
+        candidates.filter(fits(cap)).sort((a, b) => load.get(a)! - load.get(b)! || a.localeCompare(b))[0]
+      let chosen: string | undefined
+      for (const cap of [target, MAX_FACULTY_LOAD]) {
+        if (d.pairedTheory) {
+          const theoryTeacher = teacher.get(`${d.section}|${d.pairedTheory}`)
+          if (theoryTeacher && fits(cap)(theoryTeacher)) chosen = theoryTeacher
+        }
+        chosen ??= leastLoaded(pool.filter((f) => subjectsOf.get(f)!.has(d.subject)), cap)
+        chosen ??= leastLoaded(pool, cap)
+        if (chosen) break
+      }
+      if (!chosen) throw new Error(`No faculty capacity left for ${d.section} ${d.subject}`)
+      teacher.set(`${d.section}|${d.subject}`, chosen)
+      load.set(chosen, load.get(chosen)! + d.periods)
+      subjectsOf.get(chosen)!.add(d.subject)
+    }
+  }
+
+  // A few realistic restrictions: one member per department is off one weekday
+  const restricted: [string, number][] = [["CSE-F03", 2], ["IT-F02", 4], ["ECE-F04", 0], ["BSH-F01", 5]]
+  for (const [code, dayOff] of restricted) {
+    const f = faculty.find((x) => x.code === code)
+    if (f) f.availability = [0, 1, 2, 3, 4, 5].filter((d) => d !== dayOff).map((day) => ({ day, start: 1, end: day === 5 ? 4 : 8 }))
+  }
+  return { faculty, teacher, load }
+}
+
+const assignment = assignFaculty()
+
+export const FACULTY: DatasetFaculty[] = assignment.faculty
+
+/** Weekly load per faculty member (periods) - used for utilization reporting */
+export const FACULTY_LOAD: Map<string, number> = assignment.load
+
+export const SECTIONS: DatasetSection[] = sectionDemand.map((s) => ({
+  name: s.name,
+  dept: s.dept,
+  year: s.year,
+  students: s.students,
+  courses: Object.fromEntries(s.demand.map((d) => [d.subject, assignment.teacher.get(`${s.name}|${d.subject}`)!])),
+}))
+
+// Rooms sized for the demand: 20 x 20 theory periods over 44 usable periods/room -> 12 rooms
+// (~76% use); 60 labs over 11 lab blocks/room/week -> 8 lab rooms (~68% use)
 export const ROOMS: DatasetRoom[] = [
-  { name: "TH-101", type: "theory", capacity: 66, building: "Main Block" },
-  { name: "TH-102", type: "theory", capacity: 66, building: "Main Block" },
-  { name: "TH-103", type: "theory", capacity: 70, building: "Main Block" },
-  { name: "TH-201", type: "theory", capacity: 66, building: "CSE Block" },
-  { name: "TH-202", type: "theory", capacity: 66, building: "CSE Block" },
-  { name: "TH-301", type: "theory", capacity: 70, building: "IT Block" },
-  { name: "TH-401", type: "theory", capacity: 66, building: "ECE Block" },
-  { name: "LAB-CSE-1", type: "lab", capacity: 60, building: "CSE Block" },
-  { name: "LAB-CSE-2", type: "lab", capacity: 60, building: "CSE Block" },
-  { name: "LAB-IT-1", type: "lab", capacity: 60, building: "IT Block" },
-  { name: "LAB-ECE-1", type: "lab", capacity: 60, building: "ECE Block" },
+  ...Array.from({ length: 12 }, (_, i) => ({
+    name: `TH-${100 * (1 + Math.floor(i / 4)) + (i % 4) + 1}`,
+    type: "theory" as const,
+    capacity: i % 3 === 0 ? 72 : 66,
+    building: ["Main Block", "CSE Block", "ECE Block"][Math.floor(i / 4)],
+  })),
+  ...Array.from({ length: 8 }, (_, i) => ({
+    name: `LAB-${["CSE", "CSE", "CSE", "IT", "IT", "ECE", "ECE", "COMMON"][i]}-${i + 1}`,
+    type: "lab" as const,
+    capacity: 66,
+    building: ["CSE Block", "CSE Block", "CSE Block", "IT Block", "IT Block", "ECE Block", "ECE Block", "Main Block"][i],
+  })),
+]
+
+const loads = [...FACULTY_LOAD.values()]
+export const DATASET_NOTES = [
+  `${SECTIONS.length} sections x (5 theory x ${THEORY_PERIODS} + 3 labs x ${LAB_PERIODS} periods) = 29 periods/week each`,
+  `${FACULTY.length} faculty sized at <= ${MAX_FACULTY_LOAD} periods/week: load ${Math.min(...loads)}-${Math.max(...loads)} periods, mean utilization ${((loads.reduce((a, b) => a + b, 0) / loads.length / MAX_FACULTY_LOAD) * 100).toFixed(1)}%`,
+  `${ROOMS.filter((r) => r.type === "theory").length} theory rooms + ${ROOMS.filter((r) => r.type === "lab").length} lab rooms shared by all departments`,
 ]
 
 export interface Dataset {
@@ -171,7 +266,7 @@ export interface Dataset {
 
 export const SRKR_DATASET: Dataset = {
   key: "srkr",
-  title: "SRKR sample college (hand-built)",
+  title: "SRKR sample college (20 sections, 5 theory + 3 labs each)",
   college: COLLEGE,
   departments: DEPARTMENTS,
   departmentAdminPassword: DEPARTMENT_ADMIN_PASSWORD,
@@ -180,4 +275,5 @@ export const SRKR_DATASET: Dataset = {
   sections: SECTIONS,
   rooms: ROOMS,
   scheduleOrder: ["CSE", "IT", "ECE"],
+  notes: DATASET_NOTES,
 }

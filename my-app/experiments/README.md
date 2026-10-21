@@ -34,14 +34,17 @@ lunch, so use the solver for reportable numbers.
 
 What the script does:
 
-1. For CSE, IT and ECE in turn, run the baseline and the enhanced pipeline `RUNS` times
+1. For each department in turn (CSE, IT, ECE for the 20-section SRKR college), run the
+   baseline and the enhanced pipeline `RUNS` times
    each on all of the department's sections, against the timetables already published by
    the departments before it.
 2. Publish the best enhanced CSE run, then IT, then ECE, and check that the combined
    college timetable has no faculty, room or section double bookings.
-3. Put the busiest CSE faculty member on leave for their busiest day and measure
+3. Put the first department's busiest faculty member on leave for their busiest day and measure
    incremental rescheduling against a full regeneration.
 
-`dataset.ts` is the sample college. `npm run experiment:sql` regenerates
+`dataset.ts` is the sample college: 20 sections x (5 theory x 4 periods + 3 labs x 3
+continuous periods), with the faculty pool sized from demand at <= 18 periods/week and
+courses packed so every faculty member carries 15-18 periods. `npm run experiment:sql` regenerates
 `scripts/022_sample_college_hierarchy.sql` from it, so the database seed and the
 experiment describe the same college.

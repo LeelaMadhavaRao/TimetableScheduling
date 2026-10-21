@@ -49,12 +49,12 @@ budget (`COMPARISON_BUDGET` in `_shared/pipeline.ts`).
 
 | Stage | Before enhancement (`baseline`) | After enhancement (`enhanced`) |
 |---|---|---|
-| Base | One CP-SAT lab solve + 15-strategy greedy theory (original code) | **Relaxed-ILP diversification**: standard solution + N randomized-objective CP-SAT solutions with Hamming-distance exclusion constraints (`/solve-labs-diverse`, τ = 0.3), each paired with a different theory ordering; infeasible seeds are dropped |
+| Base | One CP-SAT lab solve + 15-strategy greedy theory (original code) | **Relaxed-ILP diversification**: 4 CP-SAT solutions in one request - solution 0 with the standard capacity-waste objective (proved optimal), then randomized objectives with Hamming-distance exclusion constraints (τ = 0.3), warm-started from the previous solution and time-limited to 2× the first solve; each paired with a different theory ordering; infeasible seeds are dropped |
 | Population | Base timetable + random 10% swaps | The diversified seeds, topped up with feasible block mutations |
 | Crossover | Slot-level, invalid genes rejected | **SCPX**: exchanges a section's coordinate group (its blocks on every day); faculty/room clashes revert the group → offspring always feasible, no repair |
-| Mutation | Random slot move, checks overlaps only | Constraint-safe block mutation: day-block swap, ±1 period / adjacent-day shift, objective-directed relocation; every move validated on a `FeasibilityGrid` (overlaps, availability, occupancy, 2 periods/day, lunch, Saturday, room type/capacity) |
-| Selection | Weighted-sum fitness, tournament, elitism | **NSGA-II**: constrained non-dominated sorting + crowding distance over five objectives; the best-Q solution is always retained |
-| Output | One timetable | Pareto front (≤ 12 alternatives); the department admin can switch to any of them before publishing |
+| Mutation | Random slot move, checks overlaps only | Constraint-safe block mutation: day-block swap, ±1 period / adjacent-day shift, objective-directed relocation. Candidates are first screened with cheap array lookups (section/faculty free, availability, occupancy, 2 periods/day) and only survivors get a room search, so ~1 attempt per accepted move |
+| Selection | Weighted-sum fitness, tournament, elitism | **NSGA-II**: constrained non-dominated sorting + crowding distance over five objectives; the best-Q solution is always retained; stops early after 8 generations without improvement |
+| Output | One timetable | The **best 3** timetables of the Pareto front: the best weighted-quality one plus the two that add the most hypervolume; the department admin can switch between them before publishing |
 | Disruptions | Full regeneration | **Incremental rescheduling**: lock every unaffected slot, re-place only the disrupted periods, local refinement |
 
 **Design note on SCPX.** The paper exchanges single `Block(d, s)` day-blocks. That
@@ -86,24 +86,28 @@ shown side by side with CSV/JSON export:
 
 ## Measured results
 
-`npm run experiment` replays the comparison offline on the sample college
-(`experiments/dataset.ts`) with the real CP-SAT solver. See
-[`experiments/results/comparison-srkr.md`](../experiments/results/comparison-srkr.md) for the full
-table. Five runs per mode, CSE published first, then IT and ECE scheduled around it:
+`npm run experiment` replays the comparison offline with the real CP-SAT solver (5 runs per
+mode; each department generates around the timetables the previous ones published).
+
+**SRKR sample college** - 20 sections, each with 5 theory subjects (4 periods/week) and
+3 labs (3 continuous periods); 35 faculty sized from demand at <= 18 periods/week (load
+15-18, mean utilization 92%); 12 theory rooms and 8 labs shared by CSE (8 sections), IT (6)
+and ECE (6). Full table: [`experiments/results/comparison-srkr.md`](../experiments/results/comparison-srkr.md).
 
 | | CSE | IT | ECE |
 |---|---|---|---|
-| Weighted quality Q (before → after) | 0.881 → 0.896 | 0.788 → 0.850 | 0.776 → 0.818 |
-| Hypervolume (before → after) | 0.434 → 0.559 | 0.153 → 0.380 | 0.103 → 0.275 |
-| Constraint preservation | 95.4% → 100% | 58.0% → 100% | 97.1% → 100% |
-| Hard violations (mean) | 0 → 0 | 1.0 → 0 | 0 → 0 |
-| Initial diversity (PIE) | 0.19 → 0.84 | ≈0.16 → 0.80 | ≈0.12 → 0.85 |
-| Runtime (base + GA, ms) | 250 → 1035 | 92 → 432 | 87 → 468 |
+| Weighted quality Q (before → after) | 0.838 → 0.874 | 0.854 → 0.863 | 0.801 → 0.834 |
+| Hypervolume (before → after) | 0.281 → 0.427 | 0.340 → 0.409 | 0.155 → 0.258 |
+| Constraint preservation | 94.6% → 100% | 69.2% → 100% | 61.5% → 100% |
+| Hard violations (mean) | 0.2 → 0 | 1.2 → 0 | 1.2 → 0 |
+| Initial diversity (PIE) | 0.14 → 0.76 | 0.12 → 0.79 | 0.11 → 0.77 |
+| Mutation attempts per accepted move | 8.4 → 1.0 | 9.2 → 1.2 | 11.2 → 1.7 |
+| Optimization time (ms) | 144 → 100 | 99 → 87 | 96 → 154 |
+| Base stage time (ms) | 1167 → 2419 | 505 → 1035 | 378 → 869 |
 
-Across the three published timetables there were 0 faculty, room or section double
-bookings. Incremental rescheduling (one faculty member on leave for a day) re-placed
-every affected period in about 8 ms, against roughly 1 s for a full enhanced
-regeneration, touching 3.4% of the timetable.
+The three published timetables together have 0 faculty, room or section double bookings.
+Incremental rescheduling (one faculty member on leave for a day) re-placed every affected
+period in about 7 ms, against about 2.5 s for a full enhanced regeneration.
 
 **Kaggle-derived college** (`DATASET=kaggle npm run experiment`, results in
 [`experiments/results/comparison-kaggle.md`](../experiments/results/comparison-kaggle.md)).
@@ -115,16 +119,17 @@ because neither dataset contains them:
 
 | | KC2 | KC57 | KC346 |
 |---|---|---|---|
-| Weighted quality Q (before -> after) | 0.819 -> 0.862 | 0.809 -> 0.871 | 0.715 -> 0.743 |
-| Hypervolume (before -> after) | 0.189 -> 0.364 | 0.141 -> 0.469 | 0.034 -> 0.101 |
-| Constraint preservation | 97.5% -> 100% | 97.9% -> 100% | 99.1% -> 100% |
+| Weighted quality Q (before → after) | 0.818 → 0.864 | 0.837 → 0.852 | 0.719 → 0.738 |
+| Hypervolume (before → after) | 0.187 → 0.370 | 0.260 → 0.390 | 0.045 → 0.098 |
+| Constraint preservation | 96.9% → 100% | 96.4% → 100% | 96.9% → 100% |
+| Mutation attempts per accepted move | 2.5 → 1.1 | 4.2 → 1.9 | 11.6 → 4.3 |
 
-Again 0 college-wide double bookings, and rescheduling a day of leave took 5 ms versus
-about 460 ms for full regeneration.
-
-The baseline is faster and needs fewer attempts per accepted mutation. The enhanced
-pipeline spends that time on seeding and Pareto search. These are this dataset's
-numbers; the paper's tables should be replaced with values measured on your own data.
+**Runtime.** The optimization stage now costs about the same as the baseline GA (early
+stopping, diversity measured only at the start and end). The base stage stays about 2×
+the baseline because Relaxed-ILP computes 4 distinct ILP solutions where the baseline
+computes one; each solve is already 0.1-0.4 s. Removing that cost would mean removing
+Enhancement 2. These are this dataset's numbers; the paper's tables should be replaced
+with values measured on your own data.
 
 ## Deployment checklist
 

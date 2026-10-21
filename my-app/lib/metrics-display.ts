@@ -41,10 +41,12 @@ export const METRICS: MetricDefinition[] = [
 
   { key: "hv", group: "Multi-objective", label: "Hypervolume (solutions offered)", description: "Objective-space volume dominated by the timetables handed to the administrator", higherIsBetter: true, countsTowardVerdict: true, get: (m) => m.process?.hypervolume, format: fixed(4) },
   { key: "hvPop", group: "Multi-objective", label: "Hypervolume (final population)", description: "Volume dominated by the non-dominated members of the final population", higherIsBetter: true, countsTowardVerdict: true, get: (m) => m.process?.populationHypervolume, format: fixed(4) },
-  { key: "front", group: "Multi-objective", label: "Pareto alternatives offered", description: "Non-dominated timetables the administrator can choose from", higherIsBetter: true, countsTowardVerdict: true, get: (m) => m.process?.paretoFrontSize, format: fixed(0) },
+  { key: "front", group: "Multi-objective", label: "Best timetables offered", description: "Non-dominated timetables the administrator can choose from (the enhanced run offers the best 3 by hypervolume contribution)", higherIsBetter: true, countsTowardVerdict: true, get: (m) => m.process?.paretoFrontSize, format: fixed(0) },
+  { key: "fullFront", group: "Multi-objective", label: "Non-dominated solutions found", description: "Size of the final Pareto front before picking the offered timetables", higherIsBetter: true, countsTowardVerdict: false, get: (m) => m.process?.fullFrontSize, format: fixed(0) },
 
   { key: "baseTime", group: "Runtime", label: "ILP / seeding time", description: "Base stage wall-clock time", higherIsBetter: false, countsTowardVerdict: false, get: (_m, job) => job.base_generation_time, format: ms },
   { key: "optTime", group: "Runtime", label: "Optimization time", description: "GA / NSGA-II wall-clock time", higherIsBetter: false, countsTowardVerdict: false, get: (_m, job) => job.optimization_time, format: ms },
+  { key: "gens", group: "Runtime", label: "Generations run", description: "The enhanced search stops early once the best solution stops improving", higherIsBetter: false, countsTowardVerdict: false, get: (m) => m.process?.generationsRun, format: fixed(0) },
 ]
 
 export type Winner = "baseline" | "enhanced" | "tie" | null

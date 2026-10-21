@@ -35,7 +35,7 @@ import {
 export const COMPARISON_BUDGET = { populationSize: 20, generations: 30 }
 
 /** Relaxed-ILP diversification settings (tau = 0.3 as tuned in the paper) */
-export const DIVERSIFICATION = { seedCount: 6, minHamming: 0.3, rngSeed: 7 }
+export const DIVERSIFICATION = { seedCount: 4, minHamming: 0.3, rngSeed: 7 }
 
 export interface BaseStageResult {
   slots: TimetableSlot[]
@@ -115,7 +115,13 @@ export interface ProcessMetrics {
   /** HV of the non-dominated set of the final population */
   populationHypervolume: number
   paretoFrontSize: number
+  /** Non-dominated solutions found before picking the few offered to the administrator */
+  fullFrontSize: number
   frontSpread: number
+  /** Generations actually run (the enhanced search stops early when it stagnates) */
+  generationsRun: number
+  /** Candidate positions considered by mutation (cheap screening included) */
+  candidatesScreened: number
   optimizationTimeMs: number
 }
 
@@ -179,7 +185,10 @@ export function runOptimizeStage(
         hypervolume: hypervolume(returned),
         populationHypervolume: hypervolume(populationPoints),
         paretoFrontSize: 1,
+        fullFrontSize: populationPoints.length,
         frontSpread: 0,
+        generationsRun: budget.generations,
+        candidatesScreened: s.mutationAttempts,
         optimizationTimeMs: s.totalTimeMs,
       },
     }
@@ -213,7 +222,10 @@ export function runOptimizeStage(
       hypervolume: hypervolume(frontPoints),
       populationHypervolume: hypervolume(populationPoints),
       paretoFrontSize: front.length,
+      fullFrontSize: s.fullFrontSize,
       frontSpread: frontSpread(frontPoints),
+      generationsRun: s.generationsRun,
+      candidatesScreened: s.candidatesScreened,
       optimizationTimeMs: s.totalTimeMs,
     },
   }

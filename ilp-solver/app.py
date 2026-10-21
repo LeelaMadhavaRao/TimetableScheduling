@@ -93,7 +93,9 @@ class DiverseProblemData(ProblemData):
     # tau: minimum fraction of labs that must differ between any two returned solutions
     minHammingFraction: float = 0.3
     randomSeed: int = 7
-    timeLimitPerSolution: float = 6.0
+    timeLimitPerSolution: float = 3.0
+    # Solutions after the first only need to be good feasible seeds, not proven optimal
+    diverseTimeLimit: float = 0.25
 
 
 # Output Models
@@ -605,6 +607,7 @@ def solve_labs_diverse(data: DiverseProblemData):
     noise = {k: rng.random() for k in L}
     max_waste = max([max(0, rooms[k[3]].capacity - courses[k[0]].studentCount) for k in L] + [1])
     chosen_sets = []
+    first_solve_seconds = 0.0
     solutions = []
     weights_used = []
     status_name = "UNKNOWN"
@@ -626,11 +629,21 @@ def solve_labs_diverse(data: DiverseProblemData):
             terms.append(int(round(cost * 1000)) * var)
         model.Minimize(sum(terms))
 
-        solver = cp_model.CpSolver()
-        solver.parameters.max_time_in_seconds = data.timeLimitPerSolution
-        solver.parameters.random_seed = data.randomSeed + k
-        status = solver.Solve(model)
+        # Later solutions only need to be good feasible seeds: their limit scales with how long
+        # the standard solution took, and is doubled once if nothing was found in time
+        limit = data.timeLimitPerSolution if k == 0 else max(data.diverseTimeLimit, 2 * first_solve_seconds)
+        for _retry in range(2 if k > 0 else 1):
+            solver = cp_model.CpSolver()
+            solver.parameters.max_time_in_seconds = limit
+            solver.parameters.random_seed = data.randomSeed + k
+            solver.parameters.num_search_workers = 8
+            status = solver.Solve(model)
+            if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+                break
+            limit *= 2
         status_name = solver.StatusName(status)
+        if k == 0:
+            first_solve_seconds = solver.WallTime()
         if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
             print(f"[Diverse] solution {k}: {status_name} - stopping")
             break
@@ -645,7 +658,11 @@ def solve_labs_diverse(data: DiverseProblemData):
         ])
         # Exclusion constraint: at least delta labs must change in every later solution
         model.Add(sum(L[key] for key in chosen) <= len(courses) - delta)
-        print(f"[Diverse] solution {k}: {status_name}, weights={ {n: round(v, 2) for n, v in w.items()} }")
+        # Warm start the next solve from this solution: most labs can stay, delta of them must move
+        model.ClearHints()
+        for key in chosen:
+            model.AddHint(L[key], 1)
+        print(f"[Diverse] solution {k}: {status_name} in {solver.WallTime():.2f}s, weights={ {n: round(v, 2) for n, v in w.items()} }")
 
     pairwise = []
     for i in range(len(chosen_sets)):

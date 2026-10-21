@@ -63,10 +63,10 @@ const MODE_INFO: Record<AlgorithmMode, { title: string; subtitle: string; points
     title: "After Enhancement",
     subtitle: "Research-paper framework",
     points: [
-      "Relaxed-ILP: Top-N diverse lab schedules (Hamming ≥ τ = 0.3)",
+      "Relaxed-ILP: 4 diverse lab schedules (Hamming ≥ τ = 0.3)",
       "SCPX structural crossover - offspring always feasible",
-      "Constraint-safe block mutation, no repair step",
-      "NSGA-II over 5 objectives → Pareto front of alternatives",
+      "Feasibility-screened block mutation, early stopping",
+      "NSGA-II over 5 objectives → best 3 Pareto timetables",
     ],
   },
 }

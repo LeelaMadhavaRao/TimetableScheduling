@@ -167,6 +167,9 @@ export interface JobMetrics {
     hypervolume: number
     populationHypervolume: number
     paretoFrontSize: number
+    fullFrontSize?: number
+    generationsRun?: number
+    candidatesScreened?: number
     frontSpread: number
     optimizationTimeMs: number
   }

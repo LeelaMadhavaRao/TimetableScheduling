@@ -48,10 +48,11 @@ export function ParetoFront({ job, onSelected }: ParetoFrontProps) {
       <div>
         <h3 className="text-white font-semibold flex items-center gap-2">
           <GitBranch className="w-4 h-4 text-violet-400" />
-          Pareto front - {front.length} non-dominated timetables
+          Best {front.length} timetables from the Pareto front
         </h3>
         <p className="text-xs text-slate-400">
-          No alternative is better on every objective. Bold values are the best on the front. Selecting one replaces this run&apos;s timetable{job.is_published ? " (disabled: already published)" : ""}.
+          The best weighted-quality timetable plus the trade-offs that add the most hypervolume
+          {job.metrics?.process?.fullFrontSize ? ` (chosen from ${job.metrics.process.fullFrontSize} non-dominated solutions)` : ""}. None is better on every objective; bold values are the best here. Selecting one replaces this run&apos;s timetable{job.is_published ? " (disabled: already published)" : ""}.
         </p>
       </div>
       <div className="overflow-x-auto">

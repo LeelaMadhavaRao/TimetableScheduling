@@ -238,16 +238,14 @@ export class FeasibilityGrid {
     }
   }
 
-  /** True if `slot` can be added to the current grid without breaking any hard constraint */
-  canPlace(slot: TimetableSlot): boolean {
+  /**
+   * Room-independent part of canPlace (calendar rules, section and faculty free, faculty
+   * availability, other departments' occupancy, 2 periods/day). Cheap array lookups, used
+   * to screen candidate positions before any room search.
+   */
+  timeFree(slot: TimetableSlot): boolean {
     const course = this.ctx.courseByKey.get(courseKey(slot.sectionId, slot.subjectId))
     if (!respectsCalendarRules(slot, course?.yearLevel ?? 1)) return false
-
-    const room = this.ctx.rooms.get(slot.classroomId)
-    if (course && room) {
-      if (room.roomType !== course.subjectType) return false
-      if (room.capacity < Math.floor(course.studentCount * HARD_RULES.ROOM_CAPACITY_TOLERANCE)) return false
-    }
 
     if (course?.subjectType === "theory") {
       const used = this.subjectDay.get(courseKey(slot.sectionId, slot.subjectId))?.[slot.day] || 0
@@ -255,30 +253,51 @@ export class FeasibilityGrid {
     }
 
     const f = this.faculty.get(slot.facultyId)
-    const r = this.rooms.get(slot.classroomId)
     const s = this.sections.get(slot.sectionId)
     const facultyBusy = this.ctx.occupancy.facultyBusy.get(slot.facultyId)
-    const roomBusy = this.ctx.occupancy.roomBusy.get(slot.classroomId)
-
     for (let p = slot.startPeriod; p <= slot.endPeriod; p++) {
       const i = this.index(slot.day, p)
+      if ((f && f[i] > 0) || (s && s[i] > 0)) return false
       const key = slotKey(slot.day, p)
-      if ((f && f[i] > 0) || (r && r[i] > 0) || (s && s[i] > 0)) return false
-      if (facultyBusy?.has(key) || roomBusy?.has(key)) return false
+      if (facultyBusy?.has(key)) return false
       if (!isFacultyDeclaredAvailable(this.ctx, slot.facultyId, key)) return false
     }
     return true
   }
 
+  /** Room part of canPlace: right type, enough seats, free in this and other departments' timetables */
+  roomFree(slot: TimetableSlot): boolean {
+    const course = this.ctx.courseByKey.get(courseKey(slot.sectionId, slot.subjectId))
+    const room = this.ctx.rooms.get(slot.classroomId)
+    if (course && room) {
+      if (room.roomType !== course.subjectType) return false
+      if (room.capacity < Math.floor(course.studentCount * HARD_RULES.ROOM_CAPACITY_TOLERANCE)) return false
+    }
+    const r = this.rooms.get(slot.classroomId)
+    const roomBusy = this.ctx.occupancy.roomBusy.get(slot.classroomId)
+    for (let p = slot.startPeriod; p <= slot.endPeriod; p++) {
+      if (r && r[this.index(slot.day, p)] > 0) return false
+      if (roomBusy?.has(slotKey(slot.day, p))) return false
+    }
+    return true
+  }
+
+  /** True if `slot` can be added to the current grid without breaking any hard constraint */
+  canPlace(slot: TimetableSlot): boolean {
+    return this.timeFree(slot) && this.roomFree(slot)
+  }
+
   /** Free rooms of the right type/capacity for `slot` at its current time (current room first) */
   roomsFor(slot: TimetableSlot): string[] {
+    if (!this.timeFree(slot)) return []
     const course = this.ctx.courseByKey.get(courseKey(slot.sectionId, slot.subjectId))
     const result: string[] = []
+    // Current room first: keeps rooms stable and usually succeeds immediately
+    if (this.roomFree(slot)) result.push(slot.classroomId)
     for (const room of this.ctx.rooms.values()) {
-      if (course && room.roomType !== course.subjectType) continue
-      if (this.canPlace({ ...slot, classroomId: room.id })) result.push(room.id)
+      if (room.id === slot.classroomId || (course && room.roomType !== course.subjectType)) continue
+      if (this.roomFree({ ...slot, classroomId: room.id })) result.push(room.id)
     }
-    result.sort((a, b) => (a === slot.classroomId ? -1 : b === slot.classroomId ? 1 : 0))
     return result
   }
 }

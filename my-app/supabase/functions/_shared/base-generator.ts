@@ -2123,46 +2123,53 @@ export class ILPTimetableGenerator {
     const labVariants: { assignments: SolverLabAssignment[]; source: SeedTimetable["labSource"] }[] = []
     let solverMessage: string | null = null
 
+    this.resetToInitialState()
+    let result: any = null
     if (labCourses.length > 0) {
       try {
-        const result = await this.postSolver("/solve-labs-diverse", {
+        result = await this.postSolver("/solve-labs-diverse", {
           ...this.buildLabProblem(labCourses, labRooms),
           numSolutions: config.seedCount,
           minHammingFraction: config.minHamming,
           randomSeed: config.rngSeed,
+          timeLimitPerSolution: 3,
         })
-        if (result.success && Array.isArray(result.solutions)) {
-          for (const assignments of result.solutions) labVariants.push({ assignments, source: "ilp-diverse" })
-        }
-        solverMessage = result.message || null
-        console.log(`[Diversify] Relaxed ILP returned ${labVariants.length} distinct lab schedules`)
       } catch (error) {
         solverMessage = `Relaxed-ILP endpoint unavailable (${error instanceof Error ? error.message : String(error)})`
-        console.warn(`[Diversify] ${solverMessage} - falling back to single ILP + greedy variations`)
-        try {
-          const single = await this.postSolver("/solve-labs", this.buildLabProblem(labCourses, labRooms))
-          if (single.success) labVariants.push({ assignments: single.assignments, source: "ilp" })
-        } catch (singleError) {
-          console.warn(`[Diversify] Single ILP solve failed too: ${singleError instanceof Error ? singleError.message : String(singleError)}`)
-        }
+        console.warn(`[Diversify] ${solverMessage} - falling back to the standard solve + greedy variations`)
       }
     }
+    const solutions: SolverLabAssignment[][] = result?.success && Array.isArray(result.solutions) ? result.solutions : []
+    if (result) solverMessage = result.message || null
 
     const seeds: SeedTimetable[] = []
     const theoryStrategies = [1, 2, 3, 4, 5, 6, 7]
     const maxAttempts = config.seedCount * 3
     let variantIndex = 0
 
-    // Seed 0 is the standard-objective solution (exactly the baseline base timetable), so
-    // the diversified population always contains the point the baseline starts from
-    this.resetToInitialState()
-    const standard = await silently(() => this.generate())
+    // Seed 0 is the standard-objective solution: relaxed-ILP solution 0 minimizes the same
+    // capacity-waste objective as /solve-labs (and is solved to optimality), followed by the
+    // same 15-strategy greedy theory pass as the baseline. Without the endpoint, the
+    // baseline generator itself provides it.
+    let standard: TimetableSlot[]
+    if (solutions.length > 0 || labCourses.length === 0) {
+      this.resetToInitialState()
+      if (solutions[0]) this.applyLabAssignments(labCourses, solutions[0])
+      for (const lab of labCourses) if (!this.isCoursePlaced(lab)) this.scheduleLabCourse(lab)
+      await silently(() => this.runTheoryAttempts(theoryCourses, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], rng))
+      standard = [...this.timetable]
+    } else {
+      this.resetToInitialState()
+      standard = await silently(() => this.generate())
+    }
     seeds.push({
       slots: [...standard],
       periodsScheduled: Math.min(requiredPeriods, standard.reduce((sum, s) => sum + (s.endPeriod - s.startPeriod + 1), 0)),
       labSource: "ilp-standard",
-      theoryStrategy: 0,
+      theoryStrategy: 1,
     })
+    for (const assignments of solutions.slice(1)) labVariants.push({ assignments, source: "ilp-diverse" })
+    console.log(`[Diversify] Relaxed ILP returned ${solutions.length} distinct lab schedules`)
 
     await silently(() => {
       for (let attempt = 0; attempt < maxAttempts && seeds.length < config.seedCount; attempt++) {

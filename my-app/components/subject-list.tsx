@@ -24,6 +24,8 @@ interface SubjectListProps {
 
 export function SubjectList({ subjects: initialSubjects, departments, faculty }: SubjectListProps) {
   const [subjects, setSubjects] = useState(initialSubjects)
+  // Pick up rows added/edited elsewhere when the server re-renders (router.refresh)
+  useEffect(() => setSubjects(initialSubjects), [initialSubjects])
   const [searchQuery, setSearchQuery] = useState("")
   const router = useRouter()
 

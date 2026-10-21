@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -85,6 +85,8 @@ export function GenerateTimetable({ sections }: { sections: GeneratableSection[]
   const [jobs, setJobs] = useState<TimetableJob[]>([])
   const [liveJob, setLiveJob] = useState<TimetableJob | null>(null)
   const [running, setRunning] = useState<{ mode: AlgorithmMode; stage: string } | null>(null)
+  // When the current pipeline run started: the progress poll only follows jobs created since
+  const runStartedAt = useRef<string | null>(null)
   const [errorDetails, setErrorDetails] = useState<ErrorDetail[]>([])
   const [diagnostics, setDiagnostics] = useState<Diagnostics | null>(null)
   const [executionLogs, setExecutionLogs] = useState<string[]>([])
@@ -108,7 +110,7 @@ export function GenerateTimetable({ sections }: { sections: GeneratableSection[]
       .select(JOB_COLUMNS)
       .eq("department_id", departmentId)
       .order("created_at", { ascending: false })
-      .limit(40)
+      .limit(20)
     setJobs((data || []) as TimetableJob[])
   }, [departmentId])
 
@@ -121,23 +123,28 @@ export function GenerateTimetable({ sections }: { sections: GeneratableSection[]
     if (!running || !departmentId) return
     const supabase = getSupabaseBrowserClient()
     const interval = setInterval(async () => {
+      if (!runStartedAt.current) return
       const { data } = await supabase
         .from("timetable_jobs")
         .select("id, status, progress, message, created_at, updated_at")
         .eq("department_id", departmentId)
-        .order("updated_at", { ascending: false })
+        .eq("created_by", user?.id ?? "")
+        .gte("created_at", runStartedAt.current)
+        .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle()
       if (data) setLiveJob(data as TimetableJob)
     }, 1200)
     return () => clearInterval(interval)
-  }, [running, departmentId])
+  }, [running, departmentId, user?.id])
 
   const forSelection = jobs.filter((j) => j.section_key === sectionKey && j.run_type !== "reschedule")
   const latestBaseline = forSelection.find((j) => j.algorithm_mode === "baseline") || null
   const latestEnhanced = forSelection.find((j) => j.algorithm_mode === "enhanced") || null
-  const completedBaseline = forSelection.find((j) => j.algorithm_mode === "baseline" && j.status === "completed") || null
-  const completedEnhanced = forSelection.find((j) => j.algorithm_mode === "enhanced" && j.status === "completed") || null
+  // Only the latest run of each mode is compared: if it failed there is nothing to compare,
+  // rather than silently falling back to an older run made from different data
+  const completedBaseline = latestBaseline?.status === "completed" ? latestBaseline : null
+  const completedEnhanced = latestEnhanced?.status === "completed" ? latestEnhanced : null
   const publishedJobs = jobs.filter((j) => j.is_published)
   const rescheduleRuns = jobs.filter((j) => j.run_type === "reschedule").slice(0, 3)
 
@@ -162,6 +169,8 @@ export function GenerateTimetable({ sections }: { sections: GeneratableSection[]
   const runPipeline = async (runMode: AlgorithmMode): Promise<boolean> => {
     const sessionToken = getStoredSessionToken()
     showError([])
+    setLiveJob(null)
+    runStartedAt.current = new Date(Date.now() - 5000).toISOString()
 
     setRunning({ mode: runMode, stage: "Waking up the ILP solver..." })
     try {
@@ -285,7 +294,8 @@ export function GenerateTimetable({ sections }: { sections: GeneratableSection[]
     }
   }
 
-  const JobCard = ({ job, title }: { job: TimetableJob; title: string }) => {
+  // A render function, not a component: a component defined here would remount on every poll
+  const renderJobCard = (job: TimetableJob, title: string) => {
     const hard = job.metrics?.final?.hard
     return (
       <div className="rounded-lg border border-slate-700 bg-slate-900/40 p-4 space-y-3">
@@ -493,8 +503,8 @@ export function GenerateTimetable({ sections }: { sections: GeneratableSection[]
             <p className="text-sm text-slate-400">Publishing a run commits it: faculty see it in their portal and its periods are blocked for other departments.</p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {latestBaseline ? <JobCard job={latestBaseline} title="Before Enhancement" /> : <div className="rounded-lg border border-dashed border-slate-700 p-4 text-sm text-slate-500">No baseline run for this selection yet</div>}
-            {latestEnhanced ? <JobCard job={latestEnhanced} title="After Enhancement" /> : <div className="rounded-lg border border-dashed border-slate-700 p-4 text-sm text-slate-500">No enhanced run for this selection yet</div>}
+            {latestBaseline ? renderJobCard(latestBaseline, "Before Enhancement") :  <div className="rounded-lg border border-dashed border-slate-700 p-4 text-sm text-slate-500">No baseline run for this selection yet</div>}
+            {latestEnhanced ? renderJobCard(latestEnhanced, "After Enhancement") :  <div className="rounded-lg border border-dashed border-slate-700 p-4 text-sm text-slate-500">No enhanced run for this selection yet</div>}
           </div>
           <MetricsComparison baseline={completedBaseline} enhanced={completedEnhanced} sectionNames={selectedNames} />
           {completedEnhanced && (
@@ -517,7 +527,7 @@ export function GenerateTimetable({ sections }: { sections: GeneratableSection[]
                 const r = job.metrics?.reschedule
                 return (
                   <div key={job.id} className="space-y-2">
-                    <JobCard job={job} title="Rescheduled timetable" />
+                    {renderJobCard(job, "Rescheduled timetable")}
                     {r && (
                       <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-xs">
                         <div className="p-2 rounded bg-slate-900/60 border border-slate-700"><div className="text-slate-400">Latency</div><div className="text-white font-semibold">{r.latencyMs} ms</div></div>

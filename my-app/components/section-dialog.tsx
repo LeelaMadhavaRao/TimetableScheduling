@@ -55,8 +55,15 @@ export function SectionDialog({ section, departments, trigger }: SectionDialogPr
       return
     }
 
+    if (!section && !collegeId) {
+      setErrorMsg("Your session is still loading. Please try again in a moment.")
+      setLoading(false)
+      return
+    }
+    const payload = { ...formData, department_id: formData.department_id || null }
+
     if (section) {
-      const { error } = await supabase.from("sections").update(formData).eq("id", section.id)
+      const { error } = await supabase.from("sections").update(payload).eq("id", section.id)
 
       if (error) {
         setErrorMsg("Error updating section: " + error.message)
@@ -64,7 +71,7 @@ export function SectionDialog({ section, departments, trigger }: SectionDialogPr
         return
       }
     } else {
-      const insertData = { ...formData, college_id: collegeId, created_by: user?.id ?? null }
+      const insertData = { ...payload, college_id: collegeId, created_by: user?.id ?? null }
       const { error } = await supabase.from("sections").insert(insertData)
 
       if (error) {
@@ -77,6 +84,8 @@ export function SectionDialog({ section, departments, trigger }: SectionDialogPr
     setErrorMsg(null)
     setOpen(false)
     setLoading(false)
+    if (!section) setFormData((current) => ({ ...current, name: "" }))
+    router.refresh()
   }
 
   return (

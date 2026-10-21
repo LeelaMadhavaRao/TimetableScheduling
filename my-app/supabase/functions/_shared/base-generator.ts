@@ -50,6 +50,9 @@ const THEORY_ILP_FALLBACK_ENABLED: boolean = false
 // ILP Solver Service Configuration (set by the edge function from ILP_SOLVER_URL)
 let ILP_SOLVER_URL = "https://timetablescheduling.onrender.com"
 
+/** Per-request solver timeout (a Render cold start alone can take ~60 s) */
+const SOLVER_TIMEOUT_MS = 75_000
+
 export function setSolverUrl(url: string | undefined | null): void {
   if (url) ILP_SOLVER_URL = url.replace(/\/$/, "")
 }
@@ -938,6 +941,8 @@ export class ILPTimetableGenerator {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(problemData),
+        // Leaves room for a Render cold start while staying inside the 150 s edge limit
+        signal: AbortSignal.timeout(SOLVER_TIMEOUT_MS),
       })
 
       if (!response.ok) {
@@ -1221,6 +1226,8 @@ export class ILPTimetableGenerator {
         // Weekdays: try all possible lab period slots
         for (let start = 1; start <= 8 - labPeriods + 1; start++) {
           const end = start + labPeriods - 1
+          // A lab block may not straddle the lunch break between P4 and P5
+          if (start <= 4 && end > 4) continue
           const slot = this.tryLabSlot(course, labRooms, day, start as Period, end as Period)
           if (slot) return slot
         }
@@ -2101,6 +2108,7 @@ export class ILPTimetableGenerator {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(SOLVER_TIMEOUT_MS),
     })
     if (!response.ok) throw new Error(`Solver ${path} returned ${response.status}: ${(await response.text()).slice(0, 300)}`)
     return response.json()
@@ -2132,7 +2140,7 @@ export class ILPTimetableGenerator {
           numSolutions: config.seedCount,
           minHammingFraction: config.minHamming,
           randomSeed: config.rngSeed,
-          timeLimitPerSolution: 3,
+          timeLimitPerSolution: 15,
         })
       } catch (error) {
         solverMessage = `Relaxed-ILP endpoint unavailable (${error instanceof Error ? error.message : String(error)})`
@@ -2232,20 +2240,40 @@ export class ILPTimetableGenerator {
    * Locks `locked` slots (they keep their exact positions) and re-places only the
    * `remainder` courses (periodsPerWeek = periods that must be re-placed) around them.
    */
-  rescheduleAround(locked: TimetableSlot[], remainder: CourseAssignment[], rngSeed: number): { placed: TimetableSlot[]; lockedRejected: number } {
+  rescheduleAround(
+    locked: TimetableSlot[],
+    remainder: CourseAssignment[],
+    rngSeed: number,
+  ): { kept: TimetableSlot[]; placed: TimetableSlot[]; lockedRejected: number } {
     const rng = createRng(rngSeed)
     this.resetToInitialState()
+
+    // A locked slot that no longer fits (e.g. its course now has another faculty member, or
+    // the slot breaks a rule) is not kept: its periods join the ones to re-place
+    const toReplace = new Map(remainder.map((c) => [courseKey(c.sectionId, c.subjectId), { ...c }]))
     let lockedRejected = 0
     for (const slot of locked) {
-      const course = this.courseByKey.get(courseKey(slot.sectionId, slot.subjectId))
-      if (!course || !this.addSlot(course, slot.day, slot.startPeriod, slot.endPeriod, slot.classroomId)) lockedRejected++
+      const key = courseKey(slot.sectionId, slot.subjectId)
+      const course = this.courseByKey.get(key)
+      if (!course) {
+        lockedRejected++
+        continue
+      }
+      if (!this.addSlot(course, slot.day, slot.startPeriod, slot.endPeriod, slot.classroomId)) {
+        lockedRejected++
+        const periods = slot.endPeriod - slot.startPeriod + 1
+        const existing = toReplace.get(key)
+        if (course.subjectType === "lab") toReplace.set(key, { ...course })
+        else toReplace.set(key, { ...course, periodsPerWeek: (existing?.periodsPerWeek || 0) + periods })
+      }
     }
     const lockedCount = this.timetable.length
+    const work = [...toReplace.values()]
 
-    for (const lab of remainder.filter((c) => c.subjectType === "lab")) this.scheduleLabCourse(lab)
-    this.runTheoryAttempts(remainder.filter((c) => c.subjectType === "theory"), [1, 2, 4, 3, 6, 11, 12], rng)
+    for (const lab of work.filter((c) => c.subjectType === "lab")) this.scheduleLabCourse(lab)
+    this.runTheoryAttempts(work.filter((c) => c.subjectType === "theory"), [1, 2, 4, 3, 6, 11, 12], rng)
 
-    return { placed: this.timetable.slice(lockedCount), lockedRejected }
+    return { kept: this.timetable.slice(0, lockedCount), placed: this.timetable.slice(lockedCount), lockedRejected }
   }
 
   /**

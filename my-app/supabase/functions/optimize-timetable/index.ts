@@ -9,7 +9,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3"
 import { handleCors } from "../_shared/cors.ts"
-import { buildSchedulingContext } from "../_shared/constraints.ts"
+import { buildSchedulingContext, evaluateHardConstraints } from "../_shared/constraints.ts"
 import { runOptimizeStage } from "../_shared/pipeline.ts"
 import { AlgorithmMode } from "../_shared/scheduling-types.ts"
 import {
@@ -51,10 +51,16 @@ Deno.serve(async (req) => {
     const mode: AlgorithmMode = job.algorithm_mode === "enhanced" ? "enhanced" : "baseline"
     console.log(`[Edge Function] ${mode.toUpperCase()} optimization for job ${job.id}`)
 
-    await supabase
+    // Claim the job atomically: a second concurrent call finds it no longer base_complete
+    const { data: claimed } = await supabase
       .from("timetable_jobs")
       .update({ status: "optimizing", progress: 10, message: "Loading base timetable and committed occupancy..." })
       .eq("id", job.id)
+      .eq("status", "base_complete")
+      .select("id")
+    if (!claimed || claimed.length === 0) {
+      return jsonResponse({ success: false, error: "This timetable is already being optimized" }, 409)
+    }
 
     const { data: baseRows, error } = await supabase.from("timetable_base").select("*").eq("job_id", job.id)
     if (error || !baseRows || baseRows.length === 0) {
@@ -108,7 +114,13 @@ Deno.serve(async (req) => {
         optimization_time: optimizationTime,
         metrics: { ...(job.metrics || {}), mode, final: result.final, process: result.process },
         pareto_front: result.paretoFront
-          ? result.paretoFront.map((s) => ({ objectives: s.objectives, quality: s.quality, slots: packSlots(s.slots) }))
+          ? result.paretoFront.map((s) => ({
+              objectives: s.objectives,
+              quality: s.quality,
+              // Each alternative's own hard-constraint report, used when the admin switches to it
+              hard: evaluateHardConstraints(s.slots, ctx),
+              slots: packSlots(s.slots),
+            }))
           : null,
         selected_solution: result.paretoFront ? 0 : null,
         seed_population: null,

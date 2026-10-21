@@ -30,14 +30,14 @@ export async function generateTimetablePDF(
   // 🔍 DEBUG: Log incoming data to verify periods
   console.log(`[PDF Generator] Starting PDF generation for job ${jobId}`)
   console.log(`[PDF Generator] Total slots received: ${timetableSlots.length}`)
-  
+
   const labSlots = timetableSlots.filter(s => s.subjects?.subject_type === 'lab')
   console.log(`[PDF Generator] Lab slots: ${labSlots.length}`)
   labSlots.forEach((slot, i) => {
     const span = slot.end_period - slot.start_period + 1
-    console.log(`  Lab ${i}: ${slot.subjects?.code} (${slot.sections?.name}) - Day ${slot.day_of_week}, P${slot.start_period}-${slot.end_period} (${span} periods)${span !== 4 ? ' ❌ NOT 4 PERIODS!' : ' ✅'}`)
+    console.log(`  Lab ${i}: ${slot.subjects?.code} (${slot.sections?.name}) - Day ${slot.day_of_week}, P${slot.start_period}-${slot.end_period} (${span} periods)`)
   })
-  
+
   const doc = new jsPDF({
     orientation: "landscape",
     unit: "mm",
@@ -58,7 +58,7 @@ export async function generateTimetablePDF(
   timetableSlots.forEach((slot) => {
     const sectionName = slot.sections?.name
     if (!sectionName) return
-    
+
     if (!sectionMap[sectionName]) {
       sectionMap[sectionName] = []
     }
@@ -81,7 +81,7 @@ export async function generateTimetablePDF(
     // Add decorative header background with gradient effect
     doc.setFillColor(30, 58, 138) // Deep blue
     doc.rect(0, 0, 297, 50, "F")
-    
+
     // Accent line
     doc.setFillColor(59, 130, 246) // Brighter blue
     doc.rect(0, 46, 297, 4, "F")
@@ -101,21 +101,21 @@ export async function generateTimetablePDF(
     doc.setFontSize(9)
     doc.setFont("helvetica", "normal")
     doc.setTextColor(200, 220, 255)
-    
+
     const date = new Date().toLocaleDateString("en-US", {
       year: "numeric",
       month: "long",
       day: "numeric",
     })
-    
+
     const time = new Date().toLocaleTimeString("en-US", {
       hour: "2-digit",
       minute: "2-digit",
       hour12: true,
     })
-    
+
     doc.text(`Generated: ${date} | Time: ${time}`, 15, 42)
-    
+
     // Type badge with better styling
     const badgeX = 260
     const badgeY = 38
@@ -126,7 +126,7 @@ export async function generateTimetablePDF(
     doc.setFontSize(8)
     doc.setFont("helvetica", "bold")
     doc.text(isOptimized ? "OPTIMIZED" : "BASE", badgeX + 15, badgeY + 5, { align: "center" })
-    
+
     // Job ID info
     doc.setFontSize(7)
     doc.setFont("helvetica", "normal")
@@ -144,8 +144,10 @@ export async function generateTimetablePDF(
         timetableData[sectionName][slot.day_of_week] = {}
       }
 
-      // Mark all periods from start to end
+      // Mark all periods from start to end. A period already taken is left to the earlier
+      // slot, so a clash can never leave a row with a missing cell (which shifts columns)
       for (let p = slot.start_period; p <= slot.end_period; p++) {
+        if (timetableData[sectionName][slot.day_of_week][p]) continue
         timetableData[sectionName][slot.day_of_week][p] = slot
       }
     })
@@ -160,13 +162,16 @@ export async function generateTimetablePDF(
         const slot = timetableData[sectionName]?.[dayIndex]?.[periodIndex + 1]
 
         if (slot) {
-          // Check if this is the start period of the slot
-          const isStartPeriod = slot.start_period === periodIndex + 1
+          // A slot's first cell in this column: its start period, or the first period it still
+          // owns after a clash
+          const owned = (p: number) => timetableData[sectionName]?.[dayIndex]?.[p] === slot
+          const isStartPeriod = slot.start_period === periodIndex + 1 || !owned(periodIndex)
 
           if (isStartPeriod) {
-            // Only add cell with content and rowSpan for the START period
-            const spanPeriods = slot.end_period - slot.start_period + 1
-            
+            // Only add cell with content and rowSpan for the START period (span = periods it owns)
+            let spanPeriods = 0
+            while (periodIndex + 1 + spanPeriods <= slot.end_period && owned(periodIndex + 1 + spanPeriods)) spanPeriods++
+
             if (slot.subjects && slot.faculty && slot.classrooms) {
               const isLab = slot.subjects.subject_type === "lab"
               // Show faculty name along with code
@@ -188,7 +193,8 @@ export async function generateTimetablePDF(
                 },
               })
             } else {
-              row.push("")
+              // Missing details still occupy the full span, so later columns stay aligned
+              row.push({ content: "", rowSpan: spanPeriods })
             }
           }
           // For middle/end periods: DON'T push anything - cell is covered by rowSpan above
@@ -234,9 +240,9 @@ export async function generateTimetablePDF(
         lineWidth: 0.4,
       },
       columnStyles: {
-        0: { 
+        0: {
           cellWidth: 18, // Reduced width
-          fontStyle: "bold", 
+          fontStyle: "bold",
           fillColor: [240, 245, 255],
           textColor: [30, 58, 138],
           lineColor: [180, 200, 220],
@@ -260,12 +266,12 @@ export async function generateTimetablePDF(
     // Use finalY from last table to position footer, ensuring it doesn't overlap
     const tableEndY = (doc as any).lastAutoTable.finalY || 150
     const footerY = Math.max(tableEndY + 10, pageHeight - 30)
-    
+
     // Separator line
     doc.setDrawColor(200, 200, 200)
     doc.setLineWidth(0.3)
     doc.line(10, footerY, 287, footerY)
-    
+
     // Legend (smaller, compact)
     doc.setFontSize(8)
     doc.setFont("helvetica", "bold")
@@ -286,24 +292,24 @@ export async function generateTimetablePDF(
     doc.setFontSize(6)
     doc.setTextColor(100, 100, 100)
     doc.text("Periods 1-8 | 45 min per period", 110, footerY + 5)
-    
+
     // Statistics
     const uniqueSubjects = new Set(slots.map(s => s.subjects?.code).filter(Boolean)).size
     const uniqueFaculty = new Set(slots.map(s => s.faculty?.code).filter(Boolean)).size
     const totalSlots = slots.length
-    
+
     // Right aligned stats
     doc.setFont("helvetica", "bold")
     doc.setTextColor(50, 50, 50)
     doc.setFontSize(8)
     doc.text(`Total Classes: ${totalSlots}`, 240, footerY + 6, { align: "right" })
-    
+
     // Page footer
     doc.setFontSize(8)
     doc.setTextColor(120, 120, 120)
     doc.setFont("helvetica", "normal")
     doc.text("Timetable Scheduling System", 148.5, pageHeight - 5, { align: "center" })
-    
+
     // Page number
     doc.setFontSize(7)
     doc.text(`Page ${pageNumber}`, 285, pageHeight - 5, { align: "right" })

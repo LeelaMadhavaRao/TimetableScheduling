@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
+import { getRequestSession } from "@/lib/api-session"
 import { getSupabaseServerClient } from "@/lib/server"
 
 export async function POST(request: NextRequest) {
   try {
     const supabase = await getSupabaseServerClient()
-    
+
     const body = await request.json()
     const { fullName, email, phone, institutionName, username, password, message } = body
 
@@ -135,7 +136,11 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   try {
     const supabase = await getSupabaseServerClient()
-    
+    const session = await getRequestSession(request, supabase, ['admin'])
+    if (!session) {
+      return NextResponse.json({ success: false, message: "Only system administrators can view registration requests" }, { status: 403 })
+    }
+
     // Get query parameters
     const { searchParams } = new URL(request.url)
     const status = searchParams.get("status") || "pending"

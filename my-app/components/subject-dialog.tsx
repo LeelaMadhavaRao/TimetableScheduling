@@ -61,17 +61,23 @@ export function SubjectDialog({ subject, departments, faculty, trigger }: Subjec
 
     const supabase = getSupabaseBrowserClient()
 
+    if (!subject && !collegeId) {
+      alert("Your session is still loading. Please try again in a moment.")
+      setLoading(false)
+      return
+    }
+    const payload = { ...formData, department_id: formData.department_id || null }
     let subjectId = subject?.id
 
     if (subject) {
-      const { error } = await supabase.from("subjects").update(formData).eq("id", subject.id)
+      const { error } = await supabase.from("subjects").update(payload).eq("id", subject.id)
       if (error) {
         alert("Error updating subject: " + error.message)
         setLoading(false)
         return
       }
     } else {
-      const insertData = { ...formData, college_id: collegeId, created_by: user?.id ?? null }
+      const insertData = { ...payload, college_id: collegeId, created_by: user?.id ?? null }
       const { data, error } = await supabase.from("subjects").insert(insertData).select().single()
       if (error) {
         alert("Error creating subject: " + error.message)
@@ -82,18 +88,29 @@ export function SubjectDialog({ subject, departments, faculty, trigger }: Subjec
     }
 
     // Update faculty assignments
-    await supabase.from("subject_faculty").delete().eq("subject_id", subjectId)
+    const { error: clearError } = await supabase.from("subject_faculty").delete().eq("subject_id", subjectId)
+    if (clearError) {
+      alert("Subject saved, but updating its faculty failed: " + clearError.message)
+      setLoading(false)
+      return
+    }
 
     if (selectedFaculty.length > 0) {
       const assignments = selectedFaculty.map((fid) => ({
         subject_id: subjectId,
         faculty_id: fid,
       }))
-      await supabase.from("subject_faculty").insert(assignments)
+      const { error: assignError } = await supabase.from("subject_faculty").insert(assignments)
+      if (assignError) {
+        alert("Subject saved, but assigning its faculty failed: " + assignError.message)
+        setLoading(false)
+        return
+      }
     }
 
     setOpen(false)
     setLoading(false)
+    router.refresh()
   }
 
   return (

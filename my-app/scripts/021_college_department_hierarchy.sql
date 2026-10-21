@@ -181,6 +181,14 @@ BEGIN
     RETURN json_build_object('success', false, 'message', 'Only optimized (completed) timetables can be published');
   END IF;
 
+  IF NOT EXISTS (SELECT 1 FROM timetable_optimized WHERE job_id = p_job_id) THEN
+    RETURN json_build_object('success', false, 'message', 'This timetable has no slots to publish');
+  END IF;
+
+  -- One publish per college at a time: two departments publishing simultaneously must not
+  -- both pass the clash check against the same committed state
+  PERFORM pg_advisory_xact_lock(hashtext('publish:' || v_job.college_id::text));
+
   SELECT COUNT(*), MIN(f.code || ' / ' || r.name || ' on day ' || n.day_of_week || ' P' || n.start_period)
   INTO v_conflicts, v_sample
   FROM timetable_optimized n

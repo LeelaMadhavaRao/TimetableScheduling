@@ -105,7 +105,8 @@ export function MetricsComparison({ baseline, enhanced, sectionNames }: MetricsC
         {feasibilityLeader === "enhanced" && <> It also has fewer hard-constraint violations ({eHard?.totalViolations} vs {bHard?.totalViolations}).</>}
         {feasibilityLeader === "baseline" && <> Note: the baseline has fewer hard-constraint violations on this run.</>}
         {qualityDelta !== null && <> Weighted quality changed by <strong>{qualityDelta >= 0 ? "+" : ""}{qualityDelta.toFixed(2)}%</strong>.</>}
-        <span className="block text-xs opacity-70 mt-1">Runtime is shown for reference and not counted; the enhanced pipeline deliberately spends more time on seeding and Pareto search.</span>
+        <span className="block text-xs opacity-70 mt-1">Not counted: runtime, and metrics that differ by design (number of timetables offered, their hypervolume, crossover acceptance).</span>
+        <span className="block text-xs opacity-70">Runs compared: before {new Date(baseline.created_at).toLocaleString()} · after {new Date(enhanced.created_at).toLocaleString()}</span>
       </div>
 
       <div className="overflow-x-auto">

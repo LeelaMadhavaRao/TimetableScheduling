@@ -40,12 +40,18 @@ export async function POST(request: NextRequest) {
         { status: 409 }
       )
     }
+    if (!hard && !allowWarnings) {
+      return NextResponse.json(
+        { success: false, requiresConfirmation: true, message: "This run has no recorded constraint check. Publish anyway?" },
+        { status: 409 }
+      )
+    }
     if (hard?.totalViolations > 0 && !allowWarnings) {
       return NextResponse.json(
         {
           success: false,
           requiresConfirmation: true,
-          message: `This timetable breaks ${hard.totalViolations} scheduling rule(s) (faculty availability, daily subject limit or calendar rules). Publish anyway?`,
+          message: `This timetable breaks ${hard.totalViolations} scheduling rule(s) (missing periods, faculty availability, daily subject limit or calendar rules). Publish anyway?`,
         },
         { status: 409 }
       )

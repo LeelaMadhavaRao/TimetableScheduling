@@ -1,4 +1,4 @@
-import { getSupabaseServerClient, getCurrentCollegeAdminId } from "@/lib/server"
+import { getSupabaseServerClient, requireCollegeAdminId } from "@/lib/server"
 import { ClassroomList } from "@/components/classroom-list"
 import { ClassroomDialog } from "@/components/classroom-dialog"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -9,7 +9,7 @@ import ClickSpark from "@/components/ClickSpark"
 
 export default async function ClassroomsPage() {
   const supabase = await getSupabaseServerClient()
-  const collegeId = (await getCurrentCollegeAdminId()) || "00000000-0000-0000-0000-000000000000"
+  const collegeId = await requireCollegeAdminId()
 
   // Classrooms are a shared college resource used by every department
   const { data: classrooms } = await supabase.from("classrooms").select("*").eq("college_id", collegeId).order("name")

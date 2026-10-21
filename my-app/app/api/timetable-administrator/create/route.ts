@@ -1,16 +1,17 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getSupabaseServerClient } from "@/lib/server"
 import { generateAdminCreatedEmail } from "@/lib/email-templates"
+import { appBaseUrl, sendMail } from "@/lib/mailer"
 
 // Create timetable administrator (System Admin only)
 export async function POST(request: NextRequest) {
   try {
     const supabase = await getSupabaseServerClient()
-    
+
     // Get admin credentials from cookies
     const cookies = request.cookies
     const sessionToken = cookies.get('timetable_session_token')?.value
-    
+
     if (!sessionToken) {
       return NextResponse.json(
         { success: false, message: "Unauthorized" },
@@ -46,7 +47,7 @@ export async function POST(request: NextRequest) {
     // Hash password
     const { data: hashedPassword, error: hashError } = await supabase
       .rpc('hash_password', { input_password: password })
-    
+
     if (hashError || !hashedPassword) {
       console.error("Password hash error:", hashError)
       return NextResponse.json(
@@ -72,14 +73,14 @@ export async function POST(request: NextRequest) {
 
     if (insertError) {
       console.error("Insert admin error:", insertError)
-      
+
       if (insertError.code === '23505') {
         return NextResponse.json(
           { success: false, message: "Username already exists" },
           { status: 409 }
         )
       }
-      
+
       return NextResponse.json(
         { success: false, message: insertError.message || "Failed to create administrator" },
         { status: 500 }
@@ -87,69 +88,24 @@ export async function POST(request: NextRequest) {
     }
 
     // Send welcome email with credentials
+    let emailResult: { sent: boolean; error?: string } | null = null
     if (email) {
-      try {
-        const loginUrl = `${process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'http://localhost:3000'}/login/college-admin`
-        const emailData = generateAdminCreatedEmail({
-          adminName: name,
-          username,
-          password,
-          loginUrl
-        })
-
-        console.log('📧 Attempting to send email to:', email)
-        
-        // Use absolute URL for fetch in API routes
-        // In development, use localhost; in production, use the actual domain
-        const baseUrl = process.env.NODE_ENV === 'production' 
-          ? (process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'https://timetable-scheduling.vercel.app')
-          : 'http://localhost:3000'
-        
-        const emailApiUrl = `${baseUrl}/api/send-email`
-        
-        console.log('📧 Email API URL:', emailApiUrl)
-        console.log('📧 Environment:', process.env.NODE_ENV)
-        
-        const emailResponse = await fetch(emailApiUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            to: email,
-            subject: emailData.subject,
-            html: emailData.html,
-            text: emailData.text
-          })
-        })
-
-        console.log('📧 Email API response status:', emailResponse.status)
-        
-        if (!emailResponse.ok) {
-          const errorText = await emailResponse.text()
-          console.error('❌ Email API returned error status:', emailResponse.status)
-          console.error('❌ Error response:', errorText)
-          throw new Error(`Email API returned status ${emailResponse.status}`)
-        }
-        
-        const emailResult = await emailResponse.json()
-        
-        if (emailResult.success) {
-          console.log('✅ Admin creation email sent successfully to:', email)
-          console.log('📬 Message ID:', emailResult.messageId)
-        } else {
-          console.error('❌ Email API returned error:', emailResult.error || emailResult.message)
-        }
-      } catch (emailError: any) {
-        console.error('❌ Error sending admin creation email:', emailError.message)
-        console.error('❌ Full error:', emailError)
-        // Don't fail the request if email fails
-      }
+      const emailData = generateAdminCreatedEmail({
+        adminName: name,
+        username,
+        password,
+        loginUrl: `${appBaseUrl(request)}/login/college-admin`,
+      })
+      emailResult = await sendMail({ to: email, subject: emailData.subject, html: emailData.html, text: emailData.text })
     }
 
     return NextResponse.json({
       success: true,
-      message: email 
-        ? "Administrator created successfully. Welcome email sent."
-        : "Administrator created successfully.",
+      message: !emailResult
+        ? "Administrator created successfully."
+        : emailResult.sent
+          ? "Administrator created successfully. Welcome email sent."
+          : `Administrator created, but the welcome email could not be sent (${emailResult.error}). Share the credentials manually.`,
       data: newAdmin
     })
 

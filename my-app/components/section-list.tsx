@@ -29,6 +29,8 @@ interface SectionListProps {
 
 export function SectionList({ sections: initialSections, departments, subjects }: SectionListProps) {
   const [sections, setSections] = useState(initialSections)
+  // Pick up rows added/edited elsewhere when the server re-renders (router.refresh)
+  useEffect(() => setSections(initialSections), [initialSections])
   const [selectedSection, setSelectedSection] = useState<SectionWithDetails | null>(null)
   const [showSubjects, setShowSubjects] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")

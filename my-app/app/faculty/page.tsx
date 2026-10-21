@@ -364,7 +364,7 @@ export default function FacultyDashboardPage() {
 
                             // Calculate period span and check if it's a lab
                             const periodSpan = slot.end_period - slot.start_period + 1;
-                            const isLab = slot.subjects?.code?.includes('L'); // Lab subjects usually have 'L' suffix
+                            const isLab = slot.subjects?.subject_type === 'lab';
 
                             // Mark subsequent periods to skip if multi-period
                             if (periodSpan > 1) {
@@ -437,7 +437,7 @@ export default function FacultyDashboardPage() {
                   <div className="space-y-3">
                     {todaySlots.map(slot => {
                       const colorClass = getSubjectColor(slot.subjects?.name || '');
-                      const isLab = slot.subjects?.code?.includes('L');
+                      const isLab = slot.subjects?.subject_type === 'lab';
                       return (
                         <div
                           key={slot.id}

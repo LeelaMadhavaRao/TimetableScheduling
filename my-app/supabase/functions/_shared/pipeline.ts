@@ -73,7 +73,8 @@ export async function runBaseStage(
   // (a seed that already breaks a rule would pass the violation on to its offspring)
   const ctx = buildSchedulingContext(courses, rooms, availability, occupancy)
   const reports = result.seeds.map((s) => evaluateHardConstraints(s.slots, ctx))
-  const clean = result.seeds.filter((_, i) => reports[i].totalViolations === 0)
+  // Coverage is compared separately below, so "clean" means no other rule is broken
+  const clean = result.seeds.filter((_, i) => reports[i].totalViolations - reports[i].coverageDeficitPeriods === 0)
   const pool = clean.length > 0 ? clean : result.seeds
   const bestDeficit = Math.min(...pool.map((s) => evaluateHardConstraints(s.slots, ctx).coverageDeficitPeriods))
   const seeds = pool.filter((s) => evaluateHardConstraints(s.slots, ctx).coverageDeficitPeriods === bestDeficit)
@@ -139,7 +140,8 @@ function offspringChecker(ctx: SchedulingContext, baseDeficit: number) {
     observe(slots: TimetableSlot[]) {
       const report = evaluateHardConstraints(slots, ctx)
       total++
-      if (report.totalViolations === 0 && report.coverageDeficitPeriods <= baseDeficit) clean++
+      const otherViolations = report.totalViolations - report.coverageDeficitPeriods
+      if (otherViolations === 0 && report.coverageDeficitPeriods <= baseDeficit) clean++
     },
     rate: () => (total > 0 ? (clean / total) * 100 : 100),
     total: () => total,

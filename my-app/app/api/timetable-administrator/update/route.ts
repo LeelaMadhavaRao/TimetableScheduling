@@ -1,16 +1,17 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getSupabaseServerClient } from "@/lib/server"
 import { generateAdminUpdatedEmail } from "@/lib/email-templates"
+import { appBaseUrl, sendMail } from "@/lib/mailer"
 
 // Update timetable administrator (System Admin only)
 export async function PUT(request: NextRequest) {
   try {
     const supabase = await getSupabaseServerClient()
-    
+
     // Get admin credentials from cookies
     const cookies = request.cookies
     const sessionToken = cookies.get('timetable_session_token')?.value
-    
+
     if (!sessionToken) {
       return NextResponse.json(
         { success: false, message: "Unauthorized" },
@@ -61,39 +62,39 @@ export async function PUT(request: NextRequest) {
     const updateData: Record<string, any> = {
       updated_at: new Date().toISOString()
     }
-    
+
     const updatedFields: string[] = []
 
     if (name && name !== currentAdmin.name) {
       updateData.name = name
       updatedFields.push('Name')
     }
-    
+
     if (email !== undefined && email !== currentAdmin.email) {
       updateData.email = email || null
       updatedFields.push('Email')
     }
-    
+
     if (phone !== undefined) {
       updateData.phone = phone || null
       updatedFields.push('Phone')
     }
-    
+
     if (institution_name !== undefined) {
       updateData.institution_name = institution_name || null
       updatedFields.push('Institution Name')
     }
-    
+
     if (is_active !== undefined) {
       updateData.is_active = is_active
       updatedFields.push('Account Status')
     }
-    
+
     // Handle password update
     if (password) {
       const { data: hashedPassword, error: hashError } = await supabase
         .rpc('hash_password', { input_password: password })
-      
+
       if (hashError || !hashedPassword) {
         console.error("Password hash error:", hashError)
         return NextResponse.json(
@@ -101,7 +102,7 @@ export async function PUT(request: NextRequest) {
           { status: 500 }
         )
       }
-      
+
       updateData.password_hash = hashedPassword
       updatedFields.push('Password')
     }
@@ -128,70 +129,34 @@ export async function PUT(request: NextRequest) {
       )
     }
 
+    // Deactivating a college or changing its password signs out the college admin and every
+    // department admin of that college
+    if (is_active === false || password) {
+      const { data: deptAdmins } = await supabase.from('department_admins').select('id').eq('college_id', id)
+      const userIds = [id, ...(deptAdmins || []).map((a: { id: string }) => a.id)]
+      await supabase.from('user_sessions').delete().in('user_id', userIds)
+    }
+
     // Send email notification if email is available
     const notificationEmail = email || currentAdmin.email
-    
+    let emailResult: { sent: boolean; error?: string } | null = null
     if (notificationEmail && updatedFields.length > 0) {
-      try {
-        const loginUrl = `${process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'http://localhost:3000'}/login/college-admin`
-        const emailData = generateAdminUpdatedEmail({
-          adminName: name || currentAdmin.name,
-          username: currentAdmin.username,
-          updatedFields,
-          loginUrl
-        })
-
-        console.log('📧 Attempting to send update notification to:', notificationEmail)
-        
-        const baseUrl = process.env.NODE_ENV === 'production' 
-          ? (process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'https://timetable-scheduling.vercel.app')
-          : 'http://localhost:3000'
-        
-        const emailApiUrl = `${baseUrl}/api/send-email`
-        
-        console.log('📧 Email API URL:', emailApiUrl)
-        console.log('📧 Environment:', process.env.NODE_ENV)
-        console.log('📧 Updated fields:', updatedFields.join(', '))
-        
-        const emailResponse = await fetch(emailApiUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            to: notificationEmail,
-            subject: emailData.subject,
-            html: emailData.html,
-            text: emailData.text
-          })
-        })
-
-        console.log('📧 Email API response status:', emailResponse.status)
-        
-        if (!emailResponse.ok) {
-          const errorText = await emailResponse.text()
-          console.error('❌ Email API returned error status:', emailResponse.status)
-          console.error('❌ Error response:', errorText)
-        } else {
-          const emailResult = await emailResponse.json()
-          
-          if (emailResult.success) {
-            console.log('✅ Admin update email sent successfully to:', notificationEmail)
-            console.log('📬 Message ID:', emailResult.messageId)
-          } else {
-            console.error('❌ Email API returned error:', emailResult.error || emailResult.message)
-          }
-        }
-      } catch (emailError: any) {
-        console.error('❌ Error sending admin update email:', emailError.message)
-        console.error('❌ Full error:', emailError)
-        // Don't fail the request if email fails
-      }
+      const emailData = generateAdminUpdatedEmail({
+        adminName: name || currentAdmin.name,
+        username: currentAdmin.username,
+        updatedFields,
+        loginUrl: `${appBaseUrl(request)}/login/college-admin`,
+      })
+      emailResult = await sendMail({ to: notificationEmail, subject: emailData.subject, html: emailData.html, text: emailData.text })
     }
 
     return NextResponse.json({
       success: true,
-      message: notificationEmail && updatedFields.length > 0
-        ? "Administrator updated successfully. Notification email sent."
-        : "Administrator updated successfully.",
+      message: !emailResult
+        ? "Administrator updated successfully."
+        : emailResult.sent
+          ? "Administrator updated successfully. Notification email sent."
+          : `Administrator updated, but the notification email could not be sent (${emailResult.error}).`,
       updatedFields
     })
 

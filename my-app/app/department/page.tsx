@@ -1,4 +1,4 @@
-import { getSupabaseServerClient, getCurrentDepartmentAdmin } from "@/lib/server"
+import { getSupabaseServerClient, requireDepartmentAdmin } from "@/lib/server"
 import { StatsCard } from "@/components/stats-card"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { BookOpen, Layers, Calendar, CalendarCheck, Users, FlaskConical } from "lucide-react"
@@ -15,9 +15,9 @@ const WORKFLOW = [
 
 export default async function DepartmentDashboardPage() {
   const supabase = await getSupabaseServerClient()
-  const admin = await getCurrentDepartmentAdmin()
-  const departmentId = admin?.departmentId || "00000000-0000-0000-0000-000000000000"
-  const collegeId = admin?.collegeId || "00000000-0000-0000-0000-000000000000"
+  const admin = await requireDepartmentAdmin()
+  const departmentId = admin.departmentId
+  const collegeId = admin.collegeId
 
   const [subjects, sections, jobs, committed] = await Promise.all([
     supabase.from("subjects").select("*", { count: "exact", head: true }).eq("department_id", departmentId),

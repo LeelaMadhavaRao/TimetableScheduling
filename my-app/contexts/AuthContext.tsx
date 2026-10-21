@@ -35,7 +35,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refreshSession = useCallback(async () => {
     const sessionToken = localStorage.getItem(SESSION_KEY);
-    
+
     if (!sessionToken) {
       setUser(null);
       setRole(null);
@@ -46,15 +46,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     try {
       const result = await validateSession(sessionToken);
-      
+
       if (result.success && result.user && result.role) {
         setUser(result.user);
         setRole(result.role);
         setSession(result.session || null);
       } else {
-        // Invalid session, clear storage
+        // Invalid session: drop the token but remember the role, so the user is sent back to
+        // the right login page
         localStorage.removeItem(SESSION_KEY);
-        localStorage.removeItem(ROLE_KEY);
         setUser(null);
         setRole(null);
         setSession(null);
@@ -79,29 +79,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Set in localStorage for client-side access
     localStorage.setItem(SESSION_KEY, sessionToken);
     localStorage.setItem(ROLE_KEY, userRole);
-    
+
     // Also set cookies for server-side access (with Secure and SameSite flags)
     document.cookie = `${SESSION_KEY}=${sessionToken}; path=/; max-age=${24 * 60 * 60}; SameSite=Lax; Secure`;
     document.cookie = `${ROLE_KEY}=${userRole}; path=/; max-age=${24 * 60 * 60}; SameSite=Lax; Secure`;
-    
+
     await refreshSession();
   };
 
   const logout = async () => {
     const sessionToken = localStorage.getItem(SESSION_KEY);
-    
+
     if (sessionToken) {
       await authLogout(sessionToken);
     }
-    
+
     // Clear localStorage
     localStorage.removeItem(SESSION_KEY);
     localStorage.removeItem(ROLE_KEY);
-    
+
     // Clear cookies
     document.cookie = `${SESSION_KEY}=; path=/; max-age=0`;
     document.cookie = `${ROLE_KEY}=; path=/; max-age=0`;
-    
+
     setUser(null);
     setRole(null);
     setSession(null);

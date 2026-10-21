@@ -3,6 +3,7 @@
 import type React from "react"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import {
   Dialog,
   DialogContent,
@@ -40,6 +41,7 @@ export function FacultyDialog({ faculty, departments, trigger }: FacultyDialogPr
   })
   const [phoneError, setPhoneError] = useState("")
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const router = useRouter()
   const { user, role } = useAuth()
   const { collegeId } = getUserScope(user, role)
 
@@ -61,11 +63,18 @@ export function FacultyDialog({ faculty, departments, trigger }: FacultyDialogPr
     }
 
     setLoading(true)
+    if (!faculty && !collegeId) {
+      setErrorMsg("Your session is still loading. Please try again in a moment.")
+      setLoading(false)
+      return
+    }
 
     const supabase = getSupabaseBrowserClient()
+    // An unselected department is NULL, not "" (department_id is a UUID column)
+    const payload = { ...formData, department_id: formData.department_id || null }
 
     if (faculty) {
-      const { error } = await supabase.from("faculty").update(formData).eq("id", faculty.id)
+      const { error } = await supabase.from("faculty").update(payload).eq("id", faculty.id)
 
       if (error) {
         setErrorMsg("Error updating faculty: " + error.message)
@@ -73,7 +82,7 @@ export function FacultyDialog({ faculty, departments, trigger }: FacultyDialogPr
         return
       }
     } else {
-      const insertData = { ...formData, college_id: collegeId, created_by: user?.id ?? null }
+      const insertData = { ...payload, college_id: collegeId, created_by: user?.id ?? null }
       const { error } = await supabase.from("faculty").insert(insertData)
 
       if (error) {
@@ -86,6 +95,8 @@ export function FacultyDialog({ faculty, departments, trigger }: FacultyDialogPr
     setErrorMsg(null)
     setOpen(false)
     setLoading(false)
+    if (!faculty) setFormData({ code: "", name: "", email: "", department_id: "", phone: "" })
+    router.refresh()
   }
 
   return (

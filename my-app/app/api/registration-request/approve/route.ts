@@ -20,11 +20,11 @@ function createEmailTransporter() {
 export async function POST(request: NextRequest) {
   try {
     const supabase = await getSupabaseServerClient()
-    
+
     // Only a SYSTEM admin may approve; check the session from the cookie
     const cookies = request.cookies
     const sessionToken = cookies.get('timetable_session_token')?.value
-    
+
     if (!sessionToken) {
       return NextResponse.json(
         { success: false, message: "Unauthorized" },
@@ -80,10 +80,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Send approval email with credentials directly using nodemailer
+    let emailSent = false
     if (data && data.username && data.email && (data.full_name || data.name)) {
       try {
         console.log('📧 Attempting to send approval email to:', data.email)
-        
+
         // Validate email configuration
         if (!process.env.EMAIL_USER || !process.env.EMAIL_PASSWORD) {
           console.error('❌ Email configuration not set')
@@ -91,8 +92,8 @@ export async function POST(request: NextRequest) {
           console.error('EMAIL_PASSWORD:', process.env.EMAIL_PASSWORD ? 'SET' : 'NOT SET')
           throw new Error('Email configuration not set')
         }
-        
-        const loginUrl = `${process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'http://localhost:3000'}/login/college-admin`
+
+        const loginUrl = `${(process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || new URL(request.url).origin).replace(/\/$/, '')}/login/college-admin`
         const emailData = generateRequestApprovedEmail({
           name: data.full_name || data.name,
           username: data.username,
@@ -102,7 +103,7 @@ export async function POST(request: NextRequest) {
 
         console.log('📧 Creating email transporter...')
         const transporter = createEmailTransporter()
-        
+
         console.log('📧 Sending approval email...')
         const info = await transporter.sendMail({
           from: `"${process.env.EMAIL_FROM_NAME || 'Timetable System'}" <${process.env.EMAIL_USER}>`,
@@ -112,10 +113,11 @@ export async function POST(request: NextRequest) {
           html: emailData.html,
         })
 
+        emailSent = true
         console.log('✅ Approval email sent successfully to:', data.email)
         console.log('📬 Message ID:', info.messageId)
         console.log('📬 Response:', info.response)
-        
+
       } catch (emailError: any) {
         console.error('❌ Error sending approval email:', emailError.message)
         console.error('❌ Error details:', {
@@ -137,7 +139,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: "Registration request approved successfully. Email sent to user.",
+      message: emailSent
+        ? "Registration request approved successfully. Email sent to user."
+        : `Registration approved, but the email could not be sent. Share the temporary password manually: ${data?.temp_password ?? "(see request)"}`,
       data: data
     })
 

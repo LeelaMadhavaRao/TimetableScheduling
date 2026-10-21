@@ -23,6 +23,8 @@ interface FacultyListProps {
 
 export function FacultyList({ faculty: initialFaculty, departments }: FacultyListProps) {
   const [faculty, setFaculty] = useState(initialFaculty)
+  // Pick up rows added/edited elsewhere when the server re-renders (router.refresh)
+  useEffect(() => setFaculty(initialFaculty), [initialFaculty])
   const [selectedFaculty, setSelectedFaculty] = useState<FacultyWithDept | null>(null)
   const [showAvailability, setShowAvailability] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")

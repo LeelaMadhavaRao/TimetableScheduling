@@ -143,8 +143,11 @@ export async function DELETE(request: NextRequest) {
     const id = request.nextUrl.searchParams.get('id')
     if (!id) return NextResponse.json({ success: false, message: "Administrator ID is required" }, { status: 400 })
 
-    const { error } = await supabase.from('department_admins').delete().eq('id', id).eq('college_id', collegeId)
+    const { data: deleted, error } = await supabase.from('department_admins').delete().eq('id', id).eq('college_id', collegeId).select('id')
     if (error) return NextResponse.json({ success: false, message: error.message }, { status: 500 })
+    if (!deleted || deleted.length === 0) {
+      return NextResponse.json({ success: false, message: "Administrator not found in your college" }, { status: 404 })
+    }
 
     await supabase.from('user_sessions').delete().eq('user_id', id).eq('user_type', 'department_admin')
     return NextResponse.json({ success: true, message: "Department administrator removed" })

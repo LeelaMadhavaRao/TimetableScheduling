@@ -3,12 +3,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Play, ArrowLeft, Info, Sparkles } from "lucide-react"
 import Link from "next/link"
-import { getSupabaseServerClient, getCurrentDepartmentAdmin } from "@/lib/server"
+import { getSupabaseServerClient, requireDepartmentAdmin } from "@/lib/server"
 
 export default async function GeneratePage() {
   const supabase = await getSupabaseServerClient()
-  const admin = await getCurrentDepartmentAdmin()
-  const departmentId = admin?.departmentId || "00000000-0000-0000-0000-000000000000"
+  const admin = await requireDepartmentAdmin()
+  const departmentId = admin.departmentId
 
   const [{ data: sections }, { data: publishedJobs }] = await Promise.all([
     supabase

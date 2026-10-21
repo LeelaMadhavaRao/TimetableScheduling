@@ -68,7 +68,8 @@ function TimetablePageContent() {
       if (jobParam) {
         // One specific run (baseline, enhanced or rescheduled)
         const { data: jobData, error: jobError } = await supabase.from("timetable_jobs").select("*").eq("id", jobParam).maybeSingle()
-        if (jobError || !jobData) {
+        // Runs are only visible inside their own college
+        if (jobError || !jobData || !collegeId || jobData.college_id !== collegeId) {
           setError("Timetable run not found")
           return
         }
@@ -263,11 +264,13 @@ function TimetablePageContent() {
                 </p>
               </div>
               <div className="flex gap-3 mt-4">
-                <Link href="/department/generate">
-                  <Button className="bg-blue-600 hover:bg-blue-700 dark:bg-blue-700 dark:hover:bg-blue-800">
-                    Generate Timetable
-                  </Button>
-                </Link>
+                {role === "department_admin" && (
+                  <Link href="/department/generate">
+                    <Button className="bg-blue-600 hover:bg-blue-700 dark:bg-blue-700 dark:hover:bg-blue-800">
+                      Generate Timetable
+                    </Button>
+                  </Link>
+                )}
                 <Button onClick={() => fetchTimetableData(true)} variant="outline" className="bg-white dark:bg-slate-800">
                   <RefreshCw className={`w-4 h-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
                   Refresh

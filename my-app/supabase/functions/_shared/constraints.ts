@@ -176,6 +176,7 @@ export function evaluateHardConstraints(slots: TimetableSlot[], ctx: SchedulingC
     report.calendarRules +
     report.theoryDailyLimit +
     report.roomTypeOrCapacity +
+    report.coverageDeficitPeriods +
     report.coverageSurplusPeriods
   return report
 }

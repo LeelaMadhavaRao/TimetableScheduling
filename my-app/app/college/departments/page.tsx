@@ -1,4 +1,4 @@
-import { getSupabaseServerClient, getCurrentCollegeAdminId } from "@/lib/server"
+import { getSupabaseServerClient, requireCollegeAdminId } from "@/lib/server"
 import { DepartmentManager, type DepartmentRow } from "@/components/department-manager"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -7,7 +7,7 @@ import Link from "next/link"
 
 export default async function DepartmentsPage() {
   const supabase = await getSupabaseServerClient()
-  const collegeId = (await getCurrentCollegeAdminId()) || "00000000-0000-0000-0000-000000000000"
+  const collegeId = await requireCollegeAdminId()
 
   const [{ data: departments }, { data: admins }, { data: faculty }, { data: sections }] = await Promise.all([
     supabase.from("departments").select("id, name, code").eq("college_id", collegeId).order("code"),

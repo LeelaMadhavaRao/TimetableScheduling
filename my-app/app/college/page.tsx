@@ -1,4 +1,4 @@
-import { getSupabaseServerClient, getCurrentCollegeAdminId } from "@/lib/server"
+import { getSupabaseServerClient, requireCollegeAdminId } from "@/lib/server"
 import { StatsCard } from "@/components/stats-card"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Users, Building, Network, CalendarCheck, UserCog } from "lucide-react"
@@ -15,8 +15,7 @@ const WORKFLOW = [
 
 export default async function CollegeDashboardPage() {
   const supabase = await getSupabaseServerClient()
-  const collegeId = await getCurrentCollegeAdminId()
-  const scope = collegeId || "00000000-0000-0000-0000-000000000000"
+  const scope = await requireCollegeAdminId()
 
   const [departments, admins, faculty, classrooms, published] = await Promise.all([
     supabase.from("departments").select("*", { count: "exact", head: true }).eq("college_id", scope),

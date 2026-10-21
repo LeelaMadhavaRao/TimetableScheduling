@@ -1,4 +1,4 @@
-import { getSupabaseServerClient, getCurrentDepartmentAdmin } from "@/lib/server"
+import { getSupabaseServerClient, requireDepartmentAdmin } from "@/lib/server"
 import { SectionList } from "@/components/section-list"
 import { SectionDialog } from "@/components/section-dialog"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -9,9 +9,9 @@ import ClickSpark from "@/components/ClickSpark"
 
 export default async function SectionsPage() {
   const supabase = await getSupabaseServerClient()
-  const admin = await getCurrentDepartmentAdmin()
-  const departmentId = admin?.departmentId || "00000000-0000-0000-0000-000000000000"
-  const collegeId = admin?.collegeId || "00000000-0000-0000-0000-000000000000"
+  const admin = await requireDepartmentAdmin()
+  const departmentId = admin.departmentId
+  const collegeId = admin.collegeId
 
   const { data: sections } = await supabase
     .from("sections")

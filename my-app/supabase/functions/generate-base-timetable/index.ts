@@ -126,100 +126,108 @@ async function handleGenerate(supabase: Supabase, admin: DepartmentAdminSession,
     return jsonResponse({ success: false, jobId: job.id, executionLogs, ...payload }, status)
   }
 
-  const problem = await loadDepartmentProblem(supabase, admin.collegeId, sectionIds)
-  if (problem.courses.length === 0) {
-    return fail(200, { error: "The selected sections have no subjects assigned" }, "Selected sections have no subjects assigned")
-  }
-  if (problem.rooms.length === 0) {
-    return fail(200, { error: "Your college has no classrooms configured" }, "No classrooms configured")
-  }
-  console.log(`[Edge Function] ${problem.courses.length} courses, ${problem.rooms.length} rooms, ${problem.committedSlotCount} committed slots from other departments`)
+  // Any failure (solver timeout, database error) marks the job failed instead of leaving it
+  // stuck at "generating"
+  try {
+    const problem = await loadDepartmentProblem(supabase, admin.collegeId, sectionIds)
+    if (problem.courses.length === 0) {
+      return fail(200, { error: "The selected sections have no subjects assigned" }, "Selected sections have no subjects assigned")
+    }
+    if (problem.rooms.length === 0) {
+      return fail(200, { error: "Your college has no classrooms configured" }, "No classrooms configured")
+    }
+    console.log(`[Edge Function] ${problem.courses.length} courses, ${problem.rooms.length} rooms, ${problem.committedSlotCount} committed slots from other departments`)
 
-  await supabase
-    .from("timetable_jobs")
-    .update({
-      progress: 40,
-      message: mode === "enhanced" ? "Relaxed-ILP diversification: building diverse feasible seeds..." : "Running ILP solver (labs) and greedy theory scheduling...",
-    })
-    .eq("id", job.id)
+    await supabase
+      .from("timetable_jobs")
+      .update({
+        progress: 40,
+        message: mode === "enhanced" ? "Relaxed-ILP diversification: building diverse feasible seeds..." : "Running ILP solver (labs) and greedy theory scheduling...",
+      })
+      .eq("id", job.id)
 
-  const base = await runBaseStage(mode, problem.courses, problem.rooms, problem.availability, problem.occupancy)
-  const slots = base.slots
-  console.log(`[Edge Function] Base stage finished in ${base.timeMs}ms with ${slots.length} slots`)
+    const base = await runBaseStage(mode, problem.courses, problem.rooms, problem.availability, problem.occupancy)
+    const slots = base.slots
+    console.log(`[Edge Function] Base stage finished in ${base.timeMs}ms with ${slots.length} slots`)
 
-  const conflicts = base.generator.detectConflicts(slots)
-  if (conflicts.length > 0) {
-    return fail(200, { error: "CONFLICTS_DETECTED", conflicts: conflicts.slice(0, 10) }, `Timetable generation failed: ${conflicts.length} conflicts detected. ${conflicts[0]}`)
-  }
+    const conflicts = base.generator.detectConflicts(slots)
+    if (conflicts.length > 0) {
+      return fail(200, { error: "CONFLICTS_DETECTED", conflicts: conflicts.slice(0, 10) }, `Timetable generation failed: ${conflicts.length} conflicts detected. ${conflicts[0]}`)
+    }
 
-  await supabase.from("timetable_jobs").update({ progress: 80, message: "Saving base timetable..." }).eq("id", job.id)
-  const { error: insertError } = await supabase.from("timetable_base").insert(toSlotRows(job.id, slots, admin.id))
-  if (insertError) return fail(500, { error: insertError.message }, "Error saving timetable: " + insertError.message)
+    await supabase.from("timetable_jobs").update({ progress: 80, message: "Saving base timetable..." }).eq("id", job.id)
+    const { error: insertError } = await supabase.from("timetable_base").insert(toSlotRows(job.id, slots, admin.id))
+    if (insertError) return fail(500, { error: insertError.message }, "Error saving timetable: " + insertError.message)
 
-  const validation = await validateScheduleCompleteness(
-    supabase,
-    problem.courses,
-    slots,
-    job.id,
-    problem.rooms,
-    problem.availability,
-    base.generator.getILPError(),
-    base.generator.getReducedCourses(),
-  )
-  if (validation.missing.length > 0) {
-    return fail(
-      200,
-      {
-        error: "INCOMPLETE_SCHEDULE",
-        details: validation.missing,
-        diagnostics: validation.diagnostics,
-        message: `Generated timetable is incomplete. ${validation.missing.length} subject(s) not fully scheduled.`,
-      },
-      `Incomplete schedule: ${validation.missing.length} subjects missing`,
+    const validation = await validateScheduleCompleteness(
+      supabase,
+      problem.courses,
+      slots,
+      job.id,
+      problem.rooms,
+      problem.availability,
+      base.generator.getILPError(),
+      base.generator.getReducedCourses(),
     )
-  }
+    if (validation.missing.length > 0) {
+      return fail(
+        200,
+        {
+          error: "INCOMPLETE_SCHEDULE",
+          details: validation.missing,
+          diagnostics: validation.diagnostics,
+          message: `Generated timetable is incomplete. ${validation.missing.length} subject(s) not fully scheduled.`,
+        },
+        `Incomplete schedule: ${validation.missing.length} subjects missing`,
+      )
+    }
 
-  const ctx = buildSchedulingContext(problem.courses, problem.rooms, problem.availability, problem.occupancy)
-  const summary = summarizeTimetable(slots, ctx)
+    const ctx = buildSchedulingContext(problem.courses, problem.rooms, problem.availability, problem.occupancy)
+    const summary = summarizeTimetable(slots, ctx)
 
-  await supabase
-    .from("timetable_jobs")
-    .update({
-      status: "base_complete",
-      progress: 100,
-      message: `${mode === "enhanced" ? "Enhanced" : "Baseline"} base timetable ready (${slots.length} slots in ${base.timeMs}ms)${mode === "enhanced" ? `, ${base.seeds.length} diverse seeds` : ""}`,
-      base_generation_time: base.timeMs,
-      metrics: {
-        mode,
-        base: { ...summary, timeMs: base.timeMs, diversification: base.diversification, committedSlotsRespected: problem.committedSlotCount },
-      },
-      seed_population: mode === "enhanced" ? base.seeds.map(packSlots) : null,
+    await supabase
+      .from("timetable_jobs")
+      .update({
+        status: "base_complete",
+        progress: 100,
+        message: `${mode === "enhanced" ? "Enhanced" : "Baseline"} base timetable ready (${slots.length} slots in ${base.timeMs}ms)${mode === "enhanced" ? `, ${base.seeds.length} diverse seeds` : ""}`,
+        base_generation_time: base.timeMs,
+        metrics: {
+          mode,
+          base: { ...summary, timeMs: base.timeMs, diversification: base.diversification, committedSlotsRespected: problem.committedSlotCount },
+        },
+        seed_population: mode === "enhanced" ? base.seeds.map(packSlots) : null,
+      })
+      .eq("id", job.id)
+
+    // Keep only the newest unpublished run per (department, section set, mode)
+    const { data: oldJobs } = await supabase
+      .from("timetable_jobs")
+      .select("id")
+      .eq("department_id", admin.departmentId)
+      .eq("section_key", sectionKeyOf(sectionIds))
+      .eq("algorithm_mode", mode)
+      .eq("run_type", "full")
+      .eq("is_published", false)
+      .neq("id", job.id)
+    if (oldJobs && oldJobs.length > 0) {
+      // deno-lint-ignore no-explicit-any
+      await supabase.from("timetable_jobs").delete().in("id", oldJobs.map((j: any) => j.id))
+    }
+
+    return jsonResponse({
+      success: true,
+      jobId: job.id,
+      mode,
+      slotsGenerated: slots.length,
+      generationTime: base.timeMs,
+      executionLogs,
     })
-    .eq("id", job.id)
-
-  // Keep only the newest unpublished run per (department, section set, mode)
-  const { data: oldJobs } = await supabase
-    .from("timetable_jobs")
-    .select("id")
-    .eq("department_id", admin.departmentId)
-    .eq("section_key", sectionKeyOf(sectionIds))
-    .eq("algorithm_mode", mode)
-    .eq("run_type", "full")
-    .eq("is_published", false)
-    .neq("id", job.id)
-  if (oldJobs && oldJobs.length > 0) {
-    // deno-lint-ignore no-explicit-any
-    await supabase.from("timetable_jobs").delete().in("id", oldJobs.map((j: any) => j.id))
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    console.error("[Edge Function] Generation failed:", message)
+    return fail(500, { error: message }, `Generation failed: ${message}`)
   }
-
-  return jsonResponse({
-    success: true,
-    jobId: job.id,
-    mode,
-    slotsGenerated: slots.length,
-    generationTime: base.timeMs,
-    executionLogs,
-  })
 }
 
 // deno-lint-ignore no-explicit-any

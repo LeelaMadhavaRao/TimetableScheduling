@@ -1,4 +1,4 @@
-import { getSupabaseServerClient, getCurrentCollegeAdminId } from "@/lib/server"
+import { getSupabaseServerClient, requireCollegeAdminId } from "@/lib/server"
 import { FacultyList } from "@/components/faculty-list"
 import { FacultyDialog } from "@/components/faculty-dialog"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -9,7 +9,7 @@ import ClickSpark from "@/components/ClickSpark"
 
 export default async function FacultyPage() {
   const supabase = await getSupabaseServerClient()
-  const collegeId = (await getCurrentCollegeAdminId()) || "00000000-0000-0000-0000-000000000000"
+  const collegeId = await requireCollegeAdminId()
 
   // The college admin maintains every faculty member of the college, across departments
   const { data: faculty, error } = await supabase

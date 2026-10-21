@@ -5,7 +5,7 @@ This microservice solves the lab scheduling problem using constraint programming
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from ortools.sat.python import cp_model
 from typing import List, Dict, Optional
 import uvicorn
@@ -89,13 +89,13 @@ class ProblemData(BaseModel):
 
 
 class DiverseProblemData(ProblemData):
-    numSolutions: int = 6
+    numSolutions: int = Field(6, ge=1, le=10)
     # tau: minimum fraction of labs that must differ between any two returned solutions
-    minHammingFraction: float = 0.3
+    minHammingFraction: float = Field(0.3, ge=0.0, le=1.0)
     randomSeed: int = 7
-    timeLimitPerSolution: float = 3.0
+    timeLimitPerSolution: float = Field(15.0, gt=0, le=30)
     # Solutions after the first only need to be good feasible seeds, not proven optimal
-    diverseTimeLimit: float = 0.25
+    diverseTimeLimit: float = Field(0.25, gt=0, le=10)
 
 
 # Output Models
@@ -515,6 +515,11 @@ def solve_lab_timetable(data: ProblemData):
 # RELAXED-ILP DIVERSIFICATION ENDPOINT (Enhancement 2)
 # ============================================
 
+# CP-SAT search workers for /solve-labs-diverse. Many workers on a fractional CPU (Render's
+# small instances) only split the wall-clock time limit, so the default stays small;
+# set SOLVER_WORKERS on bigger machines.
+SOLVER_WORKERS = max(1, int(os.environ.get("SOLVER_WORKERS", min(2, os.cpu_count() or 1))))
+
 LAB_BLOCKS = [
     {"name": "M1", "start": 1, "half": "M"},
     {"name": "M2", "start": 2, "half": "M"},
@@ -631,14 +636,15 @@ def solve_labs_diverse(data: DiverseProblemData):
 
         # Later solutions only need to be good feasible seeds: their limit scales with how long
         # the standard solution took, and is doubled once if nothing was found in time
-        limit = data.timeLimitPerSolution if k == 0 else max(data.diverseTimeLimit, 2 * first_solve_seconds)
+        limit = data.timeLimitPerSolution if k == 0 else min(10.0, max(data.diverseTimeLimit, 2 * first_solve_seconds))
         for _retry in range(2 if k > 0 else 1):
             solver = cp_model.CpSolver()
             solver.parameters.max_time_in_seconds = limit
             solver.parameters.random_seed = data.randomSeed + k
-            solver.parameters.num_search_workers = 8
+            solver.parameters.num_search_workers = SOLVER_WORKERS
             status = solver.Solve(model)
-            if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+            # Proven infeasible (the exclusion constraints used up the space): retrying cannot help
+            if status in (cp_model.OPTIMAL, cp_model.FEASIBLE, cp_model.INFEASIBLE):
                 break
             limit *= 2
         status_name = solver.StatusName(status)

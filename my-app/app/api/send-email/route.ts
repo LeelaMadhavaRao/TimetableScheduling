@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import nodemailer from 'nodemailer'
+import { getSupabaseServerClient } from '@/lib/server'
+import { getRequestSession } from '@/lib/api-session'
 
 // Email transporter configuration
 function createTransporter() {
@@ -16,6 +18,13 @@ function createTransporter() {
 
 export async function POST(req: NextRequest) {
   try {
+    // Not an open relay: only signed-in system or college administrators may send mail
+    const supabase = await getSupabaseServerClient()
+    const session = await getRequestSession(req, supabase, ['admin', 'college_admin'])
+    if (!session) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 403 })
+    }
+
     const body = await req.json()
     const { to, subject, html, text } = body
 
@@ -45,11 +54,11 @@ export async function POST(req: NextRequest) {
     console.log('Host:', process.env.EMAIL_HOST || 'smtp.gmail.com')
     console.log('Port:', parseInt(process.env.EMAIL_PORT || '587'))
     console.log('User:', process.env.EMAIL_USER)
-    
+
     const transporter = createTransporter()
 
     console.log('📧 Sending email...')
-    
+
     // Send email
     const info = await transporter.sendMail({
       from: `"${process.env.EMAIL_FROM_NAME || 'Timetable System'}" <${process.env.EMAIL_USER}>`,

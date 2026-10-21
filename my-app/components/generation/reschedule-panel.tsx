@@ -41,11 +41,12 @@ export function ReschedulePanel({ publishedJobs, sectionNames, onDone }: Resched
       .from("timetable_optimized")
       .select("faculty_id, classroom_id, faculty(code, name), classrooms(name)")
       .eq("job_id", jobId)
-      .then(({ data }: { data: { faculty_id: string; classroom_id: string; faculty: { code: string; name: string } | null; classrooms: { name: string } | null }[] | null }) => {
+      .then(({ data, error }: { data: { faculty_id: string; classroom_id: string; faculty: { code: string; name: string } | null; classrooms: { name: string } | null }[] | null; error: { message: string } | null }) => {
+        if (error) setError(`Could not load this timetable's faculty and rooms: ${error.message}`)
         const f = new Map<string, string>()
         const r = new Map<string, string>()
         for (const row of data || []) {
-          f.set(row.faculty_id, `${row.faculty?.code} - ${row.faculty?.name}`)
+          f.set(row.faculty_id, row.faculty ? `${row.faculty.code} - ${row.faculty.name}` : row.faculty_id)
           r.set(row.classroom_id, row.classrooms?.name || row.classroom_id)
         }
         setFaculty([...f].map(([id, label]) => ({ id, label })).sort((a, b) => a.label.localeCompare(b.label)))

@@ -30,20 +30,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // A deactivated college disables its department accounts too
-    const { data: college } = await supabase
-      .from('timetable_administrators')
-      .select('is_active')
-      .eq('id', adminData.college_id)
-      .single()
-
-    if (!college?.is_active) {
-      return NextResponse.json(
-        { success: false, message: "Your college account is inactive. Contact your college administrator." },
-        { status: 403 }
-      )
-    }
-
     // Verify password using RPC
     const { data: isValid, error: verifyError } = await supabase
       .rpc('verify_password', {
@@ -63,6 +49,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { success: false, message: "Invalid username or password" },
         { status: 401 }
+      )
+    }
+
+    // A deactivated college disables its department accounts too
+    const { data: college } = await supabase
+      .from('timetable_administrators')
+      .select('is_active')
+      .eq('id', adminData.college_id)
+      .single()
+
+    if (!college?.is_active) {
+      return NextResponse.json(
+        { success: false, message: "Your college account is inactive. Contact your college administrator." },
+        { status: 403 }
       )
     }
 

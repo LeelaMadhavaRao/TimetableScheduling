@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Calendar, Menu, X, ChevronRight, LogOut, Loader2, type LucideIcon } from "lucide-react"
 import { useState, useEffect } from "react"
 import { useAuth } from "@/contexts/AuthContext"
-import { ROLE_LOGIN, type UserRole } from "@/lib/auth"
+import { ROLE_HOME, ROLE_LOGIN, type UserRole } from "@/lib/auth"
 import ClickSpark from "@/components/ClickSpark"
 
 export interface PortalNavItem {
@@ -37,8 +37,11 @@ export function PortalLayout({ children, role, homeHref, navItems, subtitle, dis
 
   useEffect(() => {
     if (!isLoading) {
-      if (!isAuthenticated || currentRole !== role) {
+      if (!isAuthenticated || !currentRole) {
         router.push(ROLE_LOGIN[role])
+      } else if (currentRole !== role) {
+        // Signed in, but for another portal: go to that portal instead of a login page
+        router.push(ROLE_HOME[currentRole])
       } else {
         setIsCheckingAuth(false)
       }
@@ -85,7 +88,7 @@ export function PortalLayout({ children, role, homeHref, navItems, subtitle, dis
           <div className="flex items-center justify-between">
             {/* Logo */}
             <Link
-              href={homeHref} 
+              href={homeHref}
               className="flex items-center gap-2 text-xl font-bold text-white hover:text-blue-400 transition-colors group"
             >
               <div className="p-2 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-500 group-hover:shadow-lg group-hover:shadow-blue-500/50 transition-all duration-300">

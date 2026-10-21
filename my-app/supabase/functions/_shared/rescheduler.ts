@@ -104,14 +104,15 @@ export async function runIncrementalReschedule(params: {
 
   // Incremental ILP step: locked slots are fixed, the generator only fills the gaps
   const generator = new ILPTimetableGenerator(params.courses, params.rooms, params.availability, { occupancy })
-  const { placed } = await silently(() => generator.rescheduleAround(locked, remainder, params.rngSeed ?? 99))
-  let slots = locked.concat(placed)
+  const { kept, placed, lockedRejected } = await silently(() => generator.rescheduleAround(locked, remainder, params.rngSeed ?? 99))
+  let slots = kept.concat(placed)
+  const movableFrom = kept.length
 
   // Local GA-style refinement restricted to the re-placed neighbourhood
   let accepted = 0
   if (placed.length > 0) {
     const grid = FeasibilityGrid.fromSlots(ctx, slots)
-    const movable = slots.map((_, i) => i).slice(locked.length)
+    const movable = slots.map((_, i) => i).slice(movableFrom)
     let quality = weightedQuality(computeObjectives(slots, ctx))
     const iterations = params.localSearchIterations ?? 150
 
@@ -149,8 +150,10 @@ export async function runIncrementalReschedule(params: {
   const summary = summarizeTimetable(slots, ctx)
   const originalCtx = buildSchedulingContext(params.courses, params.rooms, params.availability, params.occupancy)
   const qualityBefore = weightedQuality(computeObjectives(params.currentSlots, originalCtx))
-  const lockRatio = params.currentSlots.length > 0 ? locked.length / params.currentSlots.length : 1
-  const periodsToReplace = remainder.reduce((sum, c) => sum + c.periodsPerWeek, 0)
+  const lockRatio = params.currentSlots.length > 0 ? kept.length / params.currentSlots.length : 1
+  const periodsToReplace =
+    remainder.reduce((sum, c) => sum + c.periodsPerWeek, 0) +
+    locked.filter((s) => !kept.some((k) => k.sectionId === s.sectionId && k.subjectId === s.subjectId && k.day === s.day && k.startPeriod === s.startPeriod)).reduce((sum, s) => sum + slotPeriods(s), 0)
   const periodsReplaced = placed.reduce((sum, s) => sum + slotPeriods(s), 0)
 
   return {
@@ -159,8 +162,8 @@ export async function runIncrementalReschedule(params: {
     metrics: {
       latencyMs: Date.now() - started,
       totalSlots: params.currentSlots.length,
-      affectedSlots: affected.length,
-      scheduleAffectedFraction: params.currentSlots.length > 0 ? affected.length / params.currentSlots.length : 0,
+      affectedSlots: affected.length + lockedRejected,
+      scheduleAffectedFraction: params.currentSlots.length > 0 ? (affected.length + lockedRejected) / params.currentSlots.length : 0,
       lockRatio,
       lockRatioTarget: LOCK_RATIO_TARGET,
       lockRatioSatisfied: lockRatio >= LOCK_RATIO_TARGET,

@@ -35,7 +35,7 @@ export function ClassroomDialog({ classroom, trigger }: ClassroomDialogProps) {
     capacity: classroom?.capacity || 60,
     room_type: classroom?.room_type || "theory",
     building: classroom?.building || "",
-    floor: classroom?.floor || 1,
+    floor: classroom?.floor ?? 1,
   })
   const [capacityError, setCapacityError] = useState("")
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
@@ -47,6 +47,11 @@ export function ClassroomDialog({ classroom, trigger }: ClassroomDialogProps) {
     e.preventDefault()
     setLoading(true)
 
+    if (!classroom && !collegeId) {
+      setErrorMsg("Your session is still loading. Please try again in a moment.")
+      setLoading(false)
+      return
+    }
     const supabase = getSupabaseBrowserClient()
 
     if (formData.capacity < 1) {
@@ -77,6 +82,8 @@ export function ClassroomDialog({ classroom, trigger }: ClassroomDialogProps) {
     setErrorMsg(null)
     setOpen(false)
     setLoading(false)
+    if (!classroom) setFormData((current) => ({ ...current, name: "" }))
+    router.refresh()
   }
 
   return (

@@ -17,6 +17,8 @@ interface ClassroomListProps {
 
 export function ClassroomList({ classrooms: initialClassrooms }: ClassroomListProps) {
   const [classrooms, setClassrooms] = useState(initialClassrooms)
+  // Pick up rows added/edited elsewhere when the server re-renders (router.refresh)
+  useEffect(() => setClassrooms(initialClassrooms), [initialClassrooms])
   const [searchQuery, setSearchQuery] = useState("")
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const router = useRouter()

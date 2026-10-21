@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
+import { redirect } from "next/navigation"
 
 export async function getSupabaseServerClient() {
   const cookieStore = await cookies()
@@ -74,4 +75,19 @@ export async function getCurrentDepartmentAdmin(): Promise<CurrentDepartmentAdmi
     departmentName: department?.name || '',
     departmentCode: department?.code || '',
   }
+}
+
+// For server pages: the signed-in college admin's id, or a redirect to their login page
+// (instead of rendering an empty page when the session cookie is missing or belongs to
+// another role)
+export async function requireCollegeAdminId(): Promise<string> {
+  const id = await getCurrentCollegeAdminId()
+  if (!id) redirect("/login/college-admin")
+  return id
+}
+
+export async function requireDepartmentAdmin(): Promise<CurrentDepartmentAdmin> {
+  const admin = await getCurrentDepartmentAdmin()
+  if (!admin) redirect("/login/department-admin")
+  return admin
 }

@@ -32,7 +32,7 @@ export default async function SectionsPage() {
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
         <div className="space-y-1 flex-1">
           <div className="flex items-center gap-3">
             <Link href="/department">
@@ -47,7 +47,7 @@ export default async function SectionsPage() {
               </ClickSpark>
             </Link>
             <div>
-              <h1 className="text-3xl font-bold text-white mb-1">
+              <h1 className="text-2xl sm:text-3xl font-bold text-white mb-1">
                 Section Management
               </h1>
               <p className="text-slate-300">Manage sections with student counts and subject assignments</p>
@@ -77,7 +77,7 @@ export default async function SectionsPage() {
             </div>
           </div>
         </CardHeader>
-        <CardContent className="pt-6">
+        <CardContent>
           <SectionList sections={sections || []} departments={departments || []} subjects={subjects || []} />
         </CardContent>
       </Card>

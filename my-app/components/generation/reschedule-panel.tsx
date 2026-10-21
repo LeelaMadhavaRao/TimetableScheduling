@@ -105,11 +105,11 @@ export function ReschedulePanel({ publishedJobs, sectionNames, onDone }: Resched
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        <div className="space-y-1">
+        <div className="space-y-1 min-w-0">
           <Label className="text-slate-300 text-xs">Published timetable</Label>
           <Select value={jobId} onValueChange={setJobId}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
+            <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+            <SelectContent className="max-w-[calc(100vw-2rem)]">
               {publishedJobs.map((j) => (
                 <SelectItem key={j.id} value={j.id}>
                   {(j.section_ids || []).map((id) => sectionNames.get(id) || "?").join(", ")}
@@ -118,20 +118,20 @@ export function ReschedulePanel({ publishedJobs, sectionNames, onDone }: Resched
             </SelectContent>
           </Select>
         </div>
-        <div className="space-y-1">
+        <div className="space-y-1 min-w-0">
           <Label className="text-slate-300 text-xs">Disruption</Label>
           <Select value={type} onValueChange={(v) => { setType(v as "faculty" | "room"); setTargetId("") }}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="faculty">Faculty member on leave</SelectItem>
               <SelectItem value="room">Room closed</SelectItem>
             </SelectContent>
           </Select>
         </div>
-        <div className="space-y-1">
+        <div className="space-y-1 min-w-0">
           <Label className="text-slate-300 text-xs">{type === "faculty" ? "Faculty" : "Room"}</Label>
           <Select value={targetId} onValueChange={setTargetId}>
-            <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
+            <SelectTrigger className="w-full"><SelectValue placeholder="Select..." /></SelectTrigger>
             <SelectContent>
               {options.map((o) => (
                 <SelectItem key={o.id} value={o.id}>{o.label}</SelectItem>

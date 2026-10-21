@@ -26,7 +26,7 @@ export default async function CollegeTimetablesPage() {
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
         <div className="flex items-center gap-3">
           <Link href="/college">
             <Button variant="ghost" size="icon" className="hover:bg-primary/10">
@@ -34,7 +34,7 @@ export default async function CollegeTimetablesPage() {
             </Button>
           </Link>
           <div>
-            <h1 className="text-3xl font-bold text-white mb-1">Published Timetables</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold text-white mb-1">Published Timetables</h1>
             <p className="text-slate-300">Committed timetables of every department; together they define each faculty member&apos;s week</p>
           </div>
         </div>

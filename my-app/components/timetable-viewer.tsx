@@ -145,16 +145,16 @@ export function TimetableViewer({ timetableSlots, sections, faculty, classrooms,
   return (
     <Card className="bg-white dark:bg-slate-900">
       <CardHeader className="bg-slate-50 dark:bg-slate-800/50">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <CardTitle className="text-slate-900 dark:text-slate-100">
             {isOptimized && <Badge className="mr-2 bg-emerald-600 dark:bg-emerald-700 text-white">Optimized</Badge>}
             Timetable View
           </CardTitle>
           <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "section" | "faculty" | "classroom")}>
-            <TabsList className="bg-white dark:bg-slate-800">
-              <TabsTrigger value="section" className="data-[state=active]:bg-slate-200 dark:data-[state=active]:bg-slate-700">By Section</TabsTrigger>
-              <TabsTrigger value="faculty" className="data-[state=active]:bg-slate-200 dark:data-[state=active]:bg-slate-700">By Faculty</TabsTrigger>
-              <TabsTrigger value="classroom" className="data-[state=active]:bg-slate-200 dark:data-[state=active]:bg-slate-700">By Classroom</TabsTrigger>
+            <TabsList className="bg-white dark:bg-slate-800 max-w-full">
+              <TabsTrigger value="section" className="data-[state=active]:bg-slate-200 dark:data-[state=active]:bg-slate-700 px-2 sm:px-3">By Section</TabsTrigger>
+              <TabsTrigger value="faculty" className="data-[state=active]:bg-slate-200 dark:data-[state=active]:bg-slate-700 px-2 sm:px-3">By Faculty</TabsTrigger>
+              <TabsTrigger value="classroom" className="data-[state=active]:bg-slate-200 dark:data-[state=active]:bg-slate-700 px-2 sm:px-3">By Classroom</TabsTrigger>
             </TabsList>
           </Tabs>
         </div>

@@ -50,17 +50,18 @@ interface FacultyInfo {
   name: string;
 }
 
-// Generate a color from subject name
+// Generate a color from subject name (categorical hues only: red / amber / yellow mean
+// error / warning / baseline elsewhere in the app)
 function getSubjectColor(subjectName: string): string {
   const colors = [
     'bg-blue-500/20 border-blue-500/50 text-blue-300',
     'bg-green-500/20 border-green-500/50 text-green-300',
     'bg-purple-500/20 border-purple-500/50 text-purple-300',
-    'bg-orange-500/20 border-orange-500/50 text-orange-300',
+    'bg-sky-500/20 border-sky-500/50 text-sky-300',
     'bg-pink-500/20 border-pink-500/50 text-pink-300',
     'bg-cyan-500/20 border-cyan-500/50 text-cyan-300',
-    'bg-yellow-500/20 border-yellow-500/50 text-yellow-300',
-    'bg-red-500/20 border-red-500/50 text-red-300',
+    'bg-violet-500/20 border-violet-500/50 text-violet-300',
+    'bg-fuchsia-500/20 border-fuchsia-500/50 text-fuchsia-300',
     'bg-indigo-500/20 border-indigo-500/50 text-indigo-300',
     'bg-teal-500/20 border-teal-500/50 text-teal-300',
   ];
@@ -74,7 +75,7 @@ function getSubjectColor(subjectName: string): string {
 
 export default function FacultyDashboardPage() {
   const { user, logout, isLoading: authLoading } = useAuth();
-  const { isLoading: requireAuthLoading } = useRequireAuth(['faculty']);
+  const { isLoading: requireAuthLoading, authorized } = useRequireAuth(['faculty']);
 
   const [timetableSlots, setTimetableSlots] = useState<TimetableSlot[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -144,10 +145,10 @@ export default function FacultyDashboardPage() {
   }, [facultyUser?.id]);
 
   useEffect(() => {
-    if (!authLoading && !requireAuthLoading && facultyUser) {
+    if (authorized && facultyUser) {
       loadTimetable();
     }
-  }, [authLoading, requireAuthLoading, facultyUser, loadTimetable]);
+  }, [authorized, facultyUser, loadTimetable]);
 
   const handleLogout = async () => {
     await logout();
@@ -179,7 +180,7 @@ export default function FacultyDashboardPage() {
   const filteredDays = selectedDay === 'all' ? DAYS : [selectedDay];
   const timetableGrid = getTimetableGrid();
 
-  if (authLoading || requireAuthLoading) {
+  if (authLoading || requireAuthLoading || !authorized) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-emerald-900 to-slate-900 flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-emerald-500" />
@@ -191,26 +192,26 @@ export default function FacultyDashboardPage() {
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-emerald-900 to-slate-900">
       {/* Header */}
       <header className="border-b border-emerald-500/20 bg-slate-900/50 backdrop-blur-xl sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center">
+        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="h-10 w-10 shrink-0 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center">
               <GraduationCap className="h-5 w-5 text-white" />
             </div>
-            <div>
+            <div className="min-w-0">
               <h1 className="text-xl font-bold text-white">Faculty Dashboard</h1>
-              <p className="text-sm text-slate-400">
+              <p className="text-sm text-slate-400 truncate">
                 Welcome, {facultyUser?.name || 'Faculty'} ({facultyUser?.code})
               </p>
             </div>
           </div>
-          <ClickSpark sparkColor="#ef4444">
+          <ClickSpark sparkColor="#ef4444" className="relative inline-block shrink-0">
             <Button
               variant="outline"
               onClick={handleLogout}
               className="border-slate-700 text-slate-300 hover:text-white hover:bg-slate-800"
             >
-              <LogOut className="h-4 w-4 mr-2" />
-              Logout
+              <LogOut className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Logout</span>
             </Button>
           </ClickSpark>
         </div>

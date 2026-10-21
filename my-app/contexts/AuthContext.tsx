@@ -136,17 +136,19 @@ export function useAuth() {
 // Hook to require authentication
 export function useRequireAuth(allowedRoles?: UserRole[]) {
   const { isAuthenticated, isLoading, role } = useAuth();
+  const authorized = !isLoading && isAuthenticated && !!role && (!allowedRoles || allowedRoles.includes(role));
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
-      // Redirect based on attempted role or default to faculty login
+      // Send the visitor to the login of the page they tried to open, else of their last role
       const storedRole = localStorage.getItem(ROLE_KEY) as UserRole | null;
-      window.location.href = storedRole && ROLE_LOGIN[storedRole] ? ROLE_LOGIN[storedRole] : ROLE_LOGIN.faculty;
+      const target = allowedRoles?.[0] ?? storedRole;
+      window.location.href = target && ROLE_LOGIN[target] ? ROLE_LOGIN[target] : ROLE_LOGIN.faculty;
     } else if (!isLoading && isAuthenticated && allowedRoles && role && !allowedRoles.includes(role)) {
       // User authenticated but wrong role
       window.location.href = ROLE_HOME[role] || '/';
     }
   }, [isLoading, isAuthenticated, role, allowedRoles]);
 
-  return { isLoading, isAuthenticated, role };
+  return { isLoading, isAuthenticated, role, authorized };
 }

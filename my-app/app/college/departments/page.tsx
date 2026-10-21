@@ -39,7 +39,7 @@ export default async function DepartmentsPage() {
           </Button>
         </Link>
         <div>
-          <h1 className="text-3xl font-bold text-white mb-1">Departments</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-white mb-1">Departments</h1>
           <p className="text-slate-300">Create departments and one administrator account for each</p>
         </div>
       </div>
@@ -61,7 +61,7 @@ export default async function DepartmentsPage() {
             </div>
           </div>
         </CardHeader>
-        <CardContent className="pt-6">
+        <CardContent>
           <DepartmentManager collegeId={collegeId} departments={rows} />
         </CardContent>
       </Card>

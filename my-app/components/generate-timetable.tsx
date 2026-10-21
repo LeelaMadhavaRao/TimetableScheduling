@@ -375,12 +375,12 @@ export function GenerateTimetable({ sections }: { sections: GeneratableSection[]
 
       {/* 1. Sections */}
       <Card className="p-6 bg-slate-800/50 border-slate-700">
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-3">
           <div>
             <h3 className="font-semibold text-white">1. Select the classes to schedule</h3>
             <p className="text-sm text-slate-400">Only these sections are generated; every other department&apos;s published timetable is respected.</p>
           </div>
-          <div className="flex flex-wrap gap-2 justify-end">
+          <div className="flex flex-wrap gap-2 md:justify-end">
             {/* Year shortcuts toggle every section of that year; combine them freely with the checkboxes */}
             {[...new Set(schedulable.map((s) => s.yearLevel))].sort().map((year) => {
               const ids = schedulable.filter((s) => s.yearLevel === year).map((s) => s.id)

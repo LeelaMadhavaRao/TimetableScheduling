@@ -85,7 +85,7 @@ export function PortalLayout({ children, role, homeHref, navItems, subtitle, dis
       {/* Header */}
       <header className="sticky top-0 z-50 border-b border-blue-500/20 bg-slate-900/90 backdrop-blur-xl shadow-2xl transition-all duration-300">
         <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-4">
             {/* Logo */}
             <Link
               href={homeHref}
@@ -94,10 +94,10 @@ export function PortalLayout({ children, role, homeHref, navItems, subtitle, dis
               <div className="p-2 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-500 group-hover:shadow-lg group-hover:shadow-blue-500/50 transition-all duration-300">
                 <Calendar className="w-5 h-5 text-white group-hover:scale-110 transition-transform" />
               </div>
-              <div className="hidden sm:block">
-                <span className="block">Timetable System</span>
+              <div className="hidden sm:block min-w-0">
+                <span className="block whitespace-nowrap">Timetable System</span>
                 {subtitle && (
-                  <span className="block text-xs font-normal text-slate-400">
+                  <span title={subtitle} className="block max-w-56 lg:max-w-72 truncate text-xs font-normal text-slate-400">
                     {subtitle}
                   </span>
                 )}
@@ -129,10 +129,10 @@ export function PortalLayout({ children, role, homeHref, navItems, subtitle, dis
                 )
               })}
               <div className="ml-4 pl-4 border-l border-blue-500/20 flex items-center gap-2">
-                <span className="text-sm text-slate-400 hidden lg:inline">
+                <span title={displayName ?? undefined} className="text-sm text-slate-400 hidden xl:inline max-w-40 truncate whitespace-nowrap">
                   {displayName}
                 </span>
-                <ClickSpark sparkColor="#ef4444">
+                <ClickSpark sparkColor="#ef4444" className="relative inline-block shrink-0">
                   <Button
                     variant="ghost"
                     size="sm"

@@ -25,7 +25,7 @@ export default async function FacultyPage() {
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
         <div className="space-y-1 flex-1">
           <div className="flex items-center gap-3">
             <Link href="/college">
@@ -40,7 +40,7 @@ export default async function FacultyPage() {
               </ClickSpark>
             </Link>
             <div>
-              <h1 className="text-3xl font-bold text-white mb-1">
+              <h1 className="text-2xl sm:text-3xl font-bold text-white mb-1">
                 Faculty Management
               </h1>
               <p className="text-slate-300">All faculty of the college, their availability and the periods departments have already booked</p>
@@ -70,7 +70,7 @@ export default async function FacultyPage() {
             </div>
           </div>
         </CardHeader>
-        <CardContent className="pt-6">
+        <CardContent>
           <FacultyList faculty={faculty || []} departments={departments || []} />
         </CardContent>
       </Card>

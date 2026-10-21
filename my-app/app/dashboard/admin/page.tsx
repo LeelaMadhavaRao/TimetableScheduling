@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useAuth, useRequireAuth } from "@/contexts/AuthContext";
+import type { UserRole } from "@/lib/auth";
 import { 
   getTimetableAdministrators, 
   createTimetableAdministrator, 
@@ -47,9 +48,11 @@ import {
 import ClickSpark from "@/components/ClickSpark";
 import Link from "next/link";
 
+const ADMIN_ROLES: UserRole[] = ["admin"]
+
 export default function AdminDashboardPage() {
   const { user, logout, isLoading: authLoading } = useAuth();
-  const { isLoading: requireAuthLoading } = useRequireAuth(['admin']);
+  const { isLoading: requireAuthLoading, authorized } = useRequireAuth(ADMIN_ROLES);
   
   const [administrators, setAdministrators] = useState<TimetableAdministrator[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -80,10 +83,8 @@ export default function AdminDashboardPage() {
   };
 
   useEffect(() => {
-    if (!authLoading && !requireAuthLoading) {
-      loadAdministrators();
-    }
-  }, [authLoading, requireAuthLoading]);
+    if (authorized) loadAdministrators();
+  }, [authorized]);
 
   const handleOpenDialog = (admin?: TimetableAdministrator) => {
     if (admin) {
@@ -206,7 +207,7 @@ export default function AdminDashboardPage() {
     window.location.href = '/login/admin';
   };
 
-  if (authLoading || requireAuthLoading) {
+  if (authLoading || requireAuthLoading || !authorized) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-purple-500" />
@@ -220,7 +221,7 @@ export default function AdminDashboardPage() {
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
       {/* Header */}
       <header className="border-b border-purple-500/20 bg-slate-900/50 backdrop-blur-xl sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-4 py-4 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
               <Shield className="h-5 w-5 text-white" />
@@ -236,18 +237,18 @@ export default function AdminDashboardPage() {
                 variant="outline" 
                 className="border-slate-700 text-slate-300 hover:text-white hover:bg-slate-800"
               >
-                <UserPlus className="h-4 w-4 mr-2" />
-                Registration Requests
+                <UserPlus className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Registration Requests</span>
               </Button>
             </Link>
-            <ClickSpark sparkColor="#ef4444">
+            <ClickSpark sparkColor="#ef4444" className="relative inline-block shrink-0">
               <Button 
                 variant="outline" 
                 onClick={handleLogout}
                 className="border-slate-700 text-slate-300 hover:text-white hover:bg-slate-800"
               >
-                <LogOut className="h-4 w-4 mr-2" />
-                Logout
+                <LogOut className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Logout</span>
               </Button>
             </ClickSpark>
           </div>
@@ -313,7 +314,7 @@ export default function AdminDashboardPage() {
                 Each college administrator manages one college: its faculty, classrooms and department accounts
               </CardDescription>
             </div>
-            <ClickSpark sparkColor="#22c55e">
+            <ClickSpark sparkColor="#22c55e" className="relative inline-block shrink-0">
               <Button 
                 onClick={() => handleOpenDialog()}
                 className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
@@ -371,7 +372,7 @@ export default function AdminDashboardPage() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
-                          <ClickSpark sparkColor="#3b82f6">
+                          <ClickSpark sparkColor="#3b82f6" className="relative inline-block">
                             <Button 
                               variant="outline" 
                               size="sm"
@@ -381,7 +382,7 @@ export default function AdminDashboardPage() {
                               <Edit className="h-4 w-4" />
                             </Button>
                           </ClickSpark>
-                          <ClickSpark sparkColor="#ef4444">
+                          <ClickSpark sparkColor="#ef4444" className="relative inline-block shrink-0">
                             <Button 
                               variant="outline" 
                               size="sm"

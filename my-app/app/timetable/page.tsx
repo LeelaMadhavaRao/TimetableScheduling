@@ -273,7 +273,9 @@ function TimetablePageContent() {
               <div className="space-y-2">
                 <h3 className="text-xl font-semibold text-slate-900 dark:text-slate-100">No Timetable Available</h3>
                 <p className="text-slate-600 dark:text-slate-400 max-w-md">
-                  Generate a timetable first to view it here. Go to the admin panel to create a new timetable.
+                  {role === "department_admin"
+                    ? "None of your sections has a published timetable yet. Generate one, compare the runs and publish the best."
+                    : "No department has published a timetable yet. Published timetables appear here as departments commit them."}
                 </p>
               </div>
               <div className="flex gap-3 mt-4">
@@ -305,12 +307,12 @@ function TimetablePageContent() {
           <Link href={backHref}>
             <Button variant="ghost" size="sm" className="mb-4">
               <ArrowLeft className="w-4 h-4 mr-2" />
-              Back to Home
+              Back to dashboard
             </Button>
           </Link>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-100 mb-2">
+              <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-slate-100 mb-2">
                 📅 Timetable Viewer
               </h1>
               <p className="text-slate-600 dark:text-slate-400">View generated timetables by section or faculty</p>

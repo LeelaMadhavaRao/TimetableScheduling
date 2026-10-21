@@ -51,7 +51,7 @@ export default async function GeneratePage() {
           </Button>
         </Link>
         <div>
-          <h1 className="text-3xl font-bold text-white mb-1 flex items-center gap-2">
+          <h1 className="text-2xl sm:text-3xl font-bold text-white mb-1 flex items-center gap-2">
             Generate Timetable
             <Sparkles className="w-6 h-6 text-emerald-400 animate-pulse" />
           </h1>
@@ -76,7 +76,7 @@ export default async function GeneratePage() {
             </div>
           </div>
         </CardHeader>
-        <CardContent className="pt-6">
+        <CardContent>
           <GenerateTimetable sections={generatable} />
         </CardContent>
       </Card>

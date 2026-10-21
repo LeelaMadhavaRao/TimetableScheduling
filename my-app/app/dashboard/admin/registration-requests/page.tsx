@@ -52,7 +52,7 @@ interface RegistrationRequest {
 
 export default function RegistrationRequestsPage() {
   const { isLoading: authLoading } = useAuth()
-  const { isLoading: requireAuthLoading } = useRequireAuth(['admin'])
+  const { isLoading: requireAuthLoading, authorized } = useRequireAuth(['admin'])
   
   const [requests, setRequests] = useState<RegistrationRequest[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -86,10 +86,10 @@ export default function RegistrationRequestsPage() {
   }
 
   useEffect(() => {
-    if (!authLoading && !requireAuthLoading) {
+    if (authorized) {
       fetchRequests(selectedTab)
     }
-  }, [authLoading, requireAuthLoading, selectedTab])
+  }, [authorized, selectedTab])
 
   const handleApprove = async () => {
     if (!selectedRequest) return
@@ -189,7 +189,7 @@ export default function RegistrationRequestsPage() {
     }
   }
 
-  if (authLoading || requireAuthLoading) {
+  if (authLoading || requireAuthLoading || !authorized) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-blue-400" />

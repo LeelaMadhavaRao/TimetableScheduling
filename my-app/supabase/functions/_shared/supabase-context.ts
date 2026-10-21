@@ -12,6 +12,7 @@ import {
   TimetableSlot,
 } from "./scheduling-types.ts"
 import { corsHeaders } from "./cors.ts"
+import { computeRoomCaps } from "./capacity.ts"
 
 // deno-lint-ignore no-explicit-any
 type Supabase = any
@@ -51,12 +52,33 @@ export async function resolveDepartmentAdmin(supabase: Supabase, sessionToken: u
   return { id: admin.id, name: admin.name, departmentId: admin.department_id, collegeId: admin.college_id }
 }
 
+const PAGE = 1000
+
+/**
+ * Reads every row of a query. PostgREST caps responses at 1000 rows by default, and a
+ * fully published college easily has more committed slots than that - a truncated read
+ * would silently drop occupancy and allow double bookings.
+ */
+// deno-lint-ignore no-explicit-any
+export async function selectAll(build: () => any): Promise<{ data: any[]; error: { message: string } | null }> {
+  // deno-lint-ignore no-explicit-any
+  const rows: any[] = []
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await build().range(from, from + PAGE - 1)
+    if (error) return { data: rows, error }
+    rows.push(...(data || []))
+    if (!data || data.length < PAGE) return { data: rows, error: null }
+  }
+}
+
 export interface DepartmentProblem {
   courses: CourseAssignment[]
   rooms: ClassroomOption[]
   availability: FacultyAvailabilitySlot[]
   occupancy: Occupancy
   committedSlotCount: number
+  /** Demand of the college's other unscheduled sections (drives the room reservation) */
+  remaining: { theoryPeriods: number; labBlocks: number }
 }
 
 /**
@@ -65,13 +87,25 @@ export interface DepartmentProblem {
  * sections themselves (those are being regenerated).
  */
 export async function loadDepartmentProblem(supabase: Supabase, collegeId: string, sectionIds: string[]): Promise<DepartmentProblem> {
-  const [sectionSubjects, classrooms, committed] = await Promise.all([
-    supabase.from("section_subjects").select("*, sections(*), subjects(*), faculty(*)").in("section_id", sectionIds),
-    supabase.from("classrooms").select("*").eq("college_id", collegeId),
-    supabase
-      .from("committed_timetable")
-      .select("faculty_id, classroom_id, section_id, day_of_week, start_period, end_period")
-      .eq("college_id", collegeId),
+  const [sectionSubjects, classrooms, committed, collegeCurriculum] = await Promise.all([
+    selectAll(() => supabase.from("section_subjects").select("*, sections(*), subjects(*), faculty(*)").in("section_id", sectionIds).order("id")),
+    selectAll(() => supabase.from("classrooms").select("*").eq("college_id", collegeId).order("id")),
+    selectAll(() =>
+      supabase
+        .from("committed_timetable")
+        .select("id, faculty_id, classroom_id, section_id, day_of_week, start_period, end_period")
+        .eq("college_id", collegeId)
+        .order("id"),
+    ),
+    // Every section's curriculum in the college: sizes the room reservation for sections
+    // that are neither part of this run nor published yet
+    selectAll(() =>
+      supabase
+        .from("section_subjects")
+        .select("id, section_id, subjects(subject_type, periods_per_week), sections!inner(college_id)")
+        .eq("sections.college_id", collegeId)
+        .order("id"),
+    ),
   ])
   if (sectionSubjects.error) throw new Error(`Database error (section_subjects): ${sectionSubjects.error.message}`)
   if (classrooms.error) throw new Error(`Database error (classrooms): ${classrooms.error.message}`)
@@ -103,7 +137,7 @@ export async function loadDepartmentProblem(supabase: Supabase, collegeId: strin
   const facultyIds = [...new Set(courses.map((c) => c.facultyId))]
   let availability: FacultyAvailabilitySlot[] = []
   if (facultyIds.length > 0) {
-    const { data, error } = await supabase.from("faculty_availability").select("*").in("faculty_id", facultyIds)
+    const { data, error } = await selectAll(() => supabase.from("faculty_availability").select("*").in("faculty_id", facultyIds).order("id"))
     if (error) throw new Error(`Database error (faculty_availability): ${error.message}`)
     // deno-lint-ignore no-explicit-any
     availability = (data || []).map((a: any) => ({
@@ -118,12 +152,24 @@ export async function loadDepartmentProblem(supabase: Supabase, collegeId: strin
   // deno-lint-ignore no-explicit-any
   const otherRows = (committed.data || []).filter((row: any) => !selected.has(row.section_id))
 
+  const occupancy = buildOccupancy(otherRows)
+  const scheduled = new Set<string>([...selected, ...otherRows.map((row: { section_id: string }) => row.section_id)])
+  const remaining = { theoryPeriods: 0, labBlocks: 0 }
+  // deno-lint-ignore no-explicit-any
+  for (const row of (collegeCurriculum.data || []) as any[]) {
+    if (scheduled.has(row.section_id) || !row.subjects) continue
+    if (row.subjects.subject_type === "lab") remaining.labBlocks++
+    else remaining.theoryPeriods += row.subjects.periods_per_week
+  }
+  occupancy.roomCaps = computeRoomCaps(rooms, occupancy, remaining)
+
   return {
     courses,
     rooms,
     availability,
-    occupancy: buildOccupancy(otherRows),
+    occupancy,
     committedSlotCount: otherRows.length,
+    remaining,
   }
 }
 

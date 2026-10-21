@@ -12,6 +12,7 @@ import { setSolverUrl, silently } from "../supabase/functions/_shared/base-gener
 import { buildSchedulingContext, evaluateHardConstraints } from "../supabase/functions/_shared/constraints.ts"
 import { runBaseStage, runOptimizeStage } from "../supabase/functions/_shared/pipeline.ts"
 import { runIncrementalReschedule } from "../supabase/functions/_shared/rescheduler.ts"
+import { computeRoomCaps } from "../supabase/functions/_shared/capacity.ts"
 import {
   AlgorithmMode,
   buildOccupancy,
@@ -24,11 +25,12 @@ import {
 } from "../supabase/functions/_shared/scheduling-types.ts"
 import { SRKR_DATASET } from "./dataset.ts"
 import { loadKaggleDataset } from "./kaggle-dataset.ts"
+import { buildLargeDataset } from "./large-dataset.ts"
 import { mkdirSync, writeFileSync } from "node:fs"
 import { resolve } from "node:path"
 
 const RUNS = Number(process.env.RUNS || 3)
-const DATA = process.env.DATASET === "kaggle" ? loadKaggleDataset() : SRKR_DATASET
+const DATA = process.env.DATASET === "kaggle" ? loadKaggleDataset() : process.env.DATASET === "large" ? buildLargeDataset() : SRKR_DATASET
 const { faculty: FACULTY, rooms: ROOMS, sections: SECTIONS, subjects: SUBJECTS } = DATA
 const deptOfSection = new Map(SECTIONS.map((s) => [s.name, s.dept]))
 setSolverUrl(process.env.ILP_SOLVER_URL || "http://localhost:8000")
@@ -38,8 +40,15 @@ const availability: FacultyAvailabilitySlot[] = FACULTY.flatMap((f) =>
   (f.availability || []).map((a) => ({ facultyId: f.code, dayOfWeek: a.day as any, startPeriod: a.start as any, endPeriod: a.end as any })),
 )
 
-function coursesFor(dept: string): CourseAssignment[] {
-  return SECTIONS.filter((s) => s.dept === dept).flatMap((section) =>
+/** A scheduling chunk is a department ("CSE") or one year of a department ("CSE:2") */
+const inChunk = (chunk: string, s: { dept: string; year: number }) => {
+  const [dept, year] = chunk.split(":")
+  return s.dept === dept && (!year || s.year === Number(year))
+}
+const sectionByName = new Map(SECTIONS.map((s) => [s.name, s]))
+
+function coursesFor(chunk: string): CourseAssignment[] {
+  return SECTIONS.filter((s) => inChunk(chunk, s)).flatMap((section) =>
     Object.entries(section.courses).map(([subjectCode, facultyCode]) => {
       const subject = SUBJECTS.find((s) => s.code === subjectCode)!
       return {
@@ -137,10 +146,17 @@ async function main() {
   ]
   const all: RunRecord[] = []
 
-  for (const dept of DATA.scheduleOrder) {
+  for (const [chunkIndex, dept] of DATA.scheduleOrder.entries()) {
     const occupancy = buildOccupancy(
       committed.map((s) => ({ faculty_id: s.facultyId, classroom_id: s.classroomId, day_of_week: s.day, start_period: s.startPeriod, end_period: s.endPeriod })),
     )
+    // Same college-wide room reservation the edge function applies: rooms kept free for the
+    // chunks still to be scheduled
+    const later = DATA.scheduleOrder.slice(chunkIndex + 1).flatMap(coursesFor)
+    occupancy.roomCaps = computeRoomCaps(rooms, occupancy, {
+      theoryPeriods: later.filter((c) => c.subjectType === "theory").reduce((a, c) => a + c.periodsPerWeek, 0),
+      labBlocks: later.filter((c) => c.subjectType === "lab").length,
+    })
     const records: RunRecord[] = []
     for (let run = 1; run <= RUNS; run++) {
       for (const mode of ["baseline", "enhanced"] as AlgorithmMode[]) {
@@ -167,14 +183,14 @@ async function main() {
   // Incremental rescheduling: the first department's busiest faculty member goes on leave
   // on their busiest day
   const firstDept = DATA.scheduleOrder[0]
-  const cseSlots = committed.filter((s) => deptOfSection.get(s.sectionId) === firstDept)
+  const cseSlots = committed.filter((s) => inChunk(firstDept, sectionByName.get(s.sectionId)!))
   const load = new Map<string, number>()
   for (const s of cseSlots) load.set(`${s.facultyId}|${s.day}`, (load.get(`${s.facultyId}|${s.day}`) || 0) + 1)
   const [busiest] = [...load.entries()].sort((a, b) => b[1] - a[1])
   const [leaveFaculty, leaveDay] = busiest ? busiest[0].split("|") : [FACULTY[0].code, "0"]
   const dayNames = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
   const otherOcc = buildOccupancy(
-    committed.filter((s) => deptOfSection.get(s.sectionId) !== firstDept).map((s) => ({ faculty_id: s.facultyId, classroom_id: s.classroomId, day_of_week: s.day, start_period: s.startPeriod, end_period: s.endPeriod })),
+    committed.filter((s) => !inChunk(firstDept, sectionByName.get(s.sectionId)!)).map((s) => ({ faculty_id: s.facultyId, classroom_id: s.classroomId, day_of_week: s.day, start_period: s.startPeriod, end_period: s.endPeriod })),
   )
   const resched = await silently(() => runIncrementalReschedule({
     currentSlots: cseSlots,

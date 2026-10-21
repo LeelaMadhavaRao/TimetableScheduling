@@ -162,6 +162,7 @@ export function runOptimizeStage(
     const ga = new GATimetableOptimizer(baseSlots, {
       config: { POPULATION_SIZE: budget.populationSize, GENERATIONS: budget.generations },
       occupancy: ctx.occupancy,
+      rooms: [...ctx.rooms.values()],
     })
     ga.offspringObserver = (slots) => checker.observe(slots)
     const { optimizedSchedule, finalPopulation } = ga.optimize()

@@ -87,13 +87,26 @@ function TimetablePageContent() {
           setLatestJob(null)
           return
         }
-        let query = supabase
-          .from("timetable_optimized")
-          .select(`${SLOT_SELECT}, timetable_jobs!inner(is_published, college_id, department_id, published_at, message)`)
-          .eq("timetable_jobs.is_published", true)
-          .eq("timetable_jobs.college_id", collegeId)
-        if (departmentId) query = query.eq("timetable_jobs.department_id", departmentId)
-        const { data, error: slotsError } = await query
+        // Paged: a published college easily exceeds PostgREST's 1000-row response limit
+        const data: (TimetableSlotWithDetails & { job_id: string })[] = []
+        let slotsError: { message: string } | null = null
+        for (let from = 0; ; from += 1000) {
+          let query = supabase
+            .from("timetable_optimized")
+            .select(`${SLOT_SELECT}, timetable_jobs!inner(is_published, college_id, department_id, published_at, message)`)
+            .eq("timetable_jobs.is_published", true)
+            .eq("timetable_jobs.college_id", collegeId)
+            .order("id")
+            .range(from, from + 999)
+          if (departmentId) query = query.eq("timetable_jobs.department_id", departmentId)
+          const page = await query
+          if (page.error) {
+            slotsError = page.error
+            break
+          }
+          data.push(...(page.data || []))
+          if (!page.data || page.data.length < 1000) break
+        }
         if (slotsError) {
           console.error("[TimetablePage] Error fetching published slots:", slotsError)
           setError("Failed to fetch published timetables")

@@ -80,7 +80,8 @@ export function GenerateTimetable({ sections }: { sections: GeneratableSection[]
   const { departmentId } = getUserScope(user, role)
 
   const schedulable = sections.filter((s) => s.subjectCount > 0)
-  const [selected, setSelected] = useState<Set<string>>(() => new Set(schedulable.map((s) => s.id)))
+  // Nothing preselected: the admin decides which sections (years, or any mix) to generate
+  const [selected, setSelected] = useState<Set<string>>(() => new Set())
   const [mode, setMode] = useState<AlgorithmMode>("enhanced")
   const [jobs, setJobs] = useState<TimetableJob[]>([])
   const [liveJob, setLiveJob] = useState<TimetableJob | null>(null)
@@ -379,7 +380,31 @@ export function GenerateTimetable({ sections }: { sections: GeneratableSection[]
             <h3 className="font-semibold text-white">1. Select the classes to schedule</h3>
             <p className="text-sm text-slate-400">Only these sections are generated; every other department&apos;s published timetable is respected.</p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2 justify-end">
+            {/* Year shortcuts toggle every section of that year; combine them freely with the checkboxes */}
+            {[...new Set(schedulable.map((s) => s.yearLevel))].sort().map((year) => {
+              const ids = schedulable.filter((s) => s.yearLevel === year).map((s) => s.id)
+              const all = ids.every((id) => selected.has(id))
+              return (
+                <Button
+                  key={year}
+                  size="sm"
+                  variant="outline"
+                  aria-pressed={all}
+                  className={all ? "border-emerald-500 bg-emerald-500/15 text-emerald-200" : "border-slate-600 text-slate-200"}
+                  onClick={() => {
+                    const next = new Set(selected)
+                    for (const id of ids) {
+                      if (all) next.delete(id)
+                      else next.add(id)
+                    }
+                    setSelected(next)
+                  }}
+                >
+                  Year {year}
+                </Button>
+              )
+            })}
             <Button size="sm" variant="outline" className="border-slate-600 text-slate-200" onClick={() => setSelected(new Set(schedulable.map((s) => s.id)))}>All</Button>
             <Button size="sm" variant="outline" className="border-slate-600 text-slate-200" onClick={() => setSelected(new Set())}>None</Button>
           </div>

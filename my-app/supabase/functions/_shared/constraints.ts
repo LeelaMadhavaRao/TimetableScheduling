@@ -191,6 +191,9 @@ export class FeasibilityGrid {
   private rooms = new Map<string, Uint8Array>()
   private sections = new Map<string, Uint8Array>()
   private subjectDay = new Map<string, Uint8Array>()
+  private roomTypeUse = { theory: new Uint16Array(DAYS_PER_WEEK * PERIODS_PER_DAY), lab: new Uint16Array(DAYS_PER_WEEK * PERIODS_PER_DAY) }
+  /** When true the college-wide room reservation is ignored (only real room availability counts) */
+  borrowReserve = false
 
   constructor(private ctx: SchedulingContext) {}
 
@@ -226,11 +229,13 @@ export class FeasibilityGrid {
     const f = this.cells(this.faculty, slot.facultyId, size)
     const r = this.cells(this.rooms, slot.classroomId, size)
     const s = this.cells(this.sections, slot.sectionId, size)
+    const roomType = this.ctx.rooms.get(slot.classroomId)?.roomType
     for (let p = slot.startPeriod; p <= slot.endPeriod; p++) {
       const i = this.index(slot.day, p)
       f[i] += delta
       r[i] += delta
       s[i] += delta
+      if (roomType) this.roomTypeUse[roomType][i] += delta
     }
     const course = this.ctx.courseByKey.get(courseKey(slot.sectionId, slot.subjectId))
     if (course?.subjectType === "theory") {
@@ -276,9 +281,14 @@ export class FeasibilityGrid {
     }
     const r = this.rooms.get(slot.classroomId)
     const roomBusy = this.ctx.occupancy.roomBusy.get(slot.classroomId)
+    const caps = room && !this.borrowReserve ? this.ctx.occupancy.roomCaps?.[room.roomType] : undefined
     for (let p = slot.startPeriod; p <= slot.endPeriod; p++) {
-      if (r && r[this.index(slot.day, p)] > 0) return false
-      if (roomBusy?.has(slotKey(slot.day, p))) return false
+      const i = this.index(slot.day, p)
+      if (r && r[i] > 0) return false
+      const key = slotKey(slot.day, p)
+      if (roomBusy?.has(key)) return false
+      // College-wide reservation: a room that is new at this period must fit under the cap
+      if (caps && room && (!r || r[i] === 0) && this.roomTypeUse[room.roomType][i] + 1 > (caps.get(key) ?? Infinity)) return false
     }
     return true
   }

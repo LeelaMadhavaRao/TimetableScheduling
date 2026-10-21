@@ -12,7 +12,7 @@
 //   3. isValidSwap also rejects periods committed by other departments - required by the
 //      college-wide architecture, otherwise a baseline run could double-book shared faculty
 
-import { DayOfWeek, Occupancy, Period, slotKey, TimetableSlot } from "./scheduling-types.ts"
+import { ClassroomOption, DayOfWeek, Occupancy, Period, slotKey, TimetableSlot } from "./scheduling-types.ts"
 
 export interface GAConfig {
   POPULATION_SIZE: number
@@ -63,6 +63,7 @@ export class GATimetableOptimizer {
   private fitnessScores: Map<number, number> = new Map()
   private config: GAConfig
   private occupancy: Occupancy | null
+  private roomType: Map<string, ClassroomOption["roomType"]>
 
   initialPopulation: TimetableSlot[][] = []
   /** Instrumentation hook: sees every offspring (its time is excluded from totalTimeMs) */
@@ -82,10 +83,11 @@ export class GATimetableOptimizer {
     bestFitnessHistory: [],
   }
 
-  constructor(baseSchedule: TimetableSlot[], options: { config?: Partial<GAConfig>; occupancy?: Occupancy } = {}) {
+  constructor(baseSchedule: TimetableSlot[], options: { config?: Partial<GAConfig>; occupancy?: Occupancy; rooms?: ClassroomOption[] } = {}) {
     this.baseSchedule = baseSchedule
     this.config = { ...GA_CONFIG, ...(options.config || {}) }
     this.occupancy = options.occupancy || null
+    this.roomType = new Map((options.rooms || []).map((r) => [r.id, r.roomType]))
   }
 
   optimize(): { optimizedSchedule: TimetableSlot[]; finalFitness: number; finalPopulation: TimetableSlot[][] } {
@@ -433,6 +435,20 @@ export class GATimetableOptimizer {
           const key = slotKey(newSlot.day, p)
           if (this.occupancy.facultyBusy.get(newSlot.facultyId)?.has(key)) return false
           if (this.occupancy.roomBusy.get(newSlot.classroomId)?.has(key)) return false
+        }
+      }
+
+      // College-wide room reservation: rooms of this type used at the new periods stay under the cap
+      const type = this.roomType.get(newSlot.classroomId)
+      const caps = type ? this.occupancy?.roomCaps?.[type] : undefined
+      if (caps) {
+        for (let p = newSlot.startPeriod; p <= newSlot.endPeriod; p++) {
+          let used = 0
+          for (let i = 0; i < chromosome.length; i++) {
+            const o = chromosome[i]
+            if (i !== index && o.day === newSlot.day && o.startPeriod <= p && p <= o.endPeriod && this.roomType.get(o.classroomId) === type) used++
+          }
+          if (used + 1 > (caps.get(slotKey(newSlot.day, p)) ?? Infinity)) return false
         }
       }
 

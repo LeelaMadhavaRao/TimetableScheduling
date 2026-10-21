@@ -20,6 +20,7 @@ import {
   TimetableSlot,
 } from "./scheduling-types.ts"
 import { hammingDistance } from "./metrics.ts"
+import { roomCap } from "./capacity.ts"
 
 export type { ClassroomOption, CourseAssignment, FacultyAvailabilitySlot, TimetableSlot }
 
@@ -1246,6 +1247,7 @@ export class ILPTimetableGenerator {
   ): { day: DayOfWeek; startPeriod: Period; endPeriod: Period; classroomId: string } | null {
     if (this.isSectionAlreadyScheduled(course.sectionId, day, start, end)) return null
     if (!this.isFacultyDynamicallyAvailable(course.facultyId, day, start, end)) return null
+    if (!this.withinRoomCaps("lab", day, start, end)) return null
     // Faculty gap rule is soft - don't block labs for this
 
     for (const room of rooms) {
@@ -1637,6 +1639,9 @@ export class ILPTimetableGenerator {
     // Check faculty gap rule (soft - only for theory, skip if no other option)
     // This is handled separately in findTheorySlot with fallback
 
+    // College-wide room reservation for sections that are not scheduled yet
+    if (!this.withinRoomCaps("theory", day, start, end)) return null
+
     // CRITICAL CHECK 3: Find room with DYNAMIC availability
     for (const room of rooms) {
       if (this.isRoomDynamicallyAvailable(room.id, day, start, end)) {
@@ -1650,6 +1655,21 @@ export class ILPTimetableGenerator {
   // ==========================================
   // AVAILABILITY CHECK FUNCTIONS
   // ==========================================
+
+  /**
+   * College-wide room reservation: at each period this run may occupy at most
+   * occupancy.roomCaps rooms of the type, leaving the rest for sections not scheduled yet.
+   */
+  private withinRoomCaps(type: "theory" | "lab", day: DayOfWeek, start: Period, end: Period): boolean {
+    if (!this.occupancy.roomCaps) return true
+    for (let p = start; p <= end; p++) {
+      const key = `${day}-${p}`
+      let used = 0
+      for (const room of this.classrooms) if (room.roomType === type && this.roomSchedule.get(room.id)?.has(key)) used++
+      if (used + 1 > roomCap(this.occupancy, type, key)) return false
+    }
+    return true
+  }
 
   private isSectionAlreadyScheduled(sectionId: string, day: DayOfWeek, start: Period, end: Period): boolean {
     const schedule = this.sectionSchedule.get(sectionId)
@@ -1829,6 +1849,11 @@ export class ILPTimetableGenerator {
         return false
       }
     }
+    const roomType = this.classrooms.find((r) => r.id === classroomId)?.roomType
+    if (roomType && !this.withinRoomCaps(roomType, day, startPeriod, endPeriod)) {
+      console.error(`[ERROR] Room reservation for unscheduled sections reached at Day ${day} P${startPeriod}-${endPeriod} - Skipping ${course.subjectCode} (${course.sectionName})`)
+      return false
+    }
 
     // Add to main timetable
     this.timetable.push({
@@ -1962,6 +1987,8 @@ export class ILPTimetableGenerator {
       })),
       facultyAvailability,
       blockedRoomSlots,
+      // "day-period" -> max lab rooms this run may use (college-wide reservation)
+      labRoomCaps: this.occupancy.roomCaps ? Object.fromEntries(this.occupancy.roomCaps.lab) : {},
       rules: {
         labPeriods: RULES.LAB_PERIODS,
         daysPerWeek: 6, // Mon-Sat

@@ -40,6 +40,20 @@ grid of declared availability and the periods departments have booked.
 generate (dept A) ──► publish ──► committed_timetable ──► occupancy for dept B ──► generate (dept B) ──► publish
 ```
 
+### Room reservation at high utilization
+
+When rooms are 90%+ booked, the departments that generate first would otherwise take the
+best periods (mostly mornings) and leave the last departments periods their sections cannot
+use. Each run therefore keeps, at every period, a share of the free rooms for sections of
+the college that are not scheduled yet (their remaining demand spread over the week,
+`_shared/capacity.ts`). The ILP solver, the greedy theory pass and both GAs respect it. The
+enhanced optimizer's coverage-completion step may borrow a reserved room when a period
+fits nowhere else, so the reserve steers departments apart without ever leaving a gap.
+
+Department admins choose freely which sections to generate: one year, several years or
+any mix (year buttons plus per-section checkboxes). Sections not selected are simply left
+for a later run; published ones are respected as occupancy.
+
 ## Before vs after enhancement
 
 The department generate page runs either pipeline on the same sections, or both with
@@ -123,6 +137,17 @@ because neither dataset contains them:
 | Hypervolume (before → after) | 0.187 → 0.370 | 0.260 → 0.390 | 0.045 → 0.098 |
 | Constraint preservation | 96.9% → 100% | 96.4% → 100% | 96.9% → 100% |
 | Mutation attempts per accepted move | 2.5 → 1.1 | 4.2 → 1.9 | 11.6 → 4.3 |
+
+**Large university** (`DATASET=large npm run experiment`, seed `scripts/024_large_university.sql`):
+410 faculty, 4 years x 25 sections (years 1-3: 5 theory + 3 labs; year 4: 5 theory + 1 lab),
+49 theory rooms at 92.8% and 24 labs at 94.7% utilization, CSE/ECE/EEE/MECH/CIVIL each
+generating year by year (20 runs) around everything published before. With the room
+reservation and coverage completion the enhanced pipeline scheduled all 20 runs with 100%
+coverage and 0 violations, 0 college-wide double bookings; the baseline left a gap in one
+run and broke rules in six. Without the reservation the last departments reached only
+70-94% coverage. Because CP-SAT is not deterministic with several workers, a repeat run can
+leave the final department a few periods short (<0.4% of 2000); regenerating that run
+resolves it.
 
 **Runtime.** The optimization stage now costs about the same as the baseline GA (early
 stopping, diversity measured only at the start and end). The base stage stays about 2×

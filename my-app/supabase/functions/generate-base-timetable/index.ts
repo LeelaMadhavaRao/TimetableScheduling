@@ -25,6 +25,7 @@ import {
   packSlots,
   resolveDepartmentAdmin,
   sectionKeyOf,
+  selectAll,
   toSlotRows,
 } from "../_shared/supabase-context.ts"
 
@@ -254,7 +255,7 @@ async function handleReschedule(supabase: Supabase, admin: DepartmentAdminSessio
     return jsonResponse({ success: false, error: "Describe the disruption: a faculty member or room and the affected days" }, 400)
   }
 
-  const { data: rows, error } = await supabase.from("timetable_optimized").select("*").eq("job_id", parent.id)
+  const { data: rows, error } = await selectAll(() => supabase.from("timetable_optimized").select("*").eq("job_id", parent.id).order("id"))
   if (error) throw error
   const currentSlots = fromSlotRows(rows || [])
   const problem = await loadDepartmentProblem(supabase, admin.collegeId, parent.section_ids)

@@ -47,6 +47,12 @@ export interface FacultyAvailabilitySlot {
   endPeriod: Period
 }
 
+/** Max rooms of each type a run may occupy per "day-period" (college-wide reservation) */
+export interface RoomCaps {
+  theory: Map<string, number>
+  lab: Map<string, number>
+}
+
 /**
  * Faculty/room time already committed by OTHER sections (published timetables of
  * other departments, or locked slots during incremental rescheduling).
@@ -55,6 +61,8 @@ export interface FacultyAvailabilitySlot {
 export interface Occupancy {
   facultyBusy: Map<string, Set<string>>
   roomBusy: Map<string, Set<string>>
+  /** Room reservation for sections not scheduled yet; absent = no limit */
+  roomCaps?: RoomCaps
   /** Optional human-readable owner of each busy faculty slot, for diagnostics */
   facultyOwner?: Map<string, string>
 }
@@ -108,6 +116,7 @@ export function mergeOccupancy(a: Occupancy, b: Occupancy): Occupancy {
     }
     source.facultyOwner?.forEach((v, k) => merged.facultyOwner!.set(k, v))
   }
+  merged.roomCaps = a.roomCaps ?? b.roomCaps
   return merged
 }
 

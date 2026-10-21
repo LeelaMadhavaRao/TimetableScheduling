@@ -86,6 +86,9 @@ class ProblemData(BaseModel):
     rules: Rules
     # roomId -> [[day, period], ...] already committed by other departments' timetables
     blockedRoomSlots: Dict[str, List[List[int]]] = {}
+    # "day-period" -> max lab rooms this request may use (rooms reserved for sections of the
+    # college that are not scheduled yet)
+    labRoomCaps: Dict[str, int] = {}
 
 
 class DiverseProblemData(ProblemData):
@@ -359,6 +362,13 @@ def solve_lab_timetable(data: ProblemData):
                         model.Add(sum(period_vars) <= 1)
         
         print("[Solver] ✓ Added constraint: room non-overlap")
+
+        # College-wide room reservation: at most labRoomCaps[day-period] lab rooms in use
+        for cap_key, cap in data.labRoomCaps.items():
+            cap_day, cap_period = (int(x) for x in cap_key.split("-"))
+            cap_vars = [L[k] for k in valid_assignments if k[1] == cap_day and cap_period in block_periods[k[2]]]
+            if cap_vars and cap < len(cap_vars):
+                model.Add(sum(cap_vars) <= cap)
         
         # ============================================
         # CONSTRAINT 3: Section non-overlap (period-level)
@@ -578,6 +588,13 @@ def _build_lab_model(data: ProblemData):
                 model.Add(sum(vars_) <= 1)
 
     no_overlap(lambda c, r: ("room", r))
+
+    # College-wide room reservation: at most labRoomCaps[day-period] lab rooms in use
+    for cap_key, cap in data.labRoomCaps.items():
+        cap_day, cap_period = (int(x) for x in cap_key.split("-"))
+        cap_vars = [v for (c_idx, day, block, r_idx), v in L.items() if day == cap_day and cap_period in block_periods[block]]
+        if cap_vars and cap < len(cap_vars):
+            model.Add(sum(cap_vars) <= cap)
     no_overlap(lambda c, r: ("section", courses[c].sectionId))
     no_overlap(lambda c, r: ("faculty", courses[c].facultyId))
     return model, L, block_periods

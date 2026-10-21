@@ -19,6 +19,7 @@ import {
   packSlots,
   PackedSlot,
   resolveDepartmentAdmin,
+  selectAll,
   toSlotRows,
   unpackSlots,
 } from "../_shared/supabase-context.ts"
@@ -62,7 +63,7 @@ Deno.serve(async (req) => {
       return jsonResponse({ success: false, error: "This timetable is already being optimized" }, 409)
     }
 
-    const { data: baseRows, error } = await supabase.from("timetable_base").select("*").eq("job_id", job.id)
+    const { data: baseRows, error } = await selectAll(() => supabase.from("timetable_base").select("*").eq("job_id", job.id).order("id"))
     if (error || !baseRows || baseRows.length === 0) {
       await supabase.from("timetable_jobs").update({ status: "failed", message: "No base timetable found" }).eq("id", job.id)
       return jsonResponse({ success: false, error: "No base timetable found" }, 404)

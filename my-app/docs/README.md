@@ -18,11 +18,13 @@ This documentation explains how the timetable scheduling system generates and op
 | 08 | [Database Schema](./08-database-schema.md) | Tables, relationships, and queries |
 | 09 | [Complete Generation Flow](./09-complete-generation-flow.md) | End-to-end walkthrough from click to display |
 | 10 | [College Hierarchy & Enhanced ILP-GA](./10-college-hierarchy-and-enhanced-ilp-ga.md) | College/department roles, publishing & occupancy, baseline vs enhanced pipelines, measured results |
+| 11 | [User Guide & Complete Flow](./11-user-guide-and-complete-flow.md) | Every page explained, generating with and without enhancement, comparing, publishing, rescheduling, full architecture |
 
 ## 🎯 Quick Start
 
 ### Understanding the System
 
+0. New users: start with the **[User Guide & Complete Flow](./11-user-guide-and-complete-flow.md)**
 1. Start with **[Architecture Overview](./01-architecture-overview.md)** for the big picture
 2. Read **[Base Timetable Generation](./02-base-timetable-generation.md)** for core logic
 3. Explore **[ILP Solver](./03-ilp-solver-constraint-programming.md)** for constraint programming

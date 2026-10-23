@@ -19,6 +19,7 @@ This documentation explains how the timetable scheduling system generates and op
 | 09 | [Complete Generation Flow](./09-complete-generation-flow.md) | End-to-end walkthrough from click to display |
 | 10 | [College Hierarchy & Enhanced ILP-GA](./10-college-hierarchy-and-enhanced-ilp-ga.md) | College/department roles, publishing & occupancy, baseline vs enhanced pipelines, measured results |
 | 11 | [User Guide & Complete Flow](./11-user-guide-and-complete-flow.md) | Every page explained, generating with and without enhancement, comparing, publishing, rescheduling, full architecture |
+| 12 | [Frontend–Backend Integration](./12-frontend-backend-integration.md) | Auth, environment, data access, edge-function and API contracts, generate → compare → publish integration |
 
 ## 🎯 Quick Start
 
